@@ -13,7 +13,6 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [activeTab, setActiveTab] = useState('daily');
 
-  // --- STATE: DAILY ACCOUNTS ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
@@ -24,7 +23,6 @@ export default function App() {
   const [cashExpenses, setCashExpenses] = useState([]);
   const [staffPayments, setStaffPayments] = useState([]);
 
-  // --- STATE: HISTORY & ANALYTICS ---
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
@@ -33,23 +31,18 @@ export default function App() {
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- CALCULATIONS ---
   const totalSale = Number(cashSale) + Number(onlineSale);
   
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
-  const totalDailyExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline;
-  
   const totalCashInHand = yesterdayCash + Number(cashSale) - totalCashExpenses - totalStaffCash;
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
-  // --- HANDLERS ---
   const handleLogin = () => { if (pinInput === MANAGER_PIN) setIsUnlocked(true); else { alert("Incorrect PIN."); setPinInput(''); }};
 
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
@@ -61,7 +54,6 @@ export default function App() {
   const addStaffPayment = () => setStaffPayments([...staffPayments, { id: Date.now(), name: '', amount: 0, type: 'Full Wage', method: 'Cash' }]);
   const updateStaffPayment = (id, field, value) => setStaffPayments(staffPayments.map(s => s.id === id ? { ...s, [field]: value } : s));
 
-  // --- DATABASE SYNC ---
   useEffect(() => {
     const fetchYesterday = async () => {
       const { data } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').order('date', { ascending: false }).limit(1);
@@ -87,7 +79,6 @@ export default function App() {
     if (error) alert("Error saving data: " + error.message); else alert("Vintage Daily Accounts Saved!");
   };
 
-  // --- PRINT FUNCTION ---
   const printReceipt = (log) => {
     const printWindow = window.open('', '', 'height=600,width=400');
     printWindow.document.write(`
@@ -107,38 +98,27 @@ export default function App() {
     printWindow.print();
   };
 
-  // --- CSV EXPORT FUNCTION (UPGRADED WITH EXPENSE DETAILS) ---
   const exportToCSV = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
     
-    // Updated header row
     let csvContent = "data:text/csv;charset=utf-8,Date,Cash Sales,Online Sales,Staff Wages,Online Expenses Breakdown,Cash/Credit Expenses Breakdown,Total Cash In Hand,Total Online Balance,Total Amount Left\n";
     
-    // Helper to format expenses into a single clean string per cell
     const formatExpenses = (expArray) => {
       if (!expArray || expArray.length === 0) return "None";
       return expArray.map(e => `${e.category || 'Item'} - ${e.description || 'N/A'} (₹${e.amount}) [${e.type || 'Online'}]`).join(" | ");
     };
     
-    // Helper to escape commas in the breakdown string so it doesn't break the CSV layout
     const escapeCSV = (str) => `"${str.replace(/"/g, '""')}"`;
 
     historyLogs.forEach(log => {
       let cashSales = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
-      
-      let staffWages = 0;
-      if (log.expense_details?.staff) {
-        staffWages = log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0);
-      }
+      let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
 
-      // Format the expense strings
       let onlineExpStr = escapeCSV(formatExpenses(log.expense_details?.online));
       let cashExpStr = escapeCSV(formatExpenses(log.expense_details?.cash));
-
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
       
-      // Build the row
       csvContent += `${log.date},${cashSales},${onlineSales},${staffWages},${onlineExpStr},${cashExpStr},${log.total_cash_in_hand},${log.total_online_balance},${totalLeft}\n`;
     });
 
@@ -151,7 +131,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // --- ANALYTICS ENGINE ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
     let totalSales = 0; let totalExpenses = 0;
@@ -188,7 +167,6 @@ export default function App() {
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
 
-  // --- UI RENDERS ---
   if (!isUnlocked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
@@ -204,7 +182,6 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
       
-      {/* TABS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#10b981' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
@@ -212,7 +189,6 @@ export default function App() {
         <button onClick={() => setIsUnlocked(false)} style={{ ...tabStyle, flex: 0.3, backgroundColor: '#ef4444', color: 'white' }}>Lock</button>
       </div>
 
-      {/* --- TAB 1: DAILY ENTRY --- */}
       {activeTab === 'daily' && (
         <>
           <datalist id="common-expenses">
@@ -278,12 +254,11 @@ export default function App() {
         </>
       )}
 
-      {/* --- TAB 2: HISTORY --- */}
       {activeTab === 'history' && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h2 style={{margin: 0}}>Past Records</h2>
-            <button onClick={exportToCSV} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📥 Download Excel/CSV</button>
+            <button onClick={exportToCSV} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📥 Download Detailed Report</button>
           </div>
           {isLoadingHistory ? <p>Loading...</p> : (
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
@@ -304,7 +279,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TAB 3: ANALYTICS --- */}
       {activeTab === 'analytics' && (
         <div style={cardStyle}>
           <h2>Visual Analytics</h2>
@@ -342,10 +316,8 @@ export default function App() {
   );
 }
 
-// --- STYLES ---
 const cardStyle = { backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
 const inputStyle = { padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px', width: '100%', boxSizing: 'border-box' };
-const totalBoxStyle = { padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '4px', fontSize: '16px', textAlign: 'center' };
 const btnStyle = { padding: '10px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const tabStyle = { flex: 1, padding: '15px', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' };
