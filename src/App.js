@@ -107,11 +107,22 @@ export default function App() {
     printWindow.print();
   };
 
-  // --- CSV EXPORT FUNCTION (RESTORED & UPGRADED) ---
+  // --- CSV EXPORT FUNCTION (UPGRADED WITH EXPENSE DETAILS) ---
   const exportToCSV = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
-    let csvContent = "data:text/csv;charset=utf-8,Date,Cash Sales,Online Sales,Staff Wages,Total Cash In Hand,Total Online Balance,Total Amount Left\n";
     
+    // Updated header row
+    let csvContent = "data:text/csv;charset=utf-8,Date,Cash Sales,Online Sales,Staff Wages,Online Expenses Breakdown,Cash/Credit Expenses Breakdown,Total Cash In Hand,Total Online Balance,Total Amount Left\n";
+    
+    // Helper to format expenses into a single clean string per cell
+    const formatExpenses = (expArray) => {
+      if (!expArray || expArray.length === 0) return "None";
+      return expArray.map(e => `${e.category || 'Item'} - ${e.description || 'N/A'} (₹${e.amount}) [${e.type || 'Online'}]`).join(" | ");
+    };
+    
+    // Helper to escape commas in the breakdown string so it doesn't break the CSV layout
+    const escapeCSV = (str) => `"${str.replace(/"/g, '""')}"`;
+
     historyLogs.forEach(log => {
       let cashSales = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
@@ -121,9 +132,14 @@ export default function App() {
         staffWages = log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0);
       }
 
+      // Format the expense strings
+      let onlineExpStr = escapeCSV(formatExpenses(log.expense_details?.online));
+      let cashExpStr = escapeCSV(formatExpenses(log.expense_details?.cash));
+
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
       
-      csvContent += `${log.date},${cashSales},${onlineSales},${staffWages},${log.total_cash_in_hand},${log.total_online_balance},${totalLeft}\n`;
+      // Build the row
+      csvContent += `${log.date},${cashSales},${onlineSales},${staffWages},${onlineExpStr},${cashExpStr},${log.total_cash_in_hand},${log.total_online_balance},${totalLeft}\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
