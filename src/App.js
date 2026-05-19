@@ -11,7 +11,7 @@ const MANAGER_PIN = '1234';
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('daily'); // 'daily', 'history', 'analytics'
+  const [activeTab, setActiveTab] = useState('daily');
 
   // --- STATE: DAILY ACCOUNTS ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -20,18 +20,14 @@ export default function App() {
   const [cashSale, setCashSale] = useState(0);
   const [onlineSale, setOnlineSale] = useState(0);
   
-  // Updated Expenses (Now with Category & Description)
   const [onlineExpenses, setOnlineExpenses] = useState([]);
   const [cashExpenses, setCashExpenses] = useState([]);
-  
-  // New Staff Tracker
   const [staffPayments, setStaffPayments] = useState([]);
 
   // --- STATE: HISTORY & ANALYTICS ---
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
-  // Analytics Dates (Default to last 7 days)
   const [analyticsStart, setAnalyticsStart] = useState(() => {
     let d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
   });
@@ -44,7 +40,6 @@ export default function App() {
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   
-  // Calculate Staff Payments based on method
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
@@ -54,7 +49,7 @@ export default function App() {
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
-  // --- HANDLERS: INPUTS ---
+  // --- HANDLERS ---
   const handleLogin = () => { if (pinInput === MANAGER_PIN) setIsUnlocked(true); else { alert("Incorrect PIN."); setPinInput(''); }};
 
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
@@ -112,6 +107,34 @@ export default function App() {
     printWindow.print();
   };
 
+  // --- CSV EXPORT FUNCTION (RESTORED & UPGRADED) ---
+  const exportToCSV = () => {
+    if (historyLogs.length === 0) return alert("No data to export!");
+    let csvContent = "data:text/csv;charset=utf-8,Date,Cash Sales,Online Sales,Staff Wages,Total Cash In Hand,Total Online Balance,Total Amount Left\n";
+    
+    historyLogs.forEach(log => {
+      let cashSales = log.expense_details?.sales?.cash || 0;
+      let onlineSales = log.expense_details?.sales?.online || 0;
+      
+      let staffWages = 0;
+      if (log.expense_details?.staff) {
+        staffWages = log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+      }
+
+      let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
+      
+      csvContent += `${log.date},${cashSales},${onlineSales},${staffWages},${log.total_cash_in_hand},${log.total_online_balance},${totalLeft}\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `vintage_accounts_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // --- ANALYTICS ENGINE ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
@@ -124,7 +147,7 @@ export default function App() {
       const processExp = (arr) => {
         if(!arr) return;
         arr.forEach(exp => {
-          if (exp.type === 'Credit') return; // Skip credit in expense totals
+          if (exp.type === 'Credit') return;
           totalExpenses += Number(exp.amount || 0);
           const cat = exp.category || exp.name || 'Uncategorized';
           categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
@@ -142,7 +165,7 @@ export default function App() {
       }
     });
 
-    const maxCatVal = Math.max(...Object.values(categoryTotals), 1); // Avoid div by 0
+    const maxCatVal = Math.max(...Object.values(categoryTotals), 1);
     const sortedCategories = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
 
     return { totalSales, totalExpenses, sortedCategories, maxCatVal };
@@ -201,7 +224,6 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            {/* ONLINE EXPENSES */}
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
               <h3 style={{color: '#3b82f6'}}>💳 Online Expenses</h3>
               {onlineExpenses.map(exp => (
@@ -214,7 +236,6 @@ export default function App() {
               <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Exp</button>
             </div>
 
-            {/* CASH EXPENSES */}
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
               <h3 style={{color: '#10b981'}}>💵 Cash / Credit Expenses</h3>
               {cashExpenses.map(exp => (
@@ -222,7 +243,7 @@ export default function App() {
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateCashExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateCashExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={{inputStyle, flex: 1}}><option>Cash</option><option>Credit</option></select>
+                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}><option>Cash</option><option>Credit</option></select>
                 </div>
               ))}
               <button onClick={addCashExpense} style={btnStyle}>+ Add Cash/Credit Exp</button>
@@ -244,7 +265,10 @@ export default function App() {
       {/* --- TAB 2: HISTORY --- */}
       {activeTab === 'history' && (
         <div style={cardStyle}>
-          <h2>Past Records</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{margin: 0}}>Past Records</h2>
+            <button onClick={exportToCSV} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📥 Download Excel/CSV</button>
+          </div>
           {isLoadingHistory ? <p>Loading...</p> : (
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
               <thead><tr style={{ borderBottom: '2px solid #ccc' }}><th style={{padding: '10px'}}>Date</th><th style={{padding: '10px'}}>Cash</th><th style={{padding: '10px'}}>Online</th><th style={{padding: '10px'}}>Total</th><th style={{padding: '10px'}}>Action</th></tr></thead>
