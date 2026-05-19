@@ -1,220 +1,259 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// --- DATABASE CONNECTION ---
-// ⚠️ PASTE YOUR KEYS HERE
+// --- DATABASE CONNECTION (PRE-FILLED) ---
 const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- APP SETTINGS ---
-const MANAGER_PIN = '1234'; // Change this to whatever you want!
+const MANAGER_PIN = '3699'; 
 
 export default function App() {
-  // --- SECURITY STATE ---
+  // --- NAVIGATION & SECURITY ---
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
+  const [activeTab, setActiveTab] = useState('daily'); // 'daily' or 'history'
 
-  // --- STATE MANAGEMENT ---
+  // --- STATE: DAILY ACCOUNTS ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
-
   const [cashSale, setCashSale] = useState(0);
   const [onlineSale, setOnlineSale] = useState(0);
-
   const [onlineExpenses, setOnlineExpenses] = useState([]);
   const [cashExpenses, setCashExpenses] = useState([]);
 
+  // --- STATE: HISTORY ---
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   // --- CALCULATIONS ---
   const totalSale = Number(cashSale) + Number(onlineSale);
-  
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
-  const totalCashExpenses = cashExpenses
-    .filter(exp => exp.type === 'Cash')
-    .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-    
-  const totalCreditExpenses = cashExpenses
-    .filter(exp => exp.type === 'Credit')
-    .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-
+  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalDailyExpenses = totalOnlineExpenses + totalCashExpenses;
-
   const totalCashInHand = yesterdayCash + Number(cashSale) - totalCashExpenses;
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
-  // --- HANDLERS ---
+  // --- HANDLERS: INPUTS ---
   const handleLogin = () => {
     if (pinInput === MANAGER_PIN) {
       setIsUnlocked(true);
     } else {
-      alert("Incorrect PIN. Please try again.");
+      alert("Incorrect PIN.");
       setPinInput('');
     }
   };
 
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), name: '', amount: 0 }]);
-  const updateOnlineExpense = (id, field, value) => {
-    setOnlineExpenses(onlineExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
-  };
-
+  const updateOnlineExpense = (id, field, value) => setOnlineExpenses(onlineExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
+  
   const addCashExpense = () => setCashExpenses([...cashExpenses, { id: Date.now(), name: '', amount: 0, type: 'Cash' }]);
-  const updateCashExpense = (id, field, value) => {
-    setCashExpenses(cashExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
-  };
+  const updateCashExpense = (id, field, value) => setCashExpenses(cashExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
 
-  // --- FETCH YESTERDAY'S BALANCE ---
+  // --- DATABASE: FETCH YESTERDAY ---
   useEffect(() => {
     const fetchYesterdayBalances = async () => {
-      if (supabaseUrl === 'YOUR_PROJECT_URL') return; 
-
-      const { data, error } = await supabase
-        .from('daily_logs')
-        .select('total_cash_in_hand, total_online_balance')
-        .order('date', { ascending: false })
-        .limit(1);
-
+      const { data } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').order('date', { ascending: false }).limit(1);
       if (data && data.length > 0) {
         setYesterdayCash(data[0].total_cash_in_hand);
         setYesterdayOnline(data[0].total_online_balance);
       }
     };
-
     fetchYesterdayBalances();
   }, []);
 
-  // --- SAVE TO DATABASE ---
-  const saveDailyAccounts = async () => {
-    if (supabaseUrl === 'YOUR_PROJECT_URL') {
-      alert("Please add your Supabase keys at the top of the code!");
-      return;
-    }
+  // --- DATABASE: FETCH HISTORY ---
+  const loadHistory = async () => {
+    setIsLoadingHistory(true);
+    const { data, error } = await supabase.from('daily_logs').select('*').order('date', { ascending: false });
+    if (data) setHistoryLogs(data);
+    setIsLoadingHistory(false);
+  };
 
-    const { data, error } = await supabase
-      .from('daily_logs')
-      .upsert({ 
+  // Trigger history load when tab changes
+  useEffect(() => {
+    if (activeTab === 'history') loadHistory();
+  }, [activeTab]);
+
+  // --- DATABASE: SAVE DAILY ---
+  const saveDailyAccounts = async () => {
+    const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, 
         total_cash_in_hand: totalCashInHand, 
         total_online_balance: totalOnlineBalance,
         expense_details: { online: onlineExpenses, cash: cashExpenses }
       }, { onConflict: 'date' });
-
-    if (error) {
-      alert("Error saving data: " + error.message);
-    } else {
-      alert("Daily accounts for Vintage saved successfully!");
-    }
+    if (error) alert("Error saving data: " + error.message);
+    else alert("Daily accounts saved successfully!");
   };
 
-  // --- LOCK SCREEN UI ---
+  // --- EXPORT TO CSV ---
+  const exportToCSV = () => {
+    if (historyLogs.length === 0) return alert("No data to export!");
+    let csvContent = "data:text/csv;charset=utf-8,Date,Cash in Hand,Online Balance,Total Left\n";
+    historyLogs.forEach(row => {
+      let totalLeft = Number(row.total_cash_in_hand) + Number(row.total_online_balance);
+      csvContent += `${row.date},${row.total_cash_in_hand},${row.total_online_balance},${totalLeft}\n`;
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `vintage_accounts_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- UI: LOCK SCREEN ---
   if (!isUnlocked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb', fontFamily: 'sans-serif' }}>
         <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
           <h2 style={{ color: '#1f2937' }}>Vintage Restaurant</h2>
-          <p style={{ color: '#6b7280', marginBottom: '20px' }}>Enter Manager PIN to access accounts</p>
-          <input 
-            type="password" 
-            value={pinInput} 
-            onChange={(e) => setPinInput(e.target.value)}
-            style={{ ...inputStyle, textAlign: 'center', fontSize: '24px', letterSpacing: '8px', marginBottom: '20px' }}
-            maxLength={4}
-          />
-          <button onClick={handleLogin} style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>
-            Unlock Register
-          </button>
+          <p style={{ color: '#6b7280', marginBottom: '20px' }}>Enter Manager PIN</p>
+          <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)} style={{ ...inputStyle, textAlign: 'center', fontSize: '24px', letterSpacing: '8px', marginBottom: '20px' }} maxLength={4} />
+          <button onClick={handleLogin} style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>Unlock</button>
         </div>
       </div>
     );
   }
 
-  // --- MAIN APP UI ---
+  // --- UI: MAIN APP ---
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '800px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
+    <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '900px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
       
-      {/* DATALISTS FOR DROPDOWNS */}
-      <datalist id="common-expenses">
-        <option value="Vegetables & Groceries" />
-        <option value="Meat & Poultry" />
-        <option value="Dairy & Milk" />
-        <option value="Daily Wages" />
-        <option value="Cleaning Supplies" />
-        <option value="Water Bottles/Cans" />
-      </datalist>
-
-      <h1 style={{ textAlign: 'center', color: '#1f2937' }}>Vintage Restaurant - Daily Accounts</h1>
-      <button onClick={() => setIsUnlocked(false)} style={{ display: 'block', margin: '0 auto 20px auto', padding: '5px 15px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Lock App</button>
-      
-      <div style={cardStyle}>
-        <h3>1. Start of Day</h3>
-        <div style={flexRow}>
-          <label style={{flex: 1}}>Date: <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle}/></label>
-          <label style={{flex: 1}}>Yesterday Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label>
-          <label style={{flex: 1}}>Yesterday Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label>
-        </div>
+      {/* HEADER & TABS */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1>
+        <button onClick={() => setIsUnlocked(false)} style={{ padding: '5px 15px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Lock App</button>
       </div>
 
-      <div style={cardStyle}>
-        <h3>2. Today's Sales</h3>
-        <div style={flexRow}>
-          <label style={{flex: 1}}>Today Cash Sale: <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/></label>
-          <label style={{flex: 1}}>Today Online Sale: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
-          <div style={{...totalBoxStyle, flex: 1}}>Total Sale: <br/><strong>{totalSale}</strong></div>
-        </div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
+        <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📊 History & Export</button>
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-        <div style={{ ...cardStyle, flex: 1, minWidth: '300px' }}>
-          <h3>3. Online Expenses</h3>
-          {onlineExpenses.map(exp => (
-            <div key={exp.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <input list="common-expenses" placeholder="Item" value={exp.name} onChange={e => updateOnlineExpense(exp.id, 'name', e.target.value)} style={inputStyle}/>
-              <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateOnlineExpense(exp.id, 'amount', e.target.value)} style={inputStyle}/>
+      {/* --- TAB: DAILY ENTRY --- */}
+      {activeTab === 'daily' && (
+        <>
+          <datalist id="common-expenses">
+            <option value="Vegetables & Groceries" />
+            <option value="Meat & Poultry" />
+            <option value="Dairy & Milk" />
+            <option value="Daily Wages" />
+            <option value="Cleaning Supplies" />
+          </datalist>
+
+          <div style={cardStyle}>
+            <h3>1. Start of Day</h3>
+            <div style={flexRow}>
+              <label style={{flex: 1}}>Date: <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle}/></label>
+              <label style={{flex: 1}}>Yesterday Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label>
+              <label style={{flex: 1}}>Yesterday Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label>
             </div>
-          ))}
-          <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Expense</button>
-          <p style={{marginTop: '15px'}}>Total Online Expenses: <strong>{totalOnlineExpenses}</strong></p>
-        </div>
+          </div>
 
-        <div style={{ ...cardStyle, flex: 1, minWidth: '300px' }}>
-          <h3>4. Cash & Credit Expenses</h3>
-          {cashExpenses.map(exp => (
-            <div key={exp.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <input list="common-expenses" placeholder="Item" value={exp.name} onChange={e => updateCashExpense(exp.id, 'name', e.target.value)} style={inputStyle}/>
-              <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={inputStyle}/>
-              <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}>
-                <option value="Cash">Cash</option>
-                <option value="Credit">Credit</option>
-              </select>
+          <div style={cardStyle}>
+            <h3>2. Today's Sales</h3>
+            <div style={flexRow}>
+              <label style={{flex: 1}}>Today Cash Sale: <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/></label>
+              <label style={{flex: 1}}>Today Online Sale: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
+              <div style={{...totalBoxStyle, flex: 1}}>Total Sale: <br/><strong>{totalSale}</strong></div>
             </div>
-          ))}
-          <button onClick={addCashExpense} style={btnStyle}>+ Add Cash/Credit Expense</button>
-          <p style={{marginTop: '15px', marginBottom: '5px'}}>Total Cash Expenses: <strong>{totalCashExpenses}</strong></p>
-          <p style={{ fontSize: '0.85em', color: '#6b7280', margin: 0 }}>(Credit Logged: {totalCreditExpenses})</p>
-        </div>
-      </div>
+          </div>
 
-      <div style={{ ...cardStyle, backgroundColor: '#e5e7eb' }}>
-        <h3>5. Final Balances</h3>
-        <div style={flexRow}>
-          <h4 style={{flex: 1}}>Cash in Hand: <br/><span style={{ color: 'green', fontSize: '24px' }}>{totalCashInHand}</span></h4>
-          <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: 'blue', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
-          <h3 style={{ borderBottom: '2px solid black', flex: 1 }}>Total Left: <br/>{totalAmountLeft}</h3>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ ...cardStyle, flex: 1, minWidth: '300px' }}>
+              <h3>3. Online Expenses</h3>
+              {onlineExpenses.map(exp => (
+                <div key={exp.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <input list="common-expenses" placeholder="Item" value={exp.name} onChange={e => updateOnlineExpense(exp.id, 'name', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateOnlineExpense(exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                </div>
+              ))}
+              <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Expense</button>
+              <p style={{marginTop: '15px'}}>Total Online Expenses: <strong>{totalOnlineExpenses}</strong></p>
+            </div>
+
+            <div style={{ ...cardStyle, flex: 1, minWidth: '300px' }}>
+              <h3>4. Cash & Credit Expenses</h3>
+              {cashExpenses.map(exp => (
+                <div key={exp.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <input list="common-expenses" placeholder="Item" value={exp.name} onChange={e => updateCashExpense(exp.id, 'name', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}>
+                    <option value="Cash">Cash</option>
+                    <option value="Credit">Credit</option>
+                  </select>
+                </div>
+              ))}
+              <button onClick={addCashExpense} style={btnStyle}>+ Add Cash/Credit Expense</button>
+              <p style={{marginTop: '15px', marginBottom: '5px'}}>Total Cash Expenses: <strong>{totalCashExpenses}</strong></p>
+              <p style={{ fontSize: '0.85em', color: '#6b7280', margin: 0 }}>(Credit Logged: {totalCreditExpenses})</p>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle, backgroundColor: '#e5e7eb' }}>
+            <h3>5. Final Balances</h3>
+            <div style={flexRow}>
+              <h4 style={{flex: 1}}>Cash in Hand: <br/><span style={{ color: 'green', fontSize: '24px' }}>{totalCashInHand}</span></h4>
+              <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: 'blue', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
+              <h3 style={{ borderBottom: '2px solid black', flex: 1 }}>Total Left: <br/>{totalAmountLeft}</h3>
+            </div>
+            <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', color: 'white', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>
+              Save & Close Register
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* --- TAB: HISTORY & ANALYTICS --- */}
+      {activeTab === 'history' && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3>Past Records</h3>
+            <button onClick={exportToCSV} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📥 Download Excel/CSV</button>
+          </div>
+          
+          {isLoadingHistory ? <p>Loading history...</p> : (
+            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #ccc' }}>
+                  <th style={{ padding: '10px' }}>Date</th>
+                  <th style={{ padding: '10px' }}>Cash in Hand</th>
+                  <th style={{ padding: '10px' }}>Online Balance</th>
+                  <th style={{ padding: '10px' }}>Total Amount Left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLogs.map(log => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px' }}><strong>{log.date}</strong></td>
+                    <td style={{ padding: '10px', color: 'green' }}>{log.total_cash_in_hand}</td>
+                    <td style={{ padding: '10px', color: 'blue' }}>{log.total_online_balance}</td>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>
+                      {Number(log.total_cash_in_hand) + Number(log.total_online_balance)}
+                    </td>
+                  </tr>
+                ))}
+                {historyLogs.length === 0 && <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>No records found. Save a day to see it here!</td></tr>}
+              </tbody>
+            </table>
+          )}
         </div>
-        <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', color: 'white', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>
-          Save & Close Register
-        </button>
-      </div>
+      )}
     </div>
   );
 }
 
-// --- BASIC STYLES ---
+// --- STYLES ---
 const cardStyle = { backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
 const inputStyle = { padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px', width: '100%', boxSizing: 'border-box' };
 const totalBoxStyle = { padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '4px', fontSize: '16px', textAlign: 'center' };
 const btnStyle = { padding: '10px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
+const tabStyle = { flex: 1, padding: '15px', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' };
