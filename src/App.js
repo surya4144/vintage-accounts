@@ -98,6 +98,7 @@ export default function App() {
     printWindow.print();
   };
 
+  // --- CSV EXPORT FIX: USING IN-CELL LINE BREAKS (\n) ---
   const exportToCSV = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
     
@@ -105,7 +106,8 @@ export default function App() {
     
     const formatExpenses = (expArray) => {
       if (!expArray || expArray.length === 0) return "None";
-      return expArray.map(e => `${e.category || 'Item'} - ${e.description || 'N/A'} (₹${e.amount}) [${e.type || 'Online'}]`).join(" | ");
+      // This \n puts each item on a new line inside the Excel cell
+      return expArray.map(e => `• ${e.category || 'Item'} - ${e.description || 'N/A'} (₹${e.amount}) [${e.type || 'Online'}]`).join("\n");
     };
     
     const escapeCSV = (str) => `"${str.replace(/"/g, '""')}"`;
