@@ -13,7 +13,10 @@
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject"
   },
-  "devDependencies": {
-    "react-scripts": "latest"
-  }
+  "dependencies": {
+    "xlsx": "*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "*"
+  },
 }
