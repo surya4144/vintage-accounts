@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import * as XLSX from 'xlsx'; // NEW: Excel Library
 
 // --- DATABASE CONNECTION ---
 const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
@@ -98,39 +99,79 @@ export default function App() {
     printWindow.print();
   };
 
-  // --- CSV EXPORT FIX: USING IN-CELL LINE BREAKS (\n) ---
-  const exportToCSV = () => {
+  // --- BRAND NEW MULTI-SHEET EXCEL EXPORT ---
+  const exportToExcel = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
-    
-    let csvContent = "data:text/csv;charset=utf-8,Date,Cash Sales,Online Sales,Staff Wages,Online Expenses Breakdown,Cash/Credit Expenses Breakdown,Total Cash In Hand,Total Online Balance,Total Amount Left\n";
-    
-    const formatExpenses = (expArray) => {
-      if (!expArray || expArray.length === 0) return "None";
-      // This \n puts each item on a new line inside the Excel cell
-      return expArray.map(e => `• ${e.category || 'Item'} - ${e.description || 'N/A'} (₹${e.amount}) [${e.type || 'Online'}]`).join("\n");
-    };
-    
-    const escapeCSV = (str) => `"${str.replace(/"/g, '""')}"`;
 
+    const summaryData = [];
+    const detailedExpenses = [];
+
+    // Loop through history to build rows for both sheets
     historyLogs.forEach(log => {
+      
+      // 1. Build the Summary Row
       let cashSales = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
       let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
-
-      let onlineExpStr = escapeCSV(formatExpenses(log.expense_details?.online));
-      let cashExpStr = escapeCSV(formatExpenses(log.expense_details?.cash));
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
-      
-      csvContent += `${log.date},${cashSales},${onlineSales},${staffWages},${onlineExpStr},${cashExpStr},${log.total_cash_in_hand},${log.total_online_balance},${totalLeft}\n`;
+
+      summaryData.push({
+        "Date": log.date,
+        "Cash Sales (₹)": cashSales,
+        "Online Sales (₹)": onlineSales,
+        "Total Staff Wages Paid (₹)": staffWages,
+        "Closing Cash In Hand (₹)": log.total_cash_in_hand,
+        "Closing Online Balance (₹)": log.total_online_balance,
+        "Total Money Left (₹)": totalLeft
+      });
+
+      // 2. Build the Detailed Expense Rows
+      const pushExpense = (arr, mainType) => {
+        if (!arr) return;
+        arr.forEach(exp => {
+          detailedExpenses.push({
+            "Date": log.date,
+            "Account Type": mainType,
+            "Payment Method": exp.type || (mainType === 'Online Exp' ? 'Online' : 'Cash'),
+            "Category": exp.category || 'Uncategorized',
+            "Description": exp.description || 'N/A',
+            "Amount (₹)": Number(exp.amount || 0)
+          });
+        });
+      };
+
+      // Push raw materials & utilities
+      pushExpense(log.expense_details?.online, "Online Exp");
+      pushExpense(log.expense_details?.cash, "Cash/Credit Exp");
+
+      // Push staff payments as line items
+      if (log.expense_details?.staff) {
+        log.expense_details.staff.forEach(staff => {
+          detailedExpenses.push({
+            "Date": log.date,
+            "Account Type": "Staff Wage/Advance",
+            "Payment Method": staff.method || 'Cash',
+            "Category": staff.type || 'Full Wage', // Full wage vs Advance
+            "Description": staff.name || 'Staff Member',
+            "Amount (₹)": Number(staff.amount || 0)
+          });
+        });
+      }
     });
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `vintage_accounts_export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Generate Excel File
+    const workbook = XLSX.utils.book_new();
+    
+    // Convert arrays to Excel Sheets
+    const worksheet1 = XLSX.utils.json_to_sheet(summaryData);
+    const worksheet2 = XLSX.utils.json_to_sheet(detailedExpenses);
+
+    // Add Sheets to Workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet1, "Daily Summary");
+    XLSX.utils.book_append_sheet(workbook, worksheet2, "Expense Details");
+
+    // Download the .xlsx file
+    XLSX.writeFile(workbook, `Vintage_Accounts_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const analyticsData = useMemo(() => {
@@ -237,7 +278,7 @@ export default function App() {
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateCashExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateCashExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={{inputStyle, flex: 2}}><option>Cash</option><option>Credit</option></select>
+                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}><option>Cash</option><option>Credit</option></select>
                 </div>
               ))}
               <button onClick={addCashExpense} style={btnStyle}>+ Add Cash/Credit Exp</button>
@@ -260,7 +301,7 @@ export default function App() {
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h2 style={{margin: 0}}>Past Records</h2>
-            <button onClick={exportToCSV} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📥 Download Detailed Report</button>
+            <button onClick={exportToExcel} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Download Multi-Sheet Excel</button>
           </div>
           {isLoadingHistory ? <p>Loading...</p> : (
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
