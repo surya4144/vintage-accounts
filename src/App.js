@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import * as XLSX from 'xlsx'; // NEW: Excel Library
+import * as XLSX from 'xlsx';
 
 // --- DATABASE CONNECTION ---
 const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
@@ -12,8 +12,9 @@ const MANAGER_PIN = '1234';
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('daily');
+  const [activeTab, setActiveTab] = useState('daily'); // daily, history, analytics, tasks
 
+  // --- STATE: DAILY ACCOUNTS ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
@@ -24,19 +25,28 @@ export default function App() {
   const [cashExpenses, setCashExpenses] = useState([]);
   const [staffPayments, setStaffPayments] = useState([]);
 
+  // --- STATE: POWERFUL FEATURE (CASH DRAWER COUNTER) ---
+  const [notes, setNotes] = useState({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+
+  // --- STATE: TASKS & REMINDERS ---
+  const [tasks, setTasks] = useState(() => {
+    const saved = localStorage.getItem('vintage_tasks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [newTask, setNewTask] = useState('');
+
+  // --- STATE: HISTORY & ANALYTICS ---
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  
   const [analyticsStart, setAnalyticsStart] = useState(() => {
     let d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
 
+  // --- CALCULATIONS ---
   const totalSale = Number(cashSale) + Number(onlineSale);
-  
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
@@ -44,6 +54,13 @@ export default function App() {
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
+  const actualDrawerTotal = 
+    (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + 
+    (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
+  
+  const drawerDifference = actualDrawerTotal - totalCashInHand;
+
+  // --- HANDLERS ---
   const handleLogin = () => { if (pinInput === MANAGER_PIN) setIsUnlocked(true); else { alert("Incorrect PIN."); setPinInput(''); }};
 
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
@@ -55,6 +72,13 @@ export default function App() {
   const addStaffPayment = () => setStaffPayments([...staffPayments, { id: Date.now(), name: '', amount: 0, type: 'Full Wage', method: 'Cash' }]);
   const updateStaffPayment = (id, field, value) => setStaffPayments(staffPayments.map(s => s.id === id ? { ...s, [field]: value } : s));
 
+  // Task Handlers
+  useEffect(() => { localStorage.setItem('vintage_tasks', JSON.stringify(tasks)); }, [tasks]);
+  const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
+  const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
+
+  // --- DATABASE SYNC ---
   useEffect(() => {
     const fetchYesterday = async () => {
       const { data } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').order('date', { ascending: false }).limit(1);
@@ -75,7 +99,7 @@ export default function App() {
   const saveDailyAccounts = async () => {
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale } }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, drawer_difference: drawerDifference }
       }, { onConflict: 'date' });
     if (error) alert("Error saving data: " + error.message); else alert("Vintage Daily Accounts Saved!");
   };
@@ -99,89 +123,55 @@ export default function App() {
     printWindow.print();
   };
 
-  // --- BRAND NEW MULTI-SHEET EXCEL EXPORT ---
   const exportToExcel = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
+    const summaryData = []; const detailedExpenses = [];
 
-    const summaryData = [];
-    const detailedExpenses = [];
-
-    // Loop through history to build rows for both sheets
     historyLogs.forEach(log => {
-      
-      // 1. Build the Summary Row
       let cashSales = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
       let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
 
       summaryData.push({
-        "Date": log.date,
-        "Cash Sales (₹)": cashSales,
-        "Online Sales (₹)": onlineSales,
-        "Total Staff Wages Paid (₹)": staffWages,
-        "Closing Cash In Hand (₹)": log.total_cash_in_hand,
-        "Closing Online Balance (₹)": log.total_online_balance,
-        "Total Money Left (₹)": totalLeft
+        "Date": log.date, "Cash Sales (₹)": cashSales, "Online Sales (₹)": onlineSales,
+        "Total Staff Wages Paid (₹)": staffWages, "Closing Cash In Hand (₹)": log.total_cash_in_hand,
+        "Closing Online Balance (₹)": log.total_online_balance, "Total Money Left (₹)": totalLeft,
+        "Physical Drawer Discrepancy (₹)": log.expense_details?.drawer_difference || 'Not Logged'
       });
 
-      // 2. Build the Detailed Expense Rows
       const pushExpense = (arr, mainType) => {
         if (!arr) return;
         arr.forEach(exp => {
           detailedExpenses.push({
-            "Date": log.date,
-            "Account Type": mainType,
-            "Payment Method": exp.type || (mainType === 'Online Exp' ? 'Online' : 'Cash'),
-            "Category": exp.category || 'Uncategorized',
-            "Description": exp.description || 'N/A',
-            "Amount (₹)": Number(exp.amount || 0)
+            "Date": log.date, "Account Type": mainType, "Payment Method": exp.type || (mainType === 'Online Exp' ? 'Online' : 'Cash'),
+            "Category": exp.category || 'Uncategorized', "Description": exp.description || 'N/A', "Amount (₹)": Number(exp.amount || 0)
           });
         });
       };
 
-      // Push raw materials & utilities
-      pushExpense(log.expense_details?.online, "Online Exp");
-      pushExpense(log.expense_details?.cash, "Cash/Credit Exp");
-
-      // Push staff payments as line items
+      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Cash/Credit Exp");
       if (log.expense_details?.staff) {
         log.expense_details.staff.forEach(staff => {
           detailedExpenses.push({
-            "Date": log.date,
-            "Account Type": "Staff Wage/Advance",
-            "Payment Method": staff.method || 'Cash',
-            "Category": staff.type || 'Full Wage', // Full wage vs Advance
-            "Description": staff.name || 'Staff Member',
-            "Amount (₹)": Number(staff.amount || 0)
+            "Date": log.date, "Account Type": "Staff Wage/Advance", "Payment Method": staff.method || 'Cash',
+            "Category": staff.type || 'Full Wage', "Description": staff.name || 'Staff Member', "Amount (₹)": Number(staff.amount || 0)
           });
         });
       }
     });
 
-    // Generate Excel File
     const workbook = XLSX.utils.book_new();
-    
-    // Convert arrays to Excel Sheets
-    const worksheet1 = XLSX.utils.json_to_sheet(summaryData);
-    const worksheet2 = XLSX.utils.json_to_sheet(detailedExpenses);
-
-    // Add Sheets to Workbook
-    XLSX.utils.book_append_sheet(workbook, worksheet1, "Daily Summary");
-    XLSX.utils.book_append_sheet(workbook, worksheet2, "Expense Details");
-
-    // Download the .xlsx file
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), "Daily Summary");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailedExpenses), "Expense Details");
     XLSX.writeFile(workbook, `Vintage_Accounts_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
-    let totalSales = 0; let totalExpenses = 0;
-    const categoryTotals = {};
-
+    let totalSales = 0; let totalExpenses = 0; const categoryTotals = {};
     filtered.forEach(log => {
       totalSales += Number(log.expense_details?.sales?.cash || 0) + Number(log.expense_details?.sales?.online || 0);
-      
       const processExp = (arr) => {
         if(!arr) return;
         arr.forEach(exp => {
@@ -191,10 +181,7 @@ export default function App() {
           categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
         });
       };
-      
-      processExp(log.expense_details?.online);
-      processExp(log.expense_details?.cash);
-      
+      processExp(log.expense_details?.online); processExp(log.expense_details?.cash);
       if(log.expense_details?.staff) {
         log.expense_details.staff.forEach(s => {
           totalExpenses += Number(s.amount || 0);
@@ -202,10 +189,8 @@ export default function App() {
         });
       }
     });
-
     const maxCatVal = Math.max(...Object.values(categoryTotals), 1);
     const sortedCategories = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
-
     return { totalSales, totalExpenses, sortedCategories, maxCatVal };
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
@@ -214,7 +199,8 @@ export default function App() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
         <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
-          <h2>Vintage Restaurant</h2><p>Enter Manager PIN</p>
+          <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '80px', marginBottom: '10px' }}/>
+          <h2 style={{marginTop: 0}}>Vintage Restaurant</h2><p>Enter Manager PIN</p>
           <input type="password" value={pinInput} onChange={e => setPinInput(e.target.value)} style={{ ...inputStyle, textAlign: 'center', fontSize: '24px', letterSpacing: '8px', marginBottom: '20px' }} maxLength={4} />
           <button onClick={handleLogin} style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>Unlock App</button>
         </div>
@@ -225,13 +211,24 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
       
+      {/* HEADER WITH LOGO */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '45px' }}/>
+          <h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1>
+        </div>
+        <button onClick={() => setIsUnlocked(false)} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🔒 Lock App</button>
+      </div>
+
+      {/* TABS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#10b981' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
         <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
-        <button onClick={() => setIsUnlocked(false)} style={{ ...tabStyle, flex: 0.3, backgroundColor: '#ef4444', color: 'white' }}>Lock</button>
+        <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders {tasks.filter(t => !t.done).length > 0 && `(${tasks.filter(t => !t.done).length})`}</button>
       </div>
 
+      {/* --- TAB 1: DAILY ENTRY --- */}
       {activeTab === 'daily' && (
         <>
           <datalist id="common-expenses">
@@ -245,26 +242,13 @@ export default function App() {
             <div style={{...cardStyle, flex: 1}}><h3>Today Sales</h3><div style={flexRow}><label>Cash: <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label></div></div>
           </div>
 
-          <div style={cardStyle}>
-            <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
-            {staffPayments.map(s => (
-              <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <input placeholder="Staff Name" value={s.name} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 2}}/>
-                <select value={s.type} onChange={e => updateStaffPayment(s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
-                <input type="number" placeholder="Amount" value={s.amount} onChange={e => updateStaffPayment(s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                <select value={s.method} onChange={e => updateStaffPayment(s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
-              </div>
-            ))}
-            <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
-          </div>
-
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
               <h3 style={{color: '#3b82f6'}}>💳 Online Expenses</h3>
               {onlineExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateOnlineExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
-                  <input placeholder="Specific Details/Note" value={exp.description} onChange={e => updateOnlineExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
+                  <input placeholder="Specific Details" value={exp.description} onChange={e => updateOnlineExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateOnlineExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 </div>
               ))}
@@ -285,18 +269,93 @@ export default function App() {
             </div>
           </div>
 
+          <div style={cardStyle}>
+            <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
+            {staffPayments.map(s => (
+              <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <input placeholder="Staff Name" value={s.name} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 2}}/>
+                <select value={s.type} onChange={e => updateStaffPayment(s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
+                <input type="number" placeholder="Amount" value={s.amount} onChange={e => updateStaffPayment(s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                <select value={s.method} onChange={e => updateStaffPayment(s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
+              </div>
+            ))}
+            <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
+          </div>
+
+          {/* NEW FEATURE: CASH DRAWER CALCULATOR */}
+          <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
+            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
+            <p style={{ fontSize: '14px', color: '#a16207', marginBottom: '15px' }}>Enter the quantity of notes currently in your register to check for missing funds.</p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹100 x <input type="number" value={notes[100]} onChange={e => setNotes({...notes, 100: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹50 x <input type="number" value={notes[50]} onChange={e => setNotes({...notes, 50: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹20 x <input type="number" value={notes[20]} onChange={e => setNotes({...notes, 20: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹10 x <input type="number" value={notes[10]} onChange={e => setNotes({...notes, 10: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1.5 }}>Coins (Total ₹): <input type="number" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} style={inputStyle}/></label>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px' }}>
+              <div>
+                <p style={{ margin: 0, color: '#6b7280' }}>Actual Physical Cash:</p>
+                <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal}</h2>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: 0, color: '#6b7280' }}>Discrepancy (Physical vs System):</p>
+                <h2 style={{ margin: 0, color: drawerDifference === 0 ? 'green' : 'red' }}>
+                  {drawerDifference > 0 ? `+ ₹${drawerDifference} (Over)` : drawerDifference < 0 ? `- ₹${Math.abs(drawerDifference)} (Short)` : 'Perfect Match ✓'}
+                </h2>
+              </div>
+            </div>
+          </div>
+
           <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
-            <h3>Final Balances</h3>
+            <h3>Final System Balances</h3>
             <div style={flexRow}>
-              <h4 style={{flex: 1}}>Cash In Hand: <br/><span style={{ color: '#34d399', fontSize: '24px' }}>{totalCashInHand}</span></h4>
+              <h4 style={{flex: 1}}>Expected Cash In Hand: <br/><span style={{ color: '#34d399', fontSize: '24px' }}>{totalCashInHand}</span></h4>
               <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
-              <h3 style={{ flex: 1 }}>Total Left: <br/>{totalAmountLeft}</h3>
+              <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
             </div>
             <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save & Close Register</button>
           </div>
         </>
       )}
 
+      {/* --- NEW TAB: TASKS & REMINDERS --- */}
+      {activeTab === 'tasks' && (
+        <div style={{ ...cardStyle, maxWidth: '600px', margin: '0 auto' }}>
+          <h2>🔔 Front Desk Tasks & Reminders</h2>
+          <p style={{ color: '#6b7280', marginBottom: '20px' }}>Log supplier payments, kitchen notes, or end-of-day duties here. These stay saved on your tablet until checked off!</p>
+          
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+            <input 
+              type="text" 
+              placeholder="e.g. Pay milk vendor ₹1500 tomorrow morning..." 
+              value={newTask} 
+              onChange={e => setNewTask(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && handleAddTask()}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button onClick={handleAddTask} style={{ ...btnStyle, backgroundColor: '#f59e0b' }}>Add Task</button>
+          </div>
+
+          <ul style={{ listStyleType: 'none', padding: 0 }}>
+            {tasks.length === 0 ? <p style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>All caught up! No pending tasks.</p> : null}
+            {tasks.map(task => (
+              <li key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: task.done ? '#f3f4f6' : 'white', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '10px', transition: '0.2s' }}>
+                <input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} style={{ transform: 'scale(1.5)', cursor: 'pointer' }} />
+                <span style={{ flex: 1, fontSize: '18px', color: task.done ? '#9ca3af' : '#1f2937', textDecoration: task.done ? 'line-through' : 'none' }}>
+                  {task.text}
+                </span>
+                <button onClick={() => deleteTask(task.id)} style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* --- TAB: HISTORY --- */}
       {activeTab === 'history' && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -322,6 +381,7 @@ export default function App() {
         </div>
       )}
 
+      {/* --- TAB: ANALYTICS --- */}
       {activeTab === 'analytics' && (
         <div style={cardStyle}>
           <h2>Visual Analytics</h2>
