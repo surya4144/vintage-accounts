@@ -7,14 +7,14 @@ const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const MANAGER_PIN = '1234'; 
-
 export default function App() {
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('daily'); // daily, history, analytics, tasks
+  // --- AUTHENTICATION STATE ---
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  // --- STATE: DAILY ACCOUNTS ---
+  const [activeTab, setActiveTab] = useState('daily');
+
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
@@ -25,17 +25,14 @@ export default function App() {
   const [cashExpenses, setCashExpenses] = useState([]);
   const [staffPayments, setStaffPayments] = useState([]);
 
-  // --- STATE: POWERFUL FEATURE (CASH DRAWER COUNTER) ---
   const [notes, setNotes] = useState({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
 
-  // --- STATE: TASKS & REMINDERS ---
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem('vintage_tasks');
     return saved ? JSON.parse(saved) : [];
   });
   const [newTask, setNewTask] = useState('');
 
-  // --- STATE: HISTORY & ANALYTICS ---
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [analyticsStart, setAnalyticsStart] = useState(() => {
@@ -43,7 +40,6 @@ export default function App() {
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- CALCULATIONS ---
   const totalSale = Number(cashSale) + Number(onlineSale);
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -60,8 +56,26 @@ export default function App() {
   
   const drawerDifference = actualDrawerTotal - totalCashInHand;
 
-  // --- HANDLERS ---
-  const handleLogin = () => { if (pinInput === MANAGER_PIN) setIsUnlocked(true); else { alert("Incorrect PIN."); setPinInput(''); }};
+  // --- SUPABASE AUTHENTICATION HANDLERS ---
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert("Login Failed: " + error.message);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
   const updateOnlineExpense = (id, field, value) => setOnlineExpenses(onlineExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
@@ -72,20 +86,19 @@ export default function App() {
   const addStaffPayment = () => setStaffPayments([...staffPayments, { id: Date.now(), name: '', amount: 0, type: 'Full Wage', method: 'Cash' }]);
   const updateStaffPayment = (id, field, value) => setStaffPayments(staffPayments.map(s => s.id === id ? { ...s, [field]: value } : s));
 
-  // Task Handlers
   useEffect(() => { localStorage.setItem('vintage_tasks', JSON.stringify(tasks)); }, [tasks]);
   const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
   const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
 
-  // --- DATABASE SYNC ---
   useEffect(() => {
+    if (!session) return;
     const fetchYesterday = async () => {
       const { data } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').order('date', { ascending: false }).limit(1);
       if (data && data.length > 0) { setYesterdayCash(data[0].total_cash_in_hand); setYesterdayOnline(data[0].total_online_balance); }
     };
     fetchYesterday();
-  }, []);
+  }, [session]);
 
   const loadHistory = async () => {
     setIsLoadingHistory(true);
@@ -94,14 +107,14 @@ export default function App() {
     setIsLoadingHistory(false);
   };
 
-  useEffect(() => { if (activeTab === 'history' || activeTab === 'analytics') loadHistory(); }, [activeTab]);
+  useEffect(() => { if (session && (activeTab === 'history' || activeTab === 'analytics')) loadHistory(); }, [activeTab, session]);
 
   const saveDailyAccounts = async () => {
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
         expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, drawer_difference: drawerDifference }
       }, { onConflict: 'date' });
-    if (error) alert("Error saving data: " + error.message); else alert("Vintage Daily Accounts Saved!");
+    if (error) alert("Error saving data: " + error.message); else alert("Vintage Daily Accounts Saved securely!");
   };
 
   const printReceipt = (log) => {
@@ -116,7 +129,7 @@ export default function App() {
       <div class="row"><b>Total Cash In Hand:</b><b>${log.total_cash_in_hand}</b></div>
       <div class="row"><b>Total Online Bal:</b><b>${log.total_online_balance}</b></div><hr/>
       <div class="row"><h3 style="margin:10px 0;">TOTAL LEFT:</h3><h3>${Number(log.total_cash_in_hand) + Number(log.total_online_balance)}</h3></div>
-      <hr/><p style="text-align:center;font-size:12px;">Generated via Vintage System</p>
+      <hr/><p style="text-align:center;font-size:12px;">Generated via Vintage Secure System</p>
       </body></html>
     `);
     printWindow.document.close();
@@ -195,32 +208,51 @@ export default function App() {
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
 
-  if (!isUnlocked) {
+  // --- SECURE LOGIN SCREEN ---
+  if (!session) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
-        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb', padding: '20px' }}>
+        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px', width: '100%', boxSizing: 'border-box' }}>
           <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '80px', marginBottom: '10px' }}/>
-          <h2 style={{marginTop: 0}}>Vintage Restaurant</h2><p>Enter Manager PIN</p>
-          <input type="password" value={pinInput} onChange={e => setPinInput(e.target.value)} style={{ ...inputStyle, textAlign: 'center', fontSize: '24px', letterSpacing: '8px', marginBottom: '20px' }} maxLength={4} />
-          <button onClick={handleLogin} style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>Unlock App</button>
+          <h2 style={{marginTop: 0, color: '#1f2937'}}>Vintage Restaurant</h2>
+          <p style={{color: '#6b7280', marginBottom: '20px'}}>Secure Admin Portal</p>
+          
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <input 
+              type="email" 
+              placeholder="Admin Email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              style={{...inputStyle, padding: '15px'}} 
+              required
+            />
+            <input 
+              type="password" 
+              placeholder="Password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              style={{...inputStyle, padding: '15px'}} 
+              required
+            />
+            <button type="submit" style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px', marginTop: '10px' }}>Secure Login</button>
+          </form>
         </div>
       </div>
     );
   }
 
+  // --- MAIN APP UI ---
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
       
-      {/* HEADER WITH LOGO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '45px' }}/>
           <h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1>
         </div>
-        <button onClick={() => setIsUnlocked(false)} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🔒 Lock App</button>
+        <button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button>
       </div>
 
-      {/* TABS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#10b981' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
@@ -228,7 +260,6 @@ export default function App() {
         <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders {tasks.filter(t => !t.done).length > 0 && `(${tasks.filter(t => !t.done).length})`}</button>
       </div>
 
-      {/* --- TAB 1: DAILY ENTRY --- */}
       {activeTab === 'daily' && (
         <>
           <datalist id="common-expenses">
@@ -282,7 +313,6 @@ export default function App() {
             <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
           </div>
 
-          {/* NEW FEATURE: CASH DRAWER CALCULATOR */}
           <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
             <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
             <p style={{ fontSize: '14px', color: '#a16207', marginBottom: '15px' }}>Enter the quantity of notes currently in your register to check for missing funds.</p>
@@ -322,7 +352,6 @@ export default function App() {
         </>
       )}
 
-      {/* --- NEW TAB: TASKS & REMINDERS --- */}
       {activeTab === 'tasks' && (
         <div style={{ ...cardStyle, maxWidth: '600px', margin: '0 auto' }}>
           <h2>🔔 Front Desk Tasks & Reminders</h2>
@@ -355,7 +384,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TAB: HISTORY --- */}
       {activeTab === 'history' && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -381,7 +409,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TAB: ANALYTICS --- */}
       {activeTab === 'analytics' && (
         <div style={cardStyle}>
           <h2>Visual Analytics</h2>
