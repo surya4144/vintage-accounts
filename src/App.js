@@ -23,6 +23,10 @@ export default function App() {
   const [onlineExpenses, setOnlineExpenses] = useState([]);
   const [cashExpenses, setCashExpenses] = useState([]);
   const [staffPayments, setStaffPayments] = useState([]);
+  
+  // NEW: CREDIT SYSTEM ARRAYS
+  const [creditSales, setCreditSales] = useState([]);
+  const [creditReceived, setCreditReceived] = useState([]);
 
   const [notes, setNotes] = useState({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
 
@@ -67,27 +71,21 @@ export default function App() {
         setOnlineExpenses(currentData.expense_details?.online || []);
         setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []);
+        setCreditSales(currentData.expense_details?.credit_sales || []);
+        setCreditReceived(currentData.expense_details?.credit_received || []);
       } else {
-        setCashSale(0);
-        setOnlineSale(0);
-        setOnlineExpenses([]);
-        setCashExpenses([]);
-        setStaffPayments([]);
+        setCashSale(0); setOnlineSale(0);
+        setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]);
+        setCreditSales([]); setCreditReceived([]);
       }
 
-      const { data: prevData } = await supabase
-        .from('daily_logs')
-        .select('total_cash_in_hand, total_online_balance')
-        .lt('date', date)
-        .order('date', { ascending: false })
-        .limit(1);
+      const { data: prevData } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').lt('date', date).order('date', { ascending: false }).limit(1);
 
       if (prevData && prevData.length > 0) {
         setYesterdayCash(prevData[0].total_cash_in_hand);
         setYesterdayOnline(prevData[0].total_online_balance);
       } else {
-        setYesterdayCash(0);
-        setYesterdayOnline(0);
+        setYesterdayCash(0); setYesterdayOnline(0);
       }
     };
     
@@ -101,17 +99,12 @@ export default function App() {
     setIsLoadingHistory(false);
   };
 
-  useEffect(() => { if (session && (activeTab === 'history' || activeTab === 'analytics')) loadHistory(); }, [activeTab, session]);
+  useEffect(() => { if (session && (activeTab === 'history' || activeTab === 'analytics' || activeTab === 'ledger')) loadHistory(); }, [activeTab, session]);
 
-  // --- NEW MATH LOGIC ---
+  // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
-  // This ONLY counts expenses explicitly marked as "Cash (Deduct from Till)"
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
-  // Expenses that were paid from the counter sales before the money was entered
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalAnilExpenses = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -119,34 +112,34 @@ export default function App() {
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
-  // --- SALES RECALCULATION ---
-  // If you entered 4000 net sale, but spent 500 from the counter, your true Gross Sale is 4500.
-  const grossCashSale = Number(cashSale) + totalCounterExpenses;
-  const totalSale = grossCashSale + Number(onlineSale);
+  // CREDIT MATH
+  const totalCreditSales = creditSales.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const creditReceivedOnline = creditReceived.filter(c => c.method === 'Online').reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
-  // --- TILL BALANCE RECALCULATION ---
-  // Notice that "totalCounterExpenses" is COMPLETELY EXCLUDED from being deducted here.
-  const totalCashInHand = yesterdayCash + Number(cashSale) - totalCashExpenses - totalStaffCash;
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
+  // SALES RECALCULATION
+  const grossCashSale = Number(cashSale) + totalCounterExpenses;
+  const trueGrossSale = grossCashSale + Number(onlineSale) + totalCreditSales; // Includes Credit Sales!
+
+  // TILL BALANCE RECALCULATION (Credit Received injects directly into the till)
+  const totalCashInHand = yesterdayCash + Number(cashSale) + creditReceivedCash - totalCashExpenses - totalStaffCash;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
-  const actualDrawerTotal = 
-    (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + 
-    (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
-  
+  const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
   const drawerDifference = actualDrawerTotal - totalCashInHand;
 
   // --- HANDLERS ---
-  const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
-  const updateOnlineExpense = (id, field, value) => setOnlineExpenses(onlineExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
+  const addArrItem = (setter, arr, defaults) => setter([...arr, { id: Date.now(), ...defaults }]);
+  const updateArrItem = (setter, arr, id, field, value) => setter(arr.map(item => item.id === id ? { ...item, [field]: value } : item));
   
-  const addCashExpense = () => setCashExpenses([...cashExpenses, { id: Date.now(), category: '', description: '', amount: 0, type: 'Cash' }]);
-  const updateCashExpense = (id, field, value) => setCashExpenses(cashExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
+  const addCreditSale = () => addArrItem(setCreditSales, creditSales, { name: '', amount: 0 });
+  const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
 
-  const addStaffPayment = () => setStaffPayments([...staffPayments, { id: Date.now(), name: '', amount: 0, type: 'Full Wage', method: 'Cash' }]);
-  const updateStaffPayment = (id, field, value) => setStaffPayments(staffPayments.map(s => s.id === id ? { ...s, [field]: value } : s));
+  const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', description: '', amount: 0 });
+  const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
+  const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, { name: '', amount: 0, type: 'Full Wage', method: 'Cash' });
 
-  useEffect(() => { localStorage.setItem('vintage_tasks', JSON.stringify(tasks)); }, [tasks]);
   const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
   const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
@@ -154,142 +147,85 @@ export default function App() {
   const saveDailyAccounts = async () => {
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, drawer_difference: drawerDifference }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, credit_sales: creditSales, credit_received: creditReceived, drawer_difference: drawerDifference }
       }, { onConflict: 'date' });
     if (error) alert("Error saving data: " + error.message); else alert("Vintage Daily Accounts Saved securely!");
   };
 
-  const printReceipt = (log) => {
-    const printWindow = window.open('', '', 'height=600,width=400');
-    printWindow.document.write(`
-      <html><head><title>Print Report - ${log.date}</title>
-      <style>body{font-family: monospace; padding: 20px;} h2{text-align:center;} .row{display:flex;justify-content:space-between;}</style>
-      </head><body>
-      <h2>VINTAGE RESTAURANT</h2><p style="text-align:center;">Daily Account Summary<br/>Date: ${log.date}</p><hr/>
-      <div class="row"><span>Cash Sales (Net):</span><span>${log.expense_details?.sales?.cash || 0}</span></div>
-      <div class="row"><span>Online Sales:</span><span>${log.expense_details?.sales?.online || 0}</span></div><hr/>
-      <div class="row"><b>Total Cash In Hand:</b><b>${log.total_cash_in_hand}</b></div>
-      <div class="row"><b>Total Online Bal:</b><b>${log.total_online_balance}</b></div><hr/>
-      <div class="row"><h3 style="margin:10px 0;">TOTAL LEFT:</h3><h3>${Number(log.total_cash_in_hand) + Number(log.total_online_balance)}</h3></div>
-      <hr/><p style="text-align:center;font-size:12px;">Generated via Vintage Secure System</p>
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-  };
-
   const exportToExcel = () => {
     if (historyLogs.length === 0) return alert("No data to export!");
-    const summaryData = []; const detailedExpenses = [];
+    const summaryData = []; const detailedData = [];
 
     historyLogs.forEach(log => {
       let netCashSale = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
-      let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
-      let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
-
-      let tejaTotal = 0; let anilTotal = 0; let counterTotal = 0;
-      if (log.expense_details?.cash) {
-        tejaTotal = log.expense_details.cash.filter(e => e.type === 'Teja').reduce((sum, e) => sum + Number(e.amount || 0), 0);
-        anilTotal = log.expense_details.cash.filter(e => e.type === 'Anil').reduce((sum, e) => sum + Number(e.amount || 0), 0);
-        counterTotal = log.expense_details.cash.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0);
-      }
-
-      // Add counter expenses back to Net Cash sale to show the true Gross Sales to the accountant
-      let grossCashSale = Number(netCashSale) + Number(counterTotal);
+      let counterTotal = log.expense_details?.cash?.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+      
+      let cSales = log.expense_details?.credit_sales?.reduce((sum, c) => sum + Number(c.amount || 0), 0) || 0;
+      let cRecv = log.expense_details?.credit_received?.reduce((sum, c) => sum + Number(c.amount || 0), 0) || 0;
 
       summaryData.push({
-        "Date": log.date, 
-        "Gross Cash Sales (₹)": grossCashSale, 
-        "Net Cash Added To Drawer (₹)": netCashSale,
-        "Online Sales (₹)": onlineSales,
-        "Total Staff Wages Paid (₹)": staffWages, 
-        "Teja Paid (₹)": tejaTotal, "Anil Paid (₹)": anilTotal,
-        "Closing Cash In Hand (₹)": log.total_cash_in_hand,
-        "Closing Online Balance (₹)": log.total_online_balance, "Total Money Left (₹)": totalLeft,
-        "Physical Drawer Discrepancy (₹)": log.expense_details?.drawer_difference || 'Not Logged'
+        "Date": log.date, "Gross Cash Sales (₹)": Number(netCashSale) + Number(counterTotal), "Online Sales (₹)": onlineSales,
+        "Credit Sales Given (₹)": cSales, "Credit Payments Received (₹)": cRecv,
+        "Closing Cash In Hand (₹)": log.total_cash_in_hand, "Closing Online Balance (₹)": log.total_online_balance,
       });
 
-      const pushExpense = (arr, mainType) => {
+      const pushData = (arr, mainType) => {
         if (!arr) return;
-        arr.forEach(exp => {
-          detailedExpenses.push({
-            "Date": log.date, "Account Type": mainType, "Payment Method": exp.type || (mainType === 'Online Exp' ? 'Online' : 'Cash'),
-            "Category": exp.category || 'Uncategorized', "Description": exp.description || 'N/A', "Amount (₹)": Number(exp.amount || 0)
+        arr.forEach(item => {
+          detailedData.push({
+            "Date": log.date, "Type": mainType, "Method": item.type || item.method || 'N/A',
+            "Details": item.category || item.name || 'N/A', "Note": item.description || '', "Amount (₹)": Number(item.amount || 0)
           });
         });
       };
-
-      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Offline/Cash Register");
-      if (log.expense_details?.staff) {
-        log.expense_details.staff.forEach(staff => {
-          detailedExpenses.push({
-            "Date": log.date, "Account Type": "Staff Wage/Advance", "Payment Method": staff.method || 'Cash',
-            "Category": staff.type || 'Full Wage', "Description": staff.name || 'Staff Member', "Amount (₹)": Number(staff.amount || 0)
-          });
-        });
-      }
+      pushData(log.expense_details?.online, "Online Exp"); pushData(log.expense_details?.cash, "Offline/Owner Exp");
+      pushData(log.expense_details?.staff, "Staff Payment"); pushData(log.expense_details?.credit_sales, "Credit Sale Given");
+      pushData(log.expense_details?.credit_received, "Credit Payment Received");
     });
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), "Daily Summary");
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailedExpenses), "Expense Details");
-    XLSX.writeFile(workbook, `Vintage_Accounts_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Daily Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailedData), "Detailed Entries");
+    XLSX.writeFile(wb, `Vintage_Accounts_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const analyticsData = useMemo(() => {
-    const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
-    let totalSales = 0; let totalExpenses = 0; const categoryTotals = {};
-    filtered.forEach(log => {
-      
-      // Rebuild Gross Sales for accurate charts
-      let logNetCashSale = Number(log.expense_details?.sales?.cash || 0);
-      let logCounterExp = log.expense_details?.cash?.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-      let logGrossCashSale = logNetCashSale + logCounterExp;
-
-      totalSales += logGrossCashSale + Number(log.expense_details?.sales?.online || 0);
-      
-      const processExp = (arr) => {
-        if(!arr) return;
-        arr.forEach(exp => {
-          // ALL expenses (even Teja/Anil/Counter) count in Analytics because they represent money spent on the business.
-          totalExpenses += Number(exp.amount || 0);
-          const cat = exp.category || exp.name || 'Uncategorized';
-          categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
-        });
-      };
-      processExp(log.expense_details?.online); processExp(log.expense_details?.cash);
-      if(log.expense_details?.staff) {
-        log.expense_details.staff.forEach(s => {
-          totalExpenses += Number(s.amount || 0);
-          categoryTotals['Staff Wages & Advances'] = (categoryTotals['Staff Wages & Advances'] || 0) + Number(s.amount || 0);
-        });
-      }
+  // AUTOMATIC KHATA (LEDGER) CALCULATOR
+  const ledgerData = useMemo(() => {
+    const balances = {};
+    historyLogs.forEach(log => {
+      (log.expense_details?.credit_sales || []).forEach(c => {
+        const key = c.name?.trim().toUpperCase() || 'UNKNOWN';
+        if (!balances[key]) balances[key] = { name: c.name || 'Unknown', given: 0, received: 0 };
+        balances[key].given += Number(c.amount || 0);
+      });
+      (log.expense_details?.credit_received || []).forEach(c => {
+        const key = c.name?.trim().toUpperCase() || 'UNKNOWN';
+        if (!balances[key]) balances[key] = { name: c.name || 'Unknown', given: 0, received: 0 };
+        balances[key].received += Number(c.amount || 0);
+      });
     });
-    const maxCatVal = Math.max(...Object.values(categoryTotals), 1);
-    const sortedCategories = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
-    return { totalSales, totalExpenses, sortedCategories, maxCatVal };
-  }, [historyLogs, analyticsStart, analyticsEnd]);
+    return Object.values(balances).map(b => ({ ...b, balance: b.given - b.received })).filter(b => b.balance !== 0).sort((a, b) => b.balance - a.balance);
+  }, [historyLogs]);
 
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb', padding: '20px' }}>
-        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px', width: '100%' }}>
           <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '80px', marginBottom: '10px' }}/>
           <h2 style={{marginTop: 0, color: '#1f2937'}}>Vintage Restaurant</h2>
           <p style={{color: '#6b7280', marginBottom: '20px'}}>Secure Admin Portal</p>
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <input type="email" placeholder="Admin Email" value={email} onChange={e => setEmail(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
             <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
-            <button type="submit" style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px', marginTop: '10px' }}>Secure Login</button>
+            <button type="submit" style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>Secure Login</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // --- MAIN APP UI ---
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
       
@@ -301,47 +237,75 @@ export default function App() {
         <button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+      {/* UPDATED NAVIGATION TABS */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#10b981' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
+        <button onClick={() => setActiveTab('ledger')} style={{ ...tabStyle, backgroundColor: activeTab === 'ledger' ? '#ec4899' : '#e5e7eb', color: activeTab === 'ledger' ? 'white' : 'black' }}>📒 Customer Khata</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
-        <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
-        <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders {tasks.filter(t => !t.done).length > 0 && `(${tasks.filter(t => !t.done).length})`}</button>
+        <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
       </div>
 
       {activeTab === 'daily' && (
         <>
           <datalist id="common-expenses">
-            <option value="Vegetables & Groceries" /><option value="Meat & Poultry" /><option value="Dairy & Milk" />
-            <option value="Cleaning Supplies" /><option value="Water Bottles/Cans" /><option value="Maintenance/Repairs" />
+            <option value="Vegetables & Groceries" /><option value="Meat & Poultry" /><option value="Dairy & Milk" /><option value="Cleaning Supplies" />
           </datalist>
 
           <div style={flexRow}>
             <div style={{...cardStyle, flex: 1, border: '2px solid #3b82f6'}}>
-              <h3 style={{ color: '#1d4ed8' }}>📅 Select Date to Log/Edit</h3>
+              <h3 style={{ color: '#1d4ed8' }}>📅 Select Date</h3>
               <label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold'}}/></label>
             </div>
             <div style={{...cardStyle, flex: 1}}><h3>Yesterday</h3><div style={flexRow}><label>Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label></div></div>
             <div style={{...cardStyle, flex: 1}}>
               <h3>Today Sales</h3>
               <div style={flexRow}>
-                <label style={{position: 'relative'}}>
-                  Cash (Net in Box): 
-                  <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/>
-                  {totalCounterExpenses > 0 && <span style={{fontSize: '12px', color: '#059669', position: 'absolute', bottom: '-20px', left: 0}}>True Gross Sale: ₹{grossCashSale}</span>}
+                <label style={{position: 'relative'}}>Cash (Net Box): <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/>
+                  {totalCounterExpenses > 0 && <span style={{fontSize: '12px', color: '#059669', position: 'absolute', bottom: '-20px', left: 0}}>True Gross: ₹{grossCashSale}</span>}
                 </label>
                 <label>Online: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginTop: '10px' }}>
+          {/* NEW SECTION: KHATA / CREDIT OPERATIONS */}
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ ...cardStyle, flex: 1, minWidth: '350px', borderTop: '4px solid #f43f5e' }}>
+              <h3 style={{color: '#e11d48'}}>🔴 Give Credit (Sale Today, Pay Later)</h3>
+              <p style={{fontSize: '12px', color: '#6b7280'}}>Logs a sale today, but does not add to cash till.</p>
+              {creditSales.map(c => (
+                <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                  <input placeholder="Customer/App Name" value={c.name} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 2}}/>
+                  <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                </div>
+              ))}
+              <button onClick={addCreditSale} style={{...btnStyle, backgroundColor: '#e11d48'}}>+ Add Credit Sale</button>
+            </div>
+
+            <div style={{ ...cardStyle, flex: 1, minWidth: '350px', borderTop: '4px solid #10b981' }}>
+              <h3 style={{color: '#059669'}}>🟢 Receive Credit Payment</h3>
+              <p style={{fontSize: '12px', color: '#6b7280'}}>Customer pays old debt. Injects directly into till.</p>
+              {creditReceived.map(c => (
+                <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                  <input placeholder="Customer Name" value={c.name} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
+                  <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={inputStyle}>
+                    <option>Cash</option><option>Online</option>
+                  </select>
+                </div>
+              ))}
+              <button onClick={addCreditReceived} style={{...btnStyle, backgroundColor: '#059669'}}>+ Settle Payment</button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
               <h3 style={{color: '#3b82f6'}}>💳 Online Expenses</h3>
               {onlineExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateOnlineExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
-                  <input placeholder="Specific Details" value={exp.description} onChange={e => updateOnlineExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
-                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateOnlineExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
+                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
+                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 </div>
               ))}
               <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Exp</button>
@@ -351,12 +315,12 @@ export default function App() {
               <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateCashExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
-                  <input placeholder="Details" value={exp.description} onChange={e => updateCashExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
-                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
+                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
+                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
+                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <select value={exp.type} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
                     <option value="Cash">Cash (Deduct from Till)</option>
-                    <option value="Counter">Counter (Paid from Net Sales)</option>
+                    <option value="Counter">Counter (Net Sale)</option>
                     <option value="Credit">Credit (Owe Later)</option>
                     <option value="Teja">Teja Paid</option>
                     <option value="Anil">Anil Paid</option>
@@ -364,69 +328,77 @@ export default function App() {
                 </div>
               ))}
               <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Exp</button>
-              
-              <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '4px', fontSize: '14px' }}>
-                <p style={{ margin: '0 0 5px 0', color: '#ef4444' }}>- Deducted from Till: <strong>₹{totalCashExpenses}</strong></p>
-                <p style={{ margin: 0, color: '#6b7280' }}>Not Deducted: Counter/Net Sales (₹{totalCounterExpenses}) | Credit (₹{totalCreditExpenses})</p>
-              </div>
-            </div>
-          </div>
-
-          <div style={cardStyle}>
-            <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
-            {staffPayments.map(s => (
-              <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <input placeholder="Staff Name" value={s.name} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 2}}/>
-                <select value={s.type} onChange={e => updateStaffPayment(s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
-                <input type="number" placeholder="Amount" value={s.amount} onChange={e => updateStaffPayment(s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                <select value={s.method} onChange={e => updateStaffPayment(s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
-              </div>
-            ))}
-            <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
-          </div>
-
-          <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
-            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹100 x <input type="number" value={notes[100]} onChange={e => setNotes({...notes, 100: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹50 x <input type="number" value={notes[50]} onChange={e => setNotes({...notes, 50: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹20 x <input type="number" value={notes[20]} onChange={e => setNotes({...notes, 20: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹10 x <input type="number" value={notes[10]} onChange={e => setNotes({...notes, 10: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1.5 }}>Coins (Total ₹): <input type="number" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} style={inputStyle}/></label>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px' }}>
-              <div>
-                <p style={{ margin: 0, color: '#6b7280' }}>Actual Physical Cash:</p>
-                <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal}</h2>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, color: '#6b7280' }}>Discrepancy (Physical vs System):</p>
-                <h2 style={{ margin: 0, color: drawerDifference === 0 ? 'green' : 'red' }}>
-                  {drawerDifference > 0 ? `+ ₹${drawerDifference} (Over)` : drawerDifference < 0 ? `- ₹${Math.abs(drawerDifference)} (Short)` : 'Perfect Match ✓'}
-                </h2>
-              </div>
             </div>
           </div>
 
           <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
             <h3>Final System Balances (For {date})</h3>
+            <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px', backgroundColor: '#374151', borderRadius: '8px' }}>
+              <p style={{ margin: 0, color: '#9ca3af' }}>True Gross Sales Today (Includes App/Credit Sales)</p>
+              <h2 style={{ margin: 0, color: '#fcd34d' }}>₹{trueGrossSale}</h2>
+            </div>
             <div style={flexRow}>
               <h4 style={{flex: 1}}>Expected Cash In Hand: <br/><span style={{ color: '#34d399', fontSize: '24px' }}>{totalCashInHand}</span></h4>
               <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
               <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
             </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#374151', padding: '15px', borderRadius: '4px', marginTop: '15px', border: '1px solid #4b5563' }}>
-              <span style={{ fontSize: '16px' }}>Owed to Teja today: <strong style={{ color: '#fcd34d' }}>₹{totalTejaExpenses}</strong></span>
-              <span style={{ fontSize: '16px' }}>Owed to Anil today: <strong style={{ color: '#fcd34d' }}>₹{totalAnilExpenses}</strong></span>
-            </div>
-
             <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save Data For {date}</button>
           </div>
         </>
+      )}
+
+      {/* --- NEW TAB: CUSTOMER KHATA (LEDGER) --- */}
+      {activeTab === 'ledger' && (
+        <div style={cardStyle}>
+          <h2 style={{ color: '#ec4899', margin: '0 0 5px 0' }}>📒 Outstanding Khata & Delivery Apps</h2>
+          <p style={{ color: '#6b7280', marginBottom: '20px' }}>This is automatically calculated from all past credit sales and payments. Anyone with a balance of ₹0 is hidden.</p>
+          
+          <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '10px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #ccc', backgroundColor: '#f3f4f6' }}>
+                <th style={{padding: '12px'}}>Customer / App Name</th>
+                <th style={{padding: '12px'}}>Total Credit Given</th>
+                <th style={{padding: '12px'}}>Total Paid Back</th>
+                <th style={{padding: '12px', color: '#e11d48'}}>Balance Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ledgerData.length === 0 ? <tr><td colSpan="4" style={{padding: '20px', textAlign: 'center'}}>No outstanding balances!</td></tr> : null}
+              {ledgerData.map((row, idx) => (
+                <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{row.name}</td>
+                  <td style={{ padding: '12px', color: '#e11d48' }}>₹{row.given}</td>
+                  <td style={{ padding: '12px', color: '#059669' }}>₹{row.received}</td>
+                  <td style={{ padding: '12px', fontWeight: 'bold', color: row.balance > 0 ? '#e11d48' : '#059669' }}>₹{row.balance}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'history' && (
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{margin: 0}}>Past Records</h2>
+            <button onClick={exportToExcel} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Download Multi-Sheet Excel</button>
+          </div>
+          {isLoadingHistory ? <p>Loading...</p> : (
+            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ borderBottom: '2px solid #ccc' }}><th style={{padding: '10px'}}>Date</th><th style={{padding: '10px'}}>Cash</th><th style={{padding: '10px'}}>Online</th><th style={{padding: '10px'}}>Total</th></tr></thead>
+              <tbody>
+                {historyLogs.map(log => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px' }}><strong>{log.date}</strong></td>
+                    <td style={{ padding: '10px', color: 'green' }}>{log.total_cash_in_hand}</td>
+                    <td style={{ padding: '10px', color: 'blue' }}>{log.total_online_balance}</td>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>{Number(log.total_cash_in_hand) + Number(log.total_online_balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
 
       {activeTab === 'tasks' && (
@@ -439,65 +411,12 @@ export default function App() {
           <ul style={{ listStyleType: 'none', padding: 0 }}>
             {tasks.map(task => (
               <li key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: task.done ? '#f3f4f6' : 'white', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '10px' }}>
-                <input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} style={{ transform: 'scale(1.5)', cursor: 'pointer' }} />
+                <input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} style={{ transform: 'scale(1.5)' }} />
                 <span style={{ flex: 1, fontSize: '18px', textDecoration: task.done ? 'line-through' : 'none' }}>{task.text}</span>
                 <button onClick={() => deleteTask(task.id)} style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px' }}>Delete</button>
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {activeTab === 'history' && (
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{margin: 0}}>Past Records</h2>
-            <button onClick={exportToExcel} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Download Multi-Sheet Excel</button>
-          </div>
-          {isLoadingHistory ? <p>Loading...</p> : (
-            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '2px solid #ccc' }}><th style={{padding: '10px'}}>Date</th><th style={{padding: '10px'}}>Cash</th><th style={{padding: '10px'}}>Online</th><th style={{padding: '10px'}}>Total</th><th style={{padding: '10px'}}>Action</th></tr></thead>
-              <tbody>
-                {historyLogs.map(log => (
-                  <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '10px' }}><strong>{log.date}</strong></td>
-                    <td style={{ padding: '10px', color: 'green' }}>{log.total_cash_in_hand}</td>
-                    <td style={{ padding: '10px', color: 'blue' }}>{log.total_online_balance}</td>
-                    <td style={{ padding: '10px', fontWeight: 'bold' }}>{Number(log.total_cash_in_hand) + Number(log.total_online_balance)}</td>
-                    <td style={{ padding: '10px' }}><button onClick={() => printReceipt(log)} style={{...btnStyle, padding: '5px 10px'}}>🖨️ Print</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'analytics' && (
-        <div style={cardStyle}>
-          <h2>Visual Analytics</h2>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', background: '#f3f4f6', padding: '15px', borderRadius: '8px' }}>
-            <label>Start Date: <input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} style={inputStyle}/></label>
-            <label>End Date: <input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} style={inputStyle}/></label>
-          </div>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
-            <div style={{ flex: 1, padding: '20px', background: '#ecfdf5', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{margin: 0, color: '#065f46', fontWeight: 'bold'}}>Total Sales</p><h2 style={{margin: 0, color: '#059669'}}>{analyticsData.totalSales}</h2>
-            </div>
-            <div style={{ flex: 1, padding: '20px', background: '#fef2f2', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{margin: 0, color: '#991b1b', fontWeight: 'bold'}}>Total Expenses</p><h2 style={{margin: 0, color: '#dc2626'}}>{analyticsData.totalExpenses}</h2>
-            </div>
-          </div>
-          <h3>Category Expenses Breakdown</h3>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px' }}>
-            {analyticsData.sortedCategories.length === 0 ? <p>No expenses found in this date range.</p> : 
-              analyticsData.sortedCategories.map(([category, amount]) => (
-              <div key={category} style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>{category}</strong><span>{amount}</span></div>
-                <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}><div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div></div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
