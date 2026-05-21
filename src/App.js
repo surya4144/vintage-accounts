@@ -8,7 +8,6 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function App() {
-  // --- AUTHENTICATION STATE ---
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,9 +39,16 @@ export default function App() {
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
 
+  // --- CALCULATIONS ---
   const totalSale = Number(cashSale) + Number(onlineSale);
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  
+  // Note: totalCashExpenses ONLY calculates items tagged as "Cash". Teja and Anil are excluded here so they don't drain the register!
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalAnilExpenses = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
@@ -56,14 +62,10 @@ export default function App() {
   
   const drawerDifference = actualDrawerTotal - totalCashInHand;
 
-  // --- SUPABASE AUTHENTICATION HANDLERS ---
+  // --- SUPABASE AUTHENTICATION ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -73,10 +75,9 @@ export default function App() {
     if (error) alert("Login Failed: " + error.message);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
+  const handleLogout = async () => await supabase.auth.signOut();
 
+  // --- HANDLERS ---
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
   const updateOnlineExpense = (id, field, value) => setOnlineExpenses(onlineExpenses.map(exp => exp.id === id ? { ...exp, [field]: value } : exp));
   
@@ -146,9 +147,18 @@ export default function App() {
       let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
 
+      // Calculate Owner Contributions for the day
+      let tejaTotal = 0; let anilTotal = 0;
+      if (log.expense_details?.cash) {
+        tejaTotal = log.expense_details.cash.filter(e => e.type === 'Teja').reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        anilTotal = log.expense_details.cash.filter(e => e.type === 'Anil').reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      }
+
       summaryData.push({
         "Date": log.date, "Cash Sales (₹)": cashSales, "Online Sales (₹)": onlineSales,
-        "Total Staff Wages Paid (₹)": staffWages, "Closing Cash In Hand (₹)": log.total_cash_in_hand,
+        "Total Staff Wages Paid (₹)": staffWages, 
+        "Teja Paid (₹)": tejaTotal, "Anil Paid (₹)": anilTotal,
+        "Closing Cash In Hand (₹)": log.total_cash_in_hand,
         "Closing Online Balance (₹)": log.total_online_balance, "Total Money Left (₹)": totalLeft,
         "Physical Drawer Discrepancy (₹)": log.expense_details?.drawer_difference || 'Not Logged'
       });
@@ -163,7 +173,7 @@ export default function App() {
         });
       };
 
-      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Cash/Credit Exp");
+      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Cash/Credit/Owner Exp");
       if (log.expense_details?.staff) {
         log.expense_details.staff.forEach(staff => {
           detailedExpenses.push({
@@ -189,6 +199,7 @@ export default function App() {
         if(!arr) return;
         arr.forEach(exp => {
           if (exp.type === 'Credit') return;
+          // Teja and Anil expenses ARE included in the Analytics total expenses, because the restaurant still incurred the cost!
           totalExpenses += Number(exp.amount || 0);
           const cat = exp.category || exp.name || 'Uncategorized';
           categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
@@ -216,24 +227,9 @@ export default function App() {
           <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '80px', marginBottom: '10px' }}/>
           <h2 style={{marginTop: 0, color: '#1f2937'}}>Vintage Restaurant</h2>
           <p style={{color: '#6b7280', marginBottom: '20px'}}>Secure Admin Portal</p>
-          
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <input 
-              type="email" 
-              placeholder="Admin Email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              style={{...inputStyle, padding: '15px'}} 
-              required
-            />
-            <input 
-              type="password" 
-              placeholder="Password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              style={{...inputStyle, padding: '15px'}} 
-              required
-            />
+            <input type="email" placeholder="Admin Email" value={email} onChange={e => setEmail(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
+            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
             <button type="submit" style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px', marginTop: '10px' }}>Secure Login</button>
           </form>
         </div>
@@ -287,16 +283,25 @@ export default function App() {
             </div>
 
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
-              <h3 style={{color: '#10b981'}}>💵 Cash / Credit Expenses</h3>
+              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateCashExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateCashExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={{inputStyle, flex: 1}}><option>Cash</option><option>Credit</option></select>
+                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}>
+                    <option value="Cash">Cash (From Till)</option>
+                    <option value="Credit">Credit (Owe Later)</option>
+                    <option value="Teja">Teja Paid</option>
+                    <option value="Anil">Anil Paid</option>
+                  </select>
                 </div>
               ))}
-              <button onClick={addCashExpense} style={btnStyle}>+ Add Cash/Credit Exp</button>
+              <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Exp</button>
+              <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '4px', fontSize: '14px' }}>
+                <p style={{ margin: '0 0 5px 0' }}>Deducted from Till: <strong>₹{totalCashExpenses}</strong></p>
+                <p style={{ margin: 0, color: '#6b7280' }}>Other: Credit (₹{totalCreditExpenses}) | Teja (₹{totalTejaExpenses}) | Anil (₹{totalAnilExpenses})</p>
+              </div>
             </div>
           </div>
 
@@ -347,6 +352,13 @@ export default function App() {
               <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
               <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
             </div>
+            
+            {/* NEW OWNER DEBT DISPLAY */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#374151', padding: '15px', borderRadius: '4px', marginTop: '15px', border: '1px solid #4b5563' }}>
+              <span style={{ fontSize: '16px' }}>Owed to Teja today: <strong style={{ color: '#fcd34d' }}>₹{totalTejaExpenses}</strong></span>
+              <span style={{ fontSize: '16px' }}>Owed to Anil today: <strong style={{ color: '#fcd34d' }}>₹{totalAnilExpenses}</strong></span>
+            </div>
+
             <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save & Close Register</button>
           </div>
         </>
