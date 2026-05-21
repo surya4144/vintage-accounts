@@ -289,7 +289,7 @@ export default function App() {
                 <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input placeholder="Customer Name" value={c.name} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
                   <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={inputStyle}>
+                  <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
                     <option>Cash</option><option>Online</option>
                   </select>
                 </div>
