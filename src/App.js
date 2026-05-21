@@ -39,29 +39,6 @@ export default function App() {
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- CALCULATIONS ---
-  const totalSale = Number(cashSale) + Number(onlineSale);
-  const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  
-  // Note: totalCashExpenses ONLY calculates items tagged as "Cash". Teja and Anil are excluded here so they don't drain the register!
-  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalAnilExpenses = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-
-  const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-
-  const totalCashInHand = yesterdayCash + Number(cashSale) - totalCashExpenses - totalStaffCash;
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
-  const totalAmountLeft = totalCashInHand + totalOnlineBalance;
-
-  const actualDrawerTotal = 
-    (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + 
-    (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
-  
-  const drawerDifference = actualDrawerTotal - totalCashInHand;
-
   // --- SUPABASE AUTHENTICATION ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -76,6 +53,87 @@ export default function App() {
   };
 
   const handleLogout = async () => await supabase.auth.signOut();
+
+  // --- NEW FEATURE: FETCH DATA BY SELECTED DATE ---
+  useEffect(() => {
+    if (!session) return;
+    
+    const loadSpecificDateData = async () => {
+      // 1. Fetch exact data for the current 'date' on the screen
+      const { data: currentData } = await supabase.from('daily_logs').select('*').eq('date', date).single();
+      
+      if (currentData) {
+        setCashSale(currentData.expense_details?.sales?.cash || 0);
+        setOnlineSale(currentData.expense_details?.sales?.online || 0);
+        setOnlineExpenses(currentData.expense_details?.online || []);
+        setCashExpenses(currentData.expense_details?.cash || []);
+        setStaffPayments(currentData.expense_details?.staff || []);
+      } else {
+        // If it is a completely new day with no data, reset the fields to zero/empty
+        setCashSale(0);
+        setOnlineSale(0);
+        setOnlineExpenses([]);
+        setCashExpenses([]);
+        setStaffPayments([]);
+      }
+
+      // 2. Fetch the "Yesterday Cash" by finding the most recent logged date strictly BEFORE the selected date
+      const { data: prevData } = await supabase
+        .from('daily_logs')
+        .select('total_cash_in_hand, total_online_balance')
+        .lt('date', date)
+        .order('date', { ascending: false })
+        .limit(1);
+
+      if (prevData && prevData.length > 0) {
+        setYesterdayCash(prevData[0].total_cash_in_hand);
+        setYesterdayOnline(prevData[0].total_online_balance);
+      } else {
+        setYesterdayCash(0);
+        setYesterdayOnline(0);
+      }
+    };
+    
+    loadSpecificDateData();
+  }, [date, session]); // This re-runs instantly whenever you change the 'date' input
+
+  const loadHistory = async () => {
+    setIsLoadingHistory(true);
+    const { data } = await supabase.from('daily_logs').select('*').order('date', { ascending: false });
+    if (data) setHistoryLogs(data);
+    setIsLoadingHistory(false);
+  };
+
+  useEffect(() => { if (session && (activeTab === 'history' || activeTab === 'analytics')) loadHistory(); }, [activeTab, session]);
+
+  // --- CALCULATIONS ---
+  const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  
+  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  
+  // These represent money ADDED to the register (by Owners or manually)
+  const totalTejaAdditions = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalAnilAdditions = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCounterAdditions = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalInjectedCash = totalTejaAdditions + totalAnilAdditions + totalCounterAdditions;
+
+  // Total Sales Math
+  const totalSale = Number(cashSale) + Number(onlineSale);
+  const effectiveCashInflow = Number(cashSale) + totalInjectedCash; // Combines actual sales with owner injections
+
+  const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+  const totalCashInHand = yesterdayCash + effectiveCashInflow - totalCashExpenses - totalStaffCash;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) - totalOnlineExpenses - totalStaffOnline;
+  const totalAmountLeft = totalCashInHand + totalOnlineBalance;
+
+  const actualDrawerTotal = 
+    (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + 
+    (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
+  
+  const drawerDifference = actualDrawerTotal - totalCashInHand;
 
   // --- HANDLERS ---
   const addOnlineExpense = () => setOnlineExpenses([...onlineExpenses, { id: Date.now(), category: '', description: '', amount: 0 }]);
@@ -92,25 +150,8 @@ export default function App() {
   const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
 
-  useEffect(() => {
-    if (!session) return;
-    const fetchYesterday = async () => {
-      const { data } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').order('date', { ascending: false }).limit(1);
-      if (data && data.length > 0) { setYesterdayCash(data[0].total_cash_in_hand); setYesterdayOnline(data[0].total_online_balance); }
-    };
-    fetchYesterday();
-  }, [session]);
-
-  const loadHistory = async () => {
-    setIsLoadingHistory(true);
-    const { data } = await supabase.from('daily_logs').select('*').order('date', { ascending: false });
-    if (data) setHistoryLogs(data);
-    setIsLoadingHistory(false);
-  };
-
-  useEffect(() => { if (session && (activeTab === 'history' || activeTab === 'analytics')) loadHistory(); }, [activeTab, session]);
-
   const saveDailyAccounts = async () => {
+    // Uses upsert: if the date exists, it OVERWRITES it with the edited data. If not, it creates a new record.
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
         expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, drawer_difference: drawerDifference }
@@ -147,17 +188,17 @@ export default function App() {
       let staffWages = log.expense_details?.staff ? log.expense_details.staff.reduce((sum, s) => sum + Number(s.amount || 0), 0) : 0;
       let totalLeft = Number(log.total_cash_in_hand) + Number(log.total_online_balance);
 
-      // Calculate Owner Contributions for the day
-      let tejaTotal = 0; let anilTotal = 0;
+      let tejaTotal = 0; let anilTotal = 0; let counterTotal = 0;
       if (log.expense_details?.cash) {
         tejaTotal = log.expense_details.cash.filter(e => e.type === 'Teja').reduce((sum, e) => sum + Number(e.amount || 0), 0);
         anilTotal = log.expense_details.cash.filter(e => e.type === 'Anil').reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        counterTotal = log.expense_details.cash.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0);
       }
 
       summaryData.push({
         "Date": log.date, "Cash Sales (₹)": cashSales, "Online Sales (₹)": onlineSales,
         "Total Staff Wages Paid (₹)": staffWages, 
-        "Teja Paid (₹)": tejaTotal, "Anil Paid (₹)": anilTotal,
+        "Teja Injected Cash (₹)": tejaTotal, "Anil Injected Cash (₹)": anilTotal, "Counter Cash Added (₹)": counterTotal,
         "Closing Cash In Hand (₹)": log.total_cash_in_hand,
         "Closing Online Balance (₹)": log.total_online_balance, "Total Money Left (₹)": totalLeft,
         "Physical Drawer Discrepancy (₹)": log.expense_details?.drawer_difference || 'Not Logged'
@@ -173,7 +214,7 @@ export default function App() {
         });
       };
 
-      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Cash/Credit/Owner Exp");
+      pushExpense(log.expense_details?.online, "Online Exp"); pushExpense(log.expense_details?.cash, "Offline/Cash Register");
       if (log.expense_details?.staff) {
         log.expense_details.staff.forEach(staff => {
           detailedExpenses.push({
@@ -198,8 +239,8 @@ export default function App() {
       const processExp = (arr) => {
         if(!arr) return;
         arr.forEach(exp => {
-          if (exp.type === 'Credit') return;
-          // Teja and Anil expenses ARE included in the Analytics total expenses, because the restaurant still incurred the cost!
+          // Do not count "Counter", "Teja", "Anil", or "Credit" as raw business expenses in charts
+          if (['Credit', 'Counter', 'Teja', 'Anil'].includes(exp.type)) return; 
           totalExpenses += Number(exp.amount || 0);
           const cat = exp.category || exp.name || 'Uncategorized';
           categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
@@ -217,7 +258,6 @@ export default function App() {
     const sortedCategories = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
     return { totalSales, totalExpenses, sortedCategories, maxCatVal };
   }, [historyLogs, analyticsStart, analyticsEnd]);
-
 
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
@@ -263,8 +303,12 @@ export default function App() {
             <option value="Cleaning Supplies" /><option value="Water Bottles/Cans" /><option value="Maintenance/Repairs" />
           </datalist>
 
+          {/* DATE SELECTOR NOW MAGICALLY LOADS PAST DATA */}
           <div style={flexRow}>
-            <div style={{...cardStyle, flex: 1}}><h3>Start of Day</h3><label>Date: <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle}/></label></div>
+            <div style={{...cardStyle, flex: 1, border: '2px solid #3b82f6'}}>
+              <h3 style={{ color: '#1d4ed8' }}>📅 Select Date to Log/Edit</h3>
+              <label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold'}}/></label>
+            </div>
             <div style={{...cardStyle, flex: 1}}><h3>Yesterday</h3><div style={flexRow}><label>Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label></div></div>
             <div style={{...cardStyle, flex: 1}}><h3>Today Sales</h3><div style={flexRow}><label>Cash: <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label></div></div>
           </div>
@@ -289,18 +333,21 @@ export default function App() {
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateCashExpense(exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1.5}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateCashExpense(exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 2}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateCashExpense(exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={inputStyle}>
+                  <select value={exp.type} onChange={e => updateCashExpense(exp.id, 'type', e.target.value)} style={{inputStyle, flex: 1}}>
                     <option value="Cash">Cash (From Till)</option>
                     <option value="Credit">Credit (Owe Later)</option>
-                    <option value="Teja">Teja Paid</option>
-                    <option value="Anil">Anil Paid</option>
+                    <option value="Teja">Teja Injected Cash</option>
+                    <option value="Anil">Anil Injected Cash</option>
+                    <option value="Counter">Counter (Add Cash)</option>
                   </select>
                 </div>
               ))}
               <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Exp</button>
+              
               <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '4px', fontSize: '14px' }}>
-                <p style={{ margin: '0 0 5px 0' }}>Deducted from Till: <strong>₹{totalCashExpenses}</strong></p>
-                <p style={{ margin: 0, color: '#6b7280' }}>Other: Credit (₹{totalCreditExpenses}) | Teja (₹{totalTejaExpenses}) | Anil (₹{totalAnilExpenses})</p>
+                <p style={{ margin: '0 0 5px 0', color: '#ef4444' }}>- Deducted from Till: <strong>₹{totalCashExpenses}</strong></p>
+                <p style={{ margin: '0 0 5px 0', color: '#059669' }}>+ ADDED to Till (Counter, Teja, Anil): <strong>₹{totalInjectedCash}</strong></p>
+                <p style={{ margin: 0, color: '#6b7280' }}>Other: Credit Logged (₹{totalCreditExpenses})</p>
               </div>
             </div>
           </div>
@@ -320,7 +367,6 @@ export default function App() {
 
           <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
             <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
-            <p style={{ fontSize: '14px', color: '#a16207', marginBottom: '15px' }}>Enter the quantity of notes currently in your register to check for missing funds.</p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
               <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
@@ -346,20 +392,19 @@ export default function App() {
           </div>
 
           <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
-            <h3>Final System Balances</h3>
+            <h3>Final System Balances (For {date})</h3>
             <div style={flexRow}>
               <h4 style={{flex: 1}}>Expected Cash In Hand: <br/><span style={{ color: '#34d399', fontSize: '24px' }}>{totalCashInHand}</span></h4>
               <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
               <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
             </div>
             
-            {/* NEW OWNER DEBT DISPLAY */}
             <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#374151', padding: '15px', borderRadius: '4px', marginTop: '15px', border: '1px solid #4b5563' }}>
-              <span style={{ fontSize: '16px' }}>Owed to Teja today: <strong style={{ color: '#fcd34d' }}>₹{totalTejaExpenses}</strong></span>
-              <span style={{ fontSize: '16px' }}>Owed to Anil today: <strong style={{ color: '#fcd34d' }}>₹{totalAnilExpenses}</strong></span>
+              <span style={{ fontSize: '16px' }}>Owed to Teja today: <strong style={{ color: '#fcd34d' }}>₹{totalTejaAdditions}</strong></span>
+              <span style={{ fontSize: '16px' }}>Owed to Anil today: <strong style={{ color: '#fcd34d' }}>₹{totalAnilAdditions}</strong></span>
             </div>
 
-            <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save & Close Register</button>
+            <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save Data For {date}</button>
           </div>
         </>
       )}
@@ -367,29 +412,16 @@ export default function App() {
       {activeTab === 'tasks' && (
         <div style={{ ...cardStyle, maxWidth: '600px', margin: '0 auto' }}>
           <h2>🔔 Front Desk Tasks & Reminders</h2>
-          <p style={{ color: '#6b7280', marginBottom: '20px' }}>Log supplier payments, kitchen notes, or end-of-day duties here. These stay saved on your tablet until checked off!</p>
-          
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <input 
-              type="text" 
-              placeholder="e.g. Pay milk vendor ₹1500 tomorrow morning..." 
-              value={newTask} 
-              onChange={e => setNewTask(e.target.value)} 
-              onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-              style={{ ...inputStyle, flex: 1 }}
-            />
+            <input type="text" placeholder="Add a task..." value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddTask()} style={{ ...inputStyle, flex: 1 }} />
             <button onClick={handleAddTask} style={{ ...btnStyle, backgroundColor: '#f59e0b' }}>Add Task</button>
           </div>
-
           <ul style={{ listStyleType: 'none', padding: 0 }}>
-            {tasks.length === 0 ? <p style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>All caught up! No pending tasks.</p> : null}
             {tasks.map(task => (
-              <li key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: task.done ? '#f3f4f6' : 'white', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '10px', transition: '0.2s' }}>
+              <li key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', backgroundColor: task.done ? '#f3f4f6' : 'white', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '10px' }}>
                 <input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} style={{ transform: 'scale(1.5)', cursor: 'pointer' }} />
-                <span style={{ flex: 1, fontSize: '18px', color: task.done ? '#9ca3af' : '#1f2937', textDecoration: task.done ? 'line-through' : 'none' }}>
-                  {task.text}
-                </span>
-                <button onClick={() => deleteTask(task.id)} style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+                <span style={{ flex: 1, fontSize: '18px', textDecoration: task.done ? 'line-through' : 'none' }}>{task.text}</span>
+                <button onClick={() => deleteTask(task.id)} style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px' }}>Delete</button>
               </li>
             ))}
           </ul>
@@ -428,7 +460,6 @@ export default function App() {
             <label>Start Date: <input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} style={inputStyle}/></label>
             <label>End Date: <input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} style={inputStyle}/></label>
           </div>
-
           <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
             <div style={{ flex: 1, padding: '20px', background: '#ecfdf5', borderRadius: '8px', textAlign: 'center' }}>
               <p style={{margin: 0, color: '#065f46', fontWeight: 'bold'}}>Total Sales</p><h2 style={{margin: 0, color: '#059669'}}>{analyticsData.totalSales}</h2>
@@ -437,18 +468,13 @@ export default function App() {
               <p style={{margin: 0, color: '#991b1b', fontWeight: 'bold'}}>Total Expenses</p><h2 style={{margin: 0, color: '#dc2626'}}>{analyticsData.totalExpenses}</h2>
             </div>
           </div>
-
           <h3>Category Expenses Breakdown</h3>
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px' }}>
             {analyticsData.sortedCategories.length === 0 ? <p>No expenses found in this date range.</p> : 
               analyticsData.sortedCategories.map(([category, amount]) => (
               <div key={category} style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <strong>{category}</strong><span>{amount}</span>
-                </div>
-                <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div>
-                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>{category}</strong><span>{amount}</span></div>
+                <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}><div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div></div>
               </div>
             ))}
           </div>
