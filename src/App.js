@@ -15,7 +15,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
 
+  // NEW: Separate UI Date Selector from the Actual Database Date
+  const [dateSelection, setDateSelection] = useState(new Date().toISOString().split('T')[0]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
   const [cashSale, setCashSale] = useState(0);
@@ -92,20 +95,17 @@ export default function App() {
 
       if (isMounted) {
         if (draft) {
-          // RESTORES UNSAVED DATA IF YOU SWITCH TABS OR REFRESH
           setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0);
           setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []);
           setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []);
           setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         } else if (currentData) {
-          // LOADS SAVED DATA FROM DATABASE
           setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0);
           setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
           setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
           setCreditReceived(currentData.expense_details?.credit_received || []);
           setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
         } else {
-          // BRAND NEW DAY
           setCashSale(0); setOnlineSale(0);
           setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]);
           setCreditSales([]); setCreditReceived([]);
@@ -180,7 +180,7 @@ export default function App() {
     } else {
       alert("Vintage Daily Accounts Saved securely!");
       localStorage.removeItem(`vintage_draft_${date}`); 
-      loadHistory(); // Forces Analytics and Categories to update instantly
+      loadHistory(); 
     }
   };
 
@@ -317,10 +317,16 @@ export default function App() {
           </datalist>
 
           <div style={flexRow}>
+            {/* NEW FETCH BUTTON FEATURE */}
             <div style={{...cardStyle, flex: 1, border: '2px solid #3b82f6'}}>
-              <h3 style={{ color: '#1d4ed8' }}>📅 Select Date</h3>
-              <label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold'}}/></label>
+              <h3 style={{ color: '#1d4ed8', marginTop: 0 }}>📅 Select Date</h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input type="date" value={dateSelection} onChange={e => setDateSelection(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold', flex: 1}}/>
+                <button onClick={() => setDate(dateSelection)} style={{...btnStyle, backgroundColor: '#2563eb'}}>📥 Fetch</button>
+              </div>
+              {date !== dateSelection && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '5px', marginBottom: 0}}>Click Fetch to load selected date!</p>}
             </div>
+            
             <div style={{...cardStyle, flex: 1}}><h3>Yesterday</h3><div style={flexRow}><label>Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label></div></div>
             <div style={{...cardStyle, flex: 1}}>
               <h3>Today Sales</h3>
@@ -404,6 +410,32 @@ export default function App() {
               </div>
             ))}
             <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
+          </div>
+
+          <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
+            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹100 x <input type="number" value={notes[100]} onChange={e => setNotes({...notes, 100: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹50 x <input type="number" value={notes[50]} onChange={e => setNotes({...notes, 50: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹20 x <input type="number" value={notes[20]} onChange={e => setNotes({...notes, 20: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1 }}>₹10 x <input type="number" value={notes[10]} onChange={e => setNotes({...notes, 10: e.target.value})} style={inputStyle}/></label>
+              <label style={{ flex: 1.5 }}>Coins (Total ₹): <input type="number" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} style={inputStyle}/></label>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px' }}>
+              <div>
+                <p style={{ margin: 0, color: '#6b7280' }}>Actual Physical Cash:</p>
+                <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal}</h2>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: 0, color: '#6b7280' }}>Discrepancy (Physical vs System):</p>
+                <h2 style={{ margin: 0, color: drawerDifference === 0 ? 'green' : 'red' }}>
+                  {drawerDifference > 0 ? `+ ₹${drawerDifference} (Over)` : drawerDifference < 0 ? `- ₹${Math.abs(drawerDifference)} (Short)` : 'Perfect Match ✓'}
+                </h2>
+              </div>
+            </div>
           </div>
 
           <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
