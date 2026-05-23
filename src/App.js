@@ -14,8 +14,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
-  const [isFetching, setIsFetching] = useState(false);
 
+  // NEW: Separate UI Date Selector from the Actual Database Date
   const [dateSelection, setDateSelection] = useState(new Date().toISOString().split('T')[0]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -81,77 +81,50 @@ export default function App() {
     return Array.from(cats).sort();
   }, [historyLogs]);
 
-  // --- 4. EXPLICIT DATA FETCH FUNCTION ---
-  const handleFetchData = async (targetDate, isManualClick = false) => {
+  // --- 4. FETCH DATA & RESTORE UNSAVED DRAFTS ---
+  useEffect(() => {
     if (!session) return;
-    setIsFetching(true);
-    setIsDataLoaded(false); 
-
-    try {
-      const { data: currentDataArr, error: fetchErr } = await supabase
-        .from('daily_logs')
-        .select('*')
-        .eq('date', targetDate)
-        .limit(1);
-
-      if (fetchErr) console.error("Database Fetch Error:", fetchErr);
-
-      const currentData = currentDataArr && currentDataArr.length > 0 ? currentDataArr[0] : null;
-      const draftStr = localStorage.getItem(`vintage_draft_${targetDate}`);
+    let isMounted = true;
+    
+    const loadSpecificDateData = async () => {
+      setIsDataLoaded(false); 
+      
+      const { data: currentData } = await supabase.from('daily_logs').select('*').eq('date', date).single();
+      const draftStr = localStorage.getItem(`vintage_draft_${date}`);
       const draft = draftStr ? JSON.parse(draftStr) : null;
 
-      // THE FIX: Priority overrides based on how the fetch was triggered
-      if (isManualClick && currentData) {
-        // User explicitly clicked fetch, and DB data exists -> OVERRIDE DRAFT
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0);
-        setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
-        setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
-        setCreditReceived(currentData.expense_details?.credit_received || []);
-        setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
-        alert(`✅ System loaded database records for ${targetDate}`);
-      } 
-      else if (isManualClick && !currentData) {
-        // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setOnlineSale(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
-        alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
+      if (isMounted) {
+        if (draft) {
+          setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0);
+          setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []);
+          setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []);
+          setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        } else if (currentData) {
+          setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0);
+          setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
+          setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
+          setCreditReceived(currentData.expense_details?.credit_received || []);
+          setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
+        } else {
+          setCashSale(0); setOnlineSale(0);
+          setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]);
+          setCreditSales([]); setCreditReceived([]);
+          setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        }
+
+        const { data: prevData } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').lt('date', date).order('date', { ascending: false }).limit(1);
+        if (prevData && prevData.length > 0) {
+          setYesterdayCash(prevData[0].total_cash_in_hand); setYesterdayOnline(prevData[0].total_online_balance);
+        } else {
+          setYesterdayCash(0); setYesterdayOnline(0);
+        }
+        setIsDataLoaded(true); 
       }
-      else if (!isManualClick && draft) {
-        // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
-      } 
-      else if (!isManualClick && currentData) {
-        // Initial page load, load DB data
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []); setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []); setCreditReceived(currentData.expense_details?.credit_received || []); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
-      } 
-      else {
-        // Initial page load, empty DB
-        setCashSale(0); setOnlineSale(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
-      }
-
-      // Fetch yesterday's balances logically
-      const { data: prevData } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').lt('date', targetDate).order('date', { ascending: false }).limit(1);
-      if (prevData && prevData.length > 0) {
-        setYesterdayCash(prevData[0].total_cash_in_hand); setYesterdayOnline(prevData[0].total_online_balance);
-      } else {
-        setYesterdayCash(0); setYesterdayOnline(0);
-      }
-
-      setDate(targetDate);
-      setDateSelection(targetDate);
-    } catch (err) {
-      console.error("Critical Runtime Error:", err);
-    }
-
-    setIsDataLoaded(true); 
-    setIsFetching(false);
-  };
-
-  // Run automatically *only* once when the user first logs in
-  useEffect(() => {
-    if (session) {
-      handleFetchData(dateSelection, false);
-    }
-  }, [session]);
+    };
+    
+    loadSpecificDateData();
+    return () => { isMounted = false; };
+  }, [date, session]);
 
   // --- 5. BACKGROUND AUTO-SAVE ---
   useEffect(() => {
@@ -165,9 +138,6 @@ export default function App() {
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalAnilExpenses = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
@@ -209,7 +179,7 @@ export default function App() {
       alert("Error saving data: " + error.message); 
     } else {
       alert("Vintage Daily Accounts Saved securely!");
-      localStorage.removeItem(`vintage_draft_${date}`); // Erase the draft so we don't accidentally load it later
+      localStorage.removeItem(`vintage_draft_${date}`); 
       loadHistory(); 
     }
   };
@@ -347,17 +317,14 @@ export default function App() {
           </datalist>
 
           <div style={flexRow}>
-            {/* UPDATED FETCH BUTTON FEATURE */}
+            {/* NEW FETCH BUTTON FEATURE */}
             <div style={{...cardStyle, flex: 1, border: '2px solid #3b82f6'}}>
               <h3 style={{ color: '#1d4ed8', marginTop: 0 }}>📅 Select Date</h3>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <input type="date" value={dateSelection} onChange={e => setDateSelection(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold', flex: 1}}/>
-                {/* true flag sent to explicitly bypass draft protection */}
-                <button onClick={() => handleFetchData(dateSelection, true)} disabled={isFetching} style={{...btnStyle, backgroundColor: isFetching ? '#9ca3af' : '#2563eb'}}>
-                  {isFetching ? '⏳ Fetching...' : '📥 Fetch'}
-                </button>
+                <button onClick={() => setDate(dateSelection)} style={{...btnStyle, backgroundColor: '#2563eb'}}>📥 Fetch</button>
               </div>
-              {date !== dateSelection && !isFetching && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '5px', marginBottom: 0}}>Click Fetch to load selected date!</p>}
+              {date !== dateSelection && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '5px', marginBottom: 0}}>Click Fetch to load selected date!</p>}
             </div>
             
             <div style={{...cardStyle, flex: 1}}><h3>Yesterday</h3><div style={flexRow}><label>Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label></div></div>
@@ -576,7 +543,7 @@ export default function App() {
                 <span style={{ flex: 1, fontSize: '18px', textDecoration: task.done ? 'line-through' : 'none' }}>{task.text}</span>
                 <button onClick={() => deleteTask(task.id)} style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px' }}>Delete</button>
               </li>
-            ))}
+            ))}  
           </ul>
         </div>
       )}
