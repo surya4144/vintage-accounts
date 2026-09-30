@@ -97,6 +97,18 @@ export default function App() {
     // Other
     "Donations", "Gifts", "Tips", "Emergency Expenses", "Miscellaneous"
   ];
+const employeeNames = [
+  "Bhavani",
+  "Suven Paul",
+  "Mani",
+  "Chaitanya",
+  "Raju",
+  "Vijaya Lakshmi",
+  "Sujatha",
+  "Azaz",
+  "Mustak",
+  "David"
+];
   const dynamicCategories = useMemo(() => {
     const cats = new Set(defaultCategories);
     historyLogs.forEach(log => {
@@ -216,8 +228,8 @@ export default function App() {
   
   const addCreditSale = () => addArrItem(setCreditSales, creditSales, { name: '', amount: 0 });
   const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
-  const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', description: '', amount: 0 });
-  const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
+  const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', employee: '', description: '', amount: 0 });
+  const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', employee: '', description: '', amount: 0, type: 'Cash' });
   const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, { name: '', amount: 0, type: 'Full Wage', method: 'Cash' });
 
   const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
@@ -261,7 +273,7 @@ export default function App() {
         arr.forEach(item => {
           detailedData.push({
             "Date": log.date, "Type": mainType, "Method": item.type || item.method || 'N/A',
-            "Details": item.category || item.name || 'N/A', "Note": item.description || '', "Amount (₹)": Number(item.amount || 0)
+            "Details": item.category || item.name || 'N/A', "Paid To": item.employee || '', "Note": item.description || '', "Amount (₹)": Number(item.amount || 0)
           });
         });
       };
@@ -430,6 +442,10 @@ export default function App() {
               {onlineExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <select value={exp.employee || ''} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'employee', e.target.value)} style={{...inputStyle, flex: 1}}>
+                    <option value="">Paid To / Employee</option>
+                    {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
+                  </select>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 </div>
@@ -442,6 +458,10 @@ export default function App() {
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <select value={exp.employee || ''} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'employee', e.target.value)} style={{...inputStyle, flex: 1}}>
+                    <option value="">Paid To / Employee</option>
+                    {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
+                  </select>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <select value={exp.type} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
@@ -461,7 +481,10 @@ export default function App() {
             <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
             {staffPayments.map(s => (
               <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <input placeholder="Staff Name" value={s.name} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                <select value={s.name || ''} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}>
+                  <option value="">Staff Name</option>
+                  {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
                 <select value={s.type} onChange={e => updateStaffPayment(s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
                 <input type="number" placeholder="Amount" value={s.amount} onChange={e => updateStaffPayment(s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 <select value={s.method} onChange={e => updateStaffPayment(s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
