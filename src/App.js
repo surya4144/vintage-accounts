@@ -481,13 +481,13 @@ const employeeNames = [
             <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
             {staffPayments.map(s => (
               <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <select value={s.name || ''} onChange={e => updateStaffPayment(s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}>
+                <select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}>
                   <option value="">Staff Name</option>
                   {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
-                <select value={s.type} onChange={e => updateStaffPayment(s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
-                <input type="number" placeholder="Amount" value={s.amount} onChange={e => updateStaffPayment(s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                <select value={s.method} onChange={e => updateStaffPayment(s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
+                <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
+                <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
               </div>
             ))}
             <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
