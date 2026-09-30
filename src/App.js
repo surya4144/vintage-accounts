@@ -324,34 +324,103 @@ const employeeNames = [
   // --- AUTOMATIC ANALYTICS CALCULATOR ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
-    let totalSales = 0; let totalExpenses = 0; const categoryTotals = {};
+    let cashSales = 0;
+    let onlineSales = 0;
+    let creditSales = 0;
+    let creditReceived = 0;
+    let operatingExpenses = 0;
+    let staffCost = 0;
+    let cashExpenses = 0;
+    let onlineExpensesTotal = 0;
+    let counterAdjustments = 0;
+    const categoryTotals = {};
+    const monthlyTotals = {};
+
+    const addCategory = (category, amount) => {
+      const value = Number(amount || 0);
+      if (value <= 0) return;
+      categoryTotals[category] = (categoryTotals[category] || 0) + value;
+    };
+
     filtered.forEach(log => {
-      let logNetCashSale = Number(log.expense_details?.sales?.cash || 0);
-      let logCounterExp = log.expense_details?.cash?.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-      let logCreditSales = log.expense_details?.credit_sales?.reduce((sum, c) => sum + Number(c.amount || 0), 0) || 0;
-      
-      totalSales += logNetCashSale + logCounterExp + logCreditSales + Number(log.expense_details?.sales?.online || 0);
-      
-      const processExp = (arr) => {
-        if(!arr) return;
-        arr.forEach(exp => {
-          if (['Credit', 'Counter', 'Teja', 'Anil'].includes(exp.type)) return; 
-          totalExpenses += Number(exp.amount || 0);
-          const cat = exp.category || exp.name || 'Uncategorized';
-          categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(exp.amount || 0);
-        });
-      };
-      processExp(log.expense_details?.online); processExp(log.expense_details?.cash);
-      if(log.expense_details?.staff) {
-        log.expense_details.staff.forEach(s => {
-          totalExpenses += Number(s.amount || 0);
-          categoryTotals['Staff Wages & Advances'] = (categoryTotals['Staff Wages & Advances'] || 0) + Number(s.amount || 0);
-        });
-      }
+      const sales = log.expense_details?.sales || {};
+      const logCash = Number(sales.cash || 0);
+      const logOnline = Number(sales.online || 0);
+      const logCredit = (log.expense_details?.credit_sales || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
+      const logCreditReceived = (log.expense_details?.credit_received || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
+      const logCounter = (log.expense_details?.cash || [])
+        .filter(e => e.type === 'Counter')
+        .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+      cashSales += logCash;
+      onlineSales += logOnline;
+      creditSales += logCredit;
+      creditReceived += logCreditReceived;
+      counterAdjustments += logCounter;
+
+      (log.expense_details?.online || []).forEach(exp => {
+        const amount = Number(exp.amount || 0);
+        operatingExpenses += amount;
+        onlineExpensesTotal += amount;
+        addCategory(exp.category || 'Uncategorized', amount);
+      });
+
+      (log.expense_details?.cash || []).forEach(exp => {
+        const amount = Number(exp.amount || 0);
+        if (exp.type === 'Cash') {
+          operatingExpenses += amount;
+          cashExpenses += amount;
+          addCategory(exp.category || 'Uncategorized', amount);
+        } else if (!['Counter', 'Credit', 'Teja', 'Anil'].includes(exp.type)) {
+          operatingExpenses += amount;
+          addCategory(exp.category || 'Uncategorized', amount);
+        }
+      });
+
+      (log.expense_details?.staff || []).forEach(s => {
+        const amount = Number(s.amount || 0);
+        operatingExpenses += amount;
+        staffCost += amount;
+        addCategory('Staff Wages & Advances', amount);
+      });
+
+      const totalSalesForDay = logCash + logOnline + logCredit + logCounter;
+      const monthKey = log.date?.slice(0, 7) || 'Unknown';
+      if (!monthlyTotals[monthKey]) monthlyTotals[monthKey] = { sales: 0, expenses: 0, days: 0 };
+      monthlyTotals[monthKey].sales += totalSalesForDay;
+      monthlyTotals[monthKey].days += 1;
     });
+
+    Object.keys(monthlyTotals).forEach(monthKey => {
+      const monthLogs = filtered.filter(log => log.date?.slice(0, 7) === monthKey);
+      let monthExpenses = 0;
+      monthLogs.forEach(log => {
+        (log.expense_details?.online || []).forEach(e => { monthExpenses += Number(e.amount || 0); });
+        (log.expense_details?.cash || []).forEach(e => {
+          if (e.type === 'Cash' || !['Counter', 'Credit', 'Teja', 'Anil'].includes(e.type)) monthExpenses += Number(e.amount || 0);
+        });
+        (log.expense_details?.staff || []).forEach(s => { monthExpenses += Number(s.amount || 0); });
+      });
+      monthlyTotals[monthKey].expenses = monthExpenses;
+    });
+
+    const totalSales = cashSales + onlineSales + creditSales + counterAdjustments;
+    const estimatedProfit = totalSales - operatingExpenses;
+    const operatingDays = filtered.length;
+    const averageDailySales = operatingDays ? totalSales / operatingDays : 0;
+    const averageDailyExpenses = operatingDays ? operatingExpenses / operatingDays : 0;
+    const creditOutstanding = Math.max(0, creditSales - creditReceived);
     const maxCatVal = Math.max(...Object.values(categoryTotals), 1);
     const sortedCategories = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1]);
-    return { totalSales, totalExpenses, sortedCategories, maxCatVal };
+    const monthlyRows = Object.entries(monthlyTotals).sort((a,b) => b[0].localeCompare(a[0]));
+
+    return {
+      totalSales, totalExpenses: operatingExpenses, estimatedProfit,
+      cashSales, onlineSales, creditSales, creditReceived,
+      cashExpenses, onlineExpensesTotal, staffCost, creditOutstanding,
+      operatingDays, averageDailySales, averageDailyExpenses,
+      sortedCategories, maxCatVal, monthlyRows
+    };
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
   // --- SECURE LOGIN SCREEN ---
@@ -617,32 +686,101 @@ const employeeNames = [
       )}
 
       {activeTab === 'analytics' && (
-        <div style={cardStyle}>
-          <h2>Visual Analytics</h2>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', background: '#f3f4f6', padding: '15px', borderRadius: '8px' }}>
-            <label>Start Date: <input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} style={inputStyle}/></label>
-            <label>End Date: <input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} style={inputStyle}/></label>
+        <div>
+          <div style={cardStyle}>
+            <h2 style={{ marginTop: 0 }}>📊 Business Analytics</h2>
+            <p style={{ color: '#6b7280', marginTop: 0 }}>
+              Review sales, operating costs, staff costs and customer credit for the selected period. Profit is an internal estimate based on the entries recorded here.
+            </p>
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', background: '#f3f4f6', padding: '15px', borderRadius: '8px', flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: '220px' }}>Start Date:<input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} style={inputStyle}/></label>
+              <label style={{ flex: 1, minWidth: '220px' }}>End Date:<input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} style={inputStyle}/></label>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '20px' }}>
+              {[
+                ['Sales', analyticsData.totalSales, '#ecfdf5', '#059669'],
+                ['Operating Expenses', analyticsData.totalExpenses, '#fef2f2', '#dc2626'],
+                ['Estimated Profit', analyticsData.estimatedProfit, '#eff6ff', '#2563eb'],
+                ['Credit Outstanding', analyticsData.creditOutstanding, '#fff7ed', '#ea580c']
+              ].map(([label, value, bg, color]) => (
+                <div key={label} style={{ flex: 1, minWidth: '190px', padding: '18px', background: bg, borderRadius: '8px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, color, fontWeight: 'bold' }}>{label}</p>
+                  <h2 style={{ margin: '6px 0 0', color }}>{formatINR(value)}</h2>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '25px' }}>
+              {[
+                ['Cash Sales', analyticsData.cashSales],
+                ['Online Sales', analyticsData.onlineSales],
+                ['Credit Sales', analyticsData.creditSales],
+                ['Credit Received', analyticsData.creditReceived],
+                ['Staff Cost', analyticsData.staffCost],
+                ['Operating Days', analyticsData.operatingDays],
+                ['Avg Daily Sales', analyticsData.averageDailySales],
+                ['Avg Daily Expenses', analyticsData.averageDailyExpenses]
+              ].map(([label, value]) => (
+                <div key={label} style={{ flex: 1, minWidth: '150px', padding: '14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: 'white' }}>
+                  <div style={{ color: '#6b7280', fontSize: '13px' }}>{label}</div>
+                  <strong style={{ display: 'block', marginTop: '5px', fontSize: '18px' }}>
+                    {label === 'Operating Days' ? value : formatINR(value)}
+                  </strong>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
-            <div style={{ flex: 1, padding: '20px', background: '#ecfdf5', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{margin: 0, color: '#065f46', fontWeight: 'bold'}}>Total Sales</p><h2 style={{margin: 0, color: '#059669'}}>₹{analyticsData.totalSales}</h2>
+
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ ...cardStyle, flex: 1, minWidth: '420px' }}>
+              <h3 style={{ marginTop: 0 }}>📅 Monthly Performance</h3>
+              {analyticsData.monthlyRows.length === 0 ? <p>No records found in this date range.</p> : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                      <th style={{ textAlign: 'left', padding: '10px' }}>Month</th>
+                      <th style={{ textAlign: 'right', padding: '10px' }}>Sales</th>
+                      <th style={{ textAlign: 'right', padding: '10px' }}>Expenses</th>
+                      <th style={{ textAlign: 'right', padding: '10px' }}>Est. Profit</th>
+                      <th style={{ textAlign: 'right', padding: '10px' }}>Days</th>
+                    </tr></thead>
+                    <tbody>
+                      {analyticsData.monthlyRows.map(([month, row]) => (
+                        <tr key={month} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                          <td style={{ padding: '10px', fontWeight: 'bold' }}>{month}</td>
+                          <td style={{ padding: '10px', textAlign: 'right' }}>{formatINR(row.sales)}</td>
+                          <td style={{ padding: '10px', textAlign: 'right' }}>{formatINR(row.expenses)}</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', color: row.sales - row.expenses >= 0 ? '#2563eb' : '#dc2626' }}>{formatINR(row.sales - row.expenses)}</td>
+                          <td style={{ padding: '10px', textAlign: 'right' }}>{row.days}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-            <div style={{ flex: 1, padding: '20px', background: '#eff6ff', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{margin: 0, color: '#1d4ed8', fontWeight: 'bold'}}>Estimated Profit</p><h2 style={{margin: 0, color: analyticsData.totalSales - analyticsData.totalExpenses >= 0 ? '#2563eb' : '#dc2626'}}>₹{(analyticsData.totalSales - analyticsData.totalExpenses).toLocaleString('en-IN')}</h2>
-            </div>
-            <div style={{ flex: 1, padding: '20px', background: '#fef2f2', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{margin: 0, color: '#991b1b', fontWeight: 'bold'}}>Total Expenses</p><h2 style={{margin: 0, color: '#dc2626'}}>₹{analyticsData.totalExpenses}</h2>
+
+            <div style={{ ...cardStyle, flex: 1, minWidth: '420px' }}>
+              <h3 style={{ marginTop: 0 }}>💰 Expense Breakdown</h3>
+              {analyticsData.sortedCategories.length === 0 ? <p>No expenses found in this date range.</p> :
+                analyticsData.sortedCategories.map(([category, amount]) => (
+                  <div key={category} style={{ marginBottom: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <strong>{category}</strong><span>{formatINR(amount)}</span>
+                    </div>
+                    <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div>
+                    </div>
+                  </div>
+                ))
+              }
             </div>
           </div>
-          <h3>Category Expenses Breakdown</h3>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px' }}>
-            {analyticsData.sortedCategories.length === 0 ? <p>No expenses found in this date range.</p> : 
-              analyticsData.sortedCategories.map(([category, amount]) => (
-              <div key={category} style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>{category}</strong><span>₹{amount}</span></div>
-                <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}><div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div></div>
-              </div>
-            ))}
+
+          <div style={{ ...cardStyle, backgroundColor: '#f9fafb' }}>
+            <strong>How to read this:</strong>
+            <span style={{ color: '#6b7280' }}> Sales include cash, online, credit sales and recorded Counter adjustments. Operating Expenses include online expenses, cash expenses marked Cash, and staff payments. Credit/Teja/Anil entries remain excluded because they do not represent an immediate operating cash expense in the current workflow.</span>
           </div>
         </div>
       )}
