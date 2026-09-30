@@ -71,7 +71,32 @@ export default function App() {
   useEffect(() => { if (session) loadHistory(); }, [session]);
 
   // --- 3. SMART CATEGORY LEARNING ---
-  const defaultCategories = ["Vegetables & Groceries", "Meat & Poultry", "Dairy & Milk", "Cleaning Supplies", "Water Bottles/Cans", "Maintenance/Repairs"];
+  const defaultCategories = [
+    // General business expenses
+    "Vegetables & Groceries", "Meat & Poultry", "Dairy & Milk", "Cleaning Supplies", "Water Bottles/Cans", "Maintenance/Repairs",
+    // Owner & personal expenses
+    "Owner Personal Expenses", "Owner Personal Shopping", "Owner Family Expenses", "Owner Personal Travel", "Owner Medical Expenses", "Owner Education", "Owner Withdrawal",
+    // Property & rent
+    "House Rent", "Shop/Office Rent", "Property Maintenance", "Property Tax",
+    // Utilities
+    "Electricity", "Water", "Gas", "Internet", "Mobile/Telephone",
+    // Travel & transportation
+    "Fuel", "Auto/Taxi", "Parking", "Vehicle Maintenance", "Travel Expenses",
+    // Business purchases
+    "Business Supplies", "Stationery", "Kitchen Supplies", "Equipment", "Small Tools",
+    // Staff & labour
+    "Staff Advance", "Staff Meals", "Staff Transportation", "Staff Welfare", "Temporary Labour",
+    // Banking & finance
+    "Bank Charges", "Payment Gateway Charges", "Loan Payment", "Loan Interest", "Cash Withdrawal Charges",
+    // Government & compliance
+    "GST", "License Fees", "Registration Fees", "Taxes", "Fines/Penalties",
+    // Marketing
+    "Advertising", "Printing", "Promotions", "Discounts", "Social Media Marketing",
+    // Maintenance
+    "Building Repairs", "Furniture Repairs", "Electrical Repairs", "Plumbing", "Equipment Repairs",
+    // Other
+    "Donations", "Gifts", "Tips", "Emergency Expenses", "Miscellaneous"
+  ];
   const dynamicCategories = useMemo(() => {
     const cats = new Set(defaultCategories);
     historyLogs.forEach(log => {
