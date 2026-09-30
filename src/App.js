@@ -24,6 +24,8 @@ export default function App() {
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
   const [cashSale, setCashSale] = useState(0);
   const [onlineSale, setOnlineSale] = useState(0);
+  const [parcelCounterCash, setParcelCounterCash] = useState(0);
+  const [parcelCounterOnline, setParcelCounterOnline] = useState(0);
   
   const [onlineExpenses, setOnlineExpenses] = useState([]);
   const [cashExpenses, setCashExpenses] = useState([]);
@@ -141,7 +143,7 @@ const employeeNames = [
       // THE FIX: Priority overrides based on how the fetch was triggered
       if (isManualClick && currentData) {
         // User explicitly clicked fetch, and DB data exists -> OVERRIDE DRAFT
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0);
+        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0);
         setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
         setCreditReceived(currentData.expense_details?.credit_received || []);
@@ -150,12 +152,12 @@ const employeeNames = [
       } 
       else if (isManualClick && !currentData) {
         // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setOnlineSale(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
       }
       else if (!isManualClick && draft) {
         // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       } 
       else if (!isManualClick && currentData) {
         // Initial page load, load DB data
@@ -163,7 +165,7 @@ const employeeNames = [
       } 
       else {
         // Initial page load, empty DB
-        setCashSale(0); setOnlineSale(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       }
 
       // Fetch yesterday's balances logically
@@ -194,10 +196,10 @@ const employeeNames = [
   // --- 5. BACKGROUND AUTO-SAVE ---
   useEffect(() => {
     if (isDataLoaded && session) {
-      const draft = { cashSale, onlineSale, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
+      const draft = { cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
       localStorage.setItem(`vintage_draft_${date}`, JSON.stringify(draft));
     }
-  }, [isDataLoaded, session, date, cashSale, onlineSale, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
+  }, [isDataLoaded, session, date, cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -213,14 +215,17 @@ const employeeNames = [
   const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedOnline = creditReceived.filter(c => c.method === 'Online').reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
-  const grossCashSale = Number(cashSale) + totalCounterExpenses;
-  const trueGrossSale = grossCashSale + Number(onlineSale) + totalCreditSales;
+  const totalParcelCounterCash = Number(parcelCounterCash || 0);
+  const totalParcelCounterOnline = Number(parcelCounterOnline || 0);
+  const grossCashSale = Number(cashSale) + totalParcelCounterCash + totalCounterExpenses;
+  const grossOnlineSale = Number(onlineSale) + totalParcelCounterOnline;
+  const trueGrossSale = grossCashSale + grossOnlineSale + totalCreditSales;
   const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-  const totalCashInHand = yesterdayCash + Number(cashSale) + creditReceivedCash - totalCashExpenses - totalStaffCash;
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
+  const totalCashInHand = yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalCashExpenses - totalStaffCash;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
@@ -233,8 +238,8 @@ const employeeNames = [
   
   const addCreditSale = () => addArrItem(setCreditSales, creditSales, { name: '', amount: 0 });
   const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
-  const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', employee: '', description: '', amount: 0 });
-  const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', employee: '', description: '', amount: 0, type: 'Cash' });
+  const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', description: '', amount: 0 });
+  const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
   const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, { name: '', amount: 0, type: 'Full Wage', method: 'Cash' });
 
   const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
@@ -254,7 +259,7 @@ const employeeNames = [
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, credit_sales: creditSales, credit_received: creditReceived, drawer_difference: drawerDifference }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived, drawer_difference: drawerDifference }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -273,12 +278,14 @@ const employeeNames = [
     historyLogs.forEach(log => {
       let netCashSale = log.expense_details?.sales?.cash || 0;
       let onlineSales = log.expense_details?.sales?.online || 0;
+      let parcelCash = log.expense_details?.sales?.parcel_counter_cash || 0;
+      let parcelOnline = log.expense_details?.sales?.parcel_counter_online || 0;
       let counterTotal = log.expense_details?.cash?.filter(e => e.type === 'Counter').reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
       let cSales = log.expense_details?.credit_sales?.reduce((sum, c) => sum + Number(c.amount || 0), 0) || 0;
       let cRecv = log.expense_details?.credit_received?.reduce((sum, c) => sum + Number(c.amount || 0), 0) || 0;
 
       summaryData.push({
-        "Date": log.date, "Gross Cash Sales (₹)": Number(netCashSale) + Number(counterTotal), "Online Sales (₹)": onlineSales,
+        "Date": log.date, "Gross Cash Sales (₹)": Number(netCashSale) + Number(parcelCash) + Number(counterTotal), "Online Sales (₹)": Number(onlineSales) + Number(parcelOnline), "Parcel Counter Cash (₹)": Number(parcelCash), "Parcel Counter Online (₹)": Number(parcelOnline),
         "Credit Sales Given (₹)": cSales, "Credit Payments Received (₹)": cRecv,
         "Closing Cash In Hand (₹)": log.total_cash_in_hand, "Closing Online Balance (₹)": log.total_online_balance,
       });
@@ -346,14 +353,16 @@ const employeeNames = [
       const sales = log.expense_details?.sales || {};
       const logCash = Number(sales.cash || 0);
       const logOnline = Number(sales.online || 0);
+      const logParcelCash = Number(sales.parcel_counter_cash || 0);
+      const logParcelOnline = Number(sales.parcel_counter_online || 0);
       const logCredit = (log.expense_details?.credit_sales || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
       const logCreditReceived = (log.expense_details?.credit_received || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
       const logCounter = (log.expense_details?.cash || [])
         .filter(e => e.type === 'Counter')
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-      cashSales += logCash;
-      onlineSales += logOnline;
+      cashSales += logCash + logParcelCash;
+      onlineSales += logOnline + logParcelOnline;
       creditSales += logCredit;
       creditReceived += logCreditReceived;
       counterAdjustments += logCounter;
@@ -384,7 +393,7 @@ const employeeNames = [
         addCategory('Staff Wages & Advances', amount);
       });
 
-      const totalSalesForDay = logCash + logOnline + logCredit + logCounter;
+      const totalSalesForDay = logCash + logParcelCash + logOnline + logParcelOnline + logCredit + logCounter;
       const monthKey = log.date?.slice(0, 7) || 'Unknown';
       if (!monthlyTotals[monthKey]) monthlyTotals[monthKey] = { sales: 0, expenses: 0, days: 0 };
       monthlyTotals[monthKey].sales += totalSalesForDay;
@@ -489,6 +498,8 @@ const employeeNames = [
                   {totalCounterExpenses > 0 && <span style={{fontSize: '12px', color: '#059669', position: 'absolute', bottom: '-20px', left: 0}}>True Gross: ₹{grossCashSale}</span>}
                 </label>
                 <label>Online: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Parcel Counter Cash: <input type="number" value={parcelCounterCash} onChange={e => setParcelCounterCash(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Parcel Counter Online: <input type="number" value={parcelCounterOnline} onChange={e => setParcelCounterOnline(Number(e.target.value))} style={inputStyle}/></label>
               </div>
             </div>
           </div>
@@ -539,10 +550,6 @@ const employeeNames = [
               {onlineExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.employee || ''} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'employee', e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option value="">Paid To / Employee</option>
-                    {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
-                  </select>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <button onClick={() => removeArrItem(setOnlineExpenses, onlineExpenses, exp.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
@@ -556,10 +563,6 @@ const employeeNames = [
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.employee || ''} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'employee', e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option value="">Paid To / Employee</option>
-                    {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
-                  </select>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <select value={exp.type} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
