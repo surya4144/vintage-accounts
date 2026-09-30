@@ -15,6 +15,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [isFetching, setIsFetching] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [dateSelection, setDateSelection] = useState(new Date().toISOString().split('T')[0]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -225,6 +226,7 @@ const employeeNames = [
   // --- HANDLERS ---
   const addArrItem = (setter, arr, defaults) => setter([...arr, { id: Date.now(), ...defaults }]);
   const updateArrItem = (setter, arr, id, field, value) => setter(arr.map(item => item.id === id ? { ...item, [field]: value } : item));
+  const removeArrItem = (setter, arr, id) => setter(arr.filter(item => item.id !== id));
   
   const addCreditSale = () => addArrItem(setCreditSales, creditSales, { name: '', amount: 0 });
   const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
@@ -237,7 +239,16 @@ const employeeNames = [
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
   useEffect(() => { localStorage.setItem('vintage_tasks', JSON.stringify(tasks)); }, [tasks]);
 
+  const clearUnsavedForm = () => {
+    if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
+    setCashSale(0); setOnlineSale(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
+    setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+    localStorage.removeItem(`vintage_draft_${date}`);
+  };
+
   const saveDailyAccounts = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
         expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale }, credit_sales: creditSales, credit_received: creditReceived, drawer_difference: drawerDifference }
@@ -245,10 +256,11 @@ const employeeNames = [
     if (error) {
       alert("Error saving data: " + error.message); 
     } else {
-      alert("Vintage Daily Accounts Saved securely!");
-      localStorage.removeItem(`vintage_draft_${date}`); // Erase the draft so we don't accidentally load it later
-      loadHistory(); 
+      localStorage.removeItem(`vintage_draft_${date}`);
+      await loadHistory();
+      alert(`✅ Accounts saved for ${date}`);
     }
+    setIsSaving(false);
   };
 
   const exportToExcel = () => {
@@ -409,6 +421,16 @@ const employeeNames = [
             </div>
           </div>
 
+          <div style={{ ...cardStyle, padding: '14px 18px', background: 'linear-gradient(135deg, #111827, #374151)', color: 'white' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db', textTransform: 'uppercase' }}>Daily Snapshot</div><div style={{ fontSize: '20px', fontWeight: '800' }}>₹{trueGrossSale.toLocaleString('en-IN')}</div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Gross sales</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Expenses</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#fca5a5' }}>₹{(totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline).toLocaleString('en-IN')}</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Cash Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#86efac' }}>₹{totalCashInHand.toLocaleString('en-IN')}</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Online Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#93c5fd' }}>₹{totalOnlineBalance.toLocaleString('en-IN')}</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Drawer</div><div style={{ fontSize: '18px', fontWeight: '700', color: drawerDifference === 0 ? '#86efac' : '#fbbf24' }}>{drawerDifference === 0 ? '✓ Match' : drawerDifference > 0 ? `+₹${drawerDifference}` : `-₹${Math.abs(drawerDifference)}`}</div></div>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px', borderTop: '4px solid #f43f5e' }}>
               <h3 style={{color: '#e11d48'}}>🔴 Give Credit (Sale Today, Pay Later)</h3>
@@ -530,7 +552,10 @@ const employeeNames = [
               <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
               <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
             </div>
-            <button onClick={saveDailyAccounts} style={{ ...btnStyle, backgroundColor: '#10b981', width: '100%', marginTop: '20px', fontSize: '18px', padding: '15px' }}>💾 Save Data For {date}</button>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button onClick={clearUnsavedForm} style={{ ...btnStyle, backgroundColor: '#6b7280', flex: 1 }}>↺ Clear Unsaved Form</button>
+              <button onClick={saveDailyAccounts} disabled={isSaving} style={{ ...btnStyle, backgroundColor: isSaving ? '#9ca3af' : '#10b981', flex: 2, fontSize: '18px', padding: '15px' }}>{isSaving ? '⏳ Saving...' : `💾 Save Data For ${date}`}</button>
+            </div>
           </div>
         </>
       )}
