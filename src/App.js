@@ -215,6 +215,9 @@ const employeeNames = [
 
   const grossCashSale = Number(cashSale) + totalCounterExpenses;
   const trueGrossSale = grossCashSale + Number(onlineSale) + totalCreditSales;
+  const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline;
+  const estimatedProfit = trueGrossSale - totalOperatingExpenses;
+  const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   const totalCashInHand = yesterdayCash + Number(cashSale) + creditReceivedCash - totalCashExpenses - totalStaffCash;
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
@@ -427,6 +430,7 @@ const employeeNames = [
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Expenses</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#fca5a5' }}>₹{(totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline).toLocaleString('en-IN')}</div></div>
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Cash Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#86efac' }}>₹{totalCashInHand.toLocaleString('en-IN')}</div></div>
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Online Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#93c5fd' }}>₹{totalOnlineBalance.toLocaleString('en-IN')}</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Est. Profit</div><div style={{ fontSize: '18px', fontWeight: '700', color: estimatedProfit >= 0 ? '#86efac' : '#fca5a5' }}>{formatINR(estimatedProfit)}</div></div>
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Drawer</div><div style={{ fontSize: '18px', fontWeight: '700', color: drawerDifference === 0 ? '#86efac' : '#fbbf24' }}>{drawerDifference === 0 ? '✓ Match' : drawerDifference > 0 ? `+₹${drawerDifference}` : `-₹${Math.abs(drawerDifference)}`}</div></div>
             </div>
           </div>
@@ -438,6 +442,7 @@ const employeeNames = [
                 <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input placeholder="Customer/App Name" value={c.name} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <button onClick={() => removeArrItem(setCreditSales, creditSales, c.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
                 </div>
               ))}
               <button onClick={addCreditSale} style={{...btnStyle, backgroundColor: '#e11d48'}}>+ Add Credit Sale</button>
@@ -452,6 +457,7 @@ const employeeNames = [
                   <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
                     <option>Cash</option><option>Online</option>
                   </select>
+                  <button onClick={() => removeArrItem(setCreditReceived, creditReceived, c.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
                 </div>
               ))}
               <button onClick={addCreditReceived} style={{...btnStyle, backgroundColor: '#059669'}}>+ Settle Payment</button>
@@ -470,6 +476,7 @@ const employeeNames = [
                   </select>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
+                  <button onClick={() => removeArrItem(setOnlineExpenses, onlineExpenses, exp.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
                 </div>
               ))}
               <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Exp</button>
@@ -493,6 +500,7 @@ const employeeNames = [
                     <option value="Teja">Teja Paid</option>
                     <option value="Anil">Anil Paid</option>
                   </select>
+                  <button onClick={() => removeArrItem(setCashExpenses, cashExpenses, exp.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
                 </div>
               ))}
               <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Exp</button>
@@ -510,6 +518,7 @@ const employeeNames = [
                 <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
                 <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
+                <button onClick={() => removeArrItem(setStaffPayments, staffPayments, s.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
               </div>
             ))}
             <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
@@ -617,6 +626,9 @@ const employeeNames = [
           <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
             <div style={{ flex: 1, padding: '20px', background: '#ecfdf5', borderRadius: '8px', textAlign: 'center' }}>
               <p style={{margin: 0, color: '#065f46', fontWeight: 'bold'}}>Total Sales</p><h2 style={{margin: 0, color: '#059669'}}>₹{analyticsData.totalSales}</h2>
+            </div>
+            <div style={{ flex: 1, padding: '20px', background: '#eff6ff', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{margin: 0, color: '#1d4ed8', fontWeight: 'bold'}}>Estimated Profit</p><h2 style={{margin: 0, color: analyticsData.totalSales - analyticsData.totalExpenses >= 0 ? '#2563eb' : '#dc2626'}}>₹{(analyticsData.totalSales - analyticsData.totalExpenses).toLocaleString('en-IN')}</h2>
             </div>
             <div style={{ flex: 1, padding: '20px', background: '#fef2f2', borderRadius: '8px', textAlign: 'center' }}>
               <p style={{margin: 0, color: '#991b1b', fontWeight: 'bold'}}>Total Expenses</p><h2 style={{margin: 0, color: '#dc2626'}}>₹{analyticsData.totalExpenses}</h2>
