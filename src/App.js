@@ -54,6 +54,18 @@ export default function App() {
   const [payrollLogs, setPayrollLogs] = useState([]);
   const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
   const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
+  const employeeNames = [
+    "Bhavani",
+    "Suven Paul",
+    "Mani",
+    "Chaitanya",
+    "Raju",
+    "Vijaya Lakshmi",
+    "Sujatha",
+    "Azaz",
+    "Mustak",
+    "David"
+  ];
 
   // --- 1. SUPABASE AUTHENTICATION ---
   useEffect(() => {
