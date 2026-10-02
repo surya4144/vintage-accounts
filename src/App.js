@@ -224,8 +224,11 @@ const employeeNames = [
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-  const totalCashInHand = yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalCashExpenses - totalStaffCash;
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
+  // Cash/online sales are entered by the cashier AFTER expenses are already paid and deducted.
+  // Therefore, do not subtract expense entries again from the closing balances.
+  // Expenses remain recorded separately for reporting/analytics.
+  const totalCashInHand = yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
@@ -783,7 +786,7 @@ const employeeNames = [
 
           <div style={{ ...cardStyle, backgroundColor: '#f9fafb' }}>
             <strong>How to read this:</strong>
-            <span style={{ color: '#6b7280' }}> Sales include cash, online, credit sales and recorded Counter adjustments. Operating Expenses include online expenses, cash expenses marked Cash, and staff payments. Credit/Teja/Anil entries remain excluded because they do not represent an immediate operating cash expense in the current workflow.</span>
+            <span style={{ color: '#6b7280' }}> Sales include the final cash/online amounts entered by the cashier after expenses have already been deducted, plus credit sales and recorded Counter adjustments. Expense entries are tracked separately for reporting and are not subtracted again from closing cash/online balances.</span>
           </div>
         </div>
       )}
