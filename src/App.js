@@ -209,7 +209,11 @@ const employeeNames = [
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalAnilExpenses = cashExpenses.filter(exp => exp.type === 'Anil').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalStaffCash = staffPayments.filter(s => s.method === 'Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffCounter = staffPayments.filter(s => s.method === 'Counter').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffCredit = staffPayments.filter(s => s.method === 'Credit').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffTeja = staffPayments.filter(s => s.method === 'Teja').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffAnil = staffPayments.filter(s => s.method === 'Anil').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalStaffOnline = 0;
 
   const totalCreditSales = creditSales.reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
@@ -220,7 +224,7 @@ const employeeNames = [
   const grossCashSale = Number(cashSale) + totalParcelCounterCash + totalCounterExpenses;
   const grossOnlineSale = Number(onlineSale) + totalParcelCounterOnline;
   const trueGrossSale = grossCashSale + grossOnlineSale + totalCreditSales;
-  const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffOnline;
+  const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -592,7 +596,13 @@ const employeeNames = [
                 </select>
                 <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
                 <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}><option>Cash</option><option>Online</option></select>
+                <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
+                  <option value="Cash">Cash (Deduct from Till)</option>
+                  <option value="Counter">Counter (Net Sale)</option>
+                  <option value="Credit">Credit (Owe Later)</option>
+                  <option value="Teja">Teja Paid</option>
+                  <option value="Anil">Anil Paid</option>
+                </select>
                 <button onClick={() => removeArrItem(setStaffPayments, staffPayments, s.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
               </div>
             ))}
