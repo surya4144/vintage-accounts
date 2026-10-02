@@ -522,7 +522,7 @@ const employeeNames = [
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Cash Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#86efac' }}>₹{totalCashInHand.toLocaleString('en-IN')}</div></div>
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Online Available</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#93c5fd' }}>₹{totalOnlineBalance.toLocaleString('en-IN')}</div></div>
               <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Est. Profit</div><div style={{ fontSize: '18px', fontWeight: '700', color: estimatedProfit >= 0 ? '#86efac' : '#fca5a5' }}>{formatINR(estimatedProfit)}</div></div>
-              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Drawer</div><div style={{ fontSize: '18px', fontWeight: '700', color: drawerDifference === 0 ? '#86efac' : '#fbbf24' }}>{drawerDifference === 0 ? '✓ Match' : drawerDifference > 0 ? `+₹${drawerDifference}` : `-₹${Math.abs(drawerDifference)}`}</div></div>
+              <div><div style={{ fontSize: '12px', color: '#d1d5db' }}>Drawer Count</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#fcd34d' }}>₹{actualDrawerTotal.toLocaleString('en-IN')}</div></div>
             </div>
           </div>
 
