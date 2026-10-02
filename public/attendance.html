@@ -1,71 +1,20 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vintage Accounts - Employee Attendance</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vintage Accounts - Employee Attendance</title>
 <style>
-body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px;color:#111827}
-.card{max-width:520px;margin:20px auto;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
-h1{text-align:center;margin-top:0}.muted{color:#6b7280}.row{display:flex;gap:10px;flex-wrap:wrap}
-select,input,button{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;box-sizing:border-box}
-button{background:#2563eb;color:white;border:0;font-weight:700;cursor:pointer;margin-top:10px}
-button.secondary{background:#059669}.status{padding:14px;border-radius:10px;background:#eff6ff;margin:15px 0}
-.hidden{display:none}.success{color:#047857;font-weight:700}.error{color:#b91c1c;font-weight:700}
-</style>
-</head>
-<body>
-<div class="card">
-<h1>👥 Employee Attendance</h1>
-<p class="muted" style="text-align:center">Check in when you arrive and check out when you leave.</p>
-
-<label>Employee</label>
-<select id="employee">
-<option value="">Select your name</option>
-<option>Bhavani</option><option>Suven Paul</option><option>Mani</option>
-<option>Chaitanya</option><option>Raju</option><option>Vijaya Lakshmi</option>
-<option>Sujatha</option><option>Azaz</option><option>Mustak</option><option>David</option>
-</select>
-
-<div id="status" class="status hidden"></div>
-<button id="checkIn" onclick="checkIn()">🟢 Check In</button>
-<button id="checkOut" class="secondary" onclick="checkOut()">🔴 Check Out</button>
-<p id="message"></p>
+body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px;color:#111827}.card{max-width:520px;margin:20px auto;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08)}h1{text-align:center;margin-top:0}.muted{color:#6b7280}select,input,button{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;box-sizing:border-box;margin-top:8px}button{background:#2563eb;color:#fff;border:0;font-weight:700;cursor:pointer;margin-top:12px}.secondary{background:#059669}.status{padding:14px;border-radius:10px;background:#eff6ff;margin:15px 0;line-height:1.7}.success{color:#047857;font-weight:700}.error{color:#b91c1c;font-weight:700}
+</style></head>
+<body><div class="card"><h1>👥 Employee Attendance</h1><p class="muted" style="text-align:center">Select your name, enter your employee code, then check in or check out.</p>
+<label>Employee</label><select id="employee"><option value="">Select your name</option><option>Bhavani</option><option>Suven Paul</option><option>Mani</option><option>Chaitanya</option><option>Raju</option><option>Vijaya Lakshmi</option><option>Sujatha</option><option>Azaz</option><option>Mustak</option><option>David</option></select>
+<label>Employee Code</label><input id="code" type="password" placeholder="Enter your code" autocomplete="off">
+<div id="status" class="status">Select your name to view today's attendance.</div>
+<button onclick="callAttendance('check_in')">🟢 Check In</button><button class="secondary" onclick="callAttendance('check_out')">🔴 Check Out</button><p id="message"></p>
 </div>
-
 <script>
-const SUPABASE_URL='https://gsscocpxmsmtevjadxjd.supabase.co';
-const SUPABASE_ANON_KEY='${SUPABASE_ANON_KEY}';
-const supabaseClient=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-const today=()=>new Date().toISOString().slice(0,10);
+const endpoint='https://gsscocpxmsmtevjadxjd.supabase.co/functions/v1/employee-attendance';
 const $=id=>document.getElementById(id);
-async function refresh(){
- const name=$('employee').value;
- if(!name){$('status').classList.add('hidden');return}
- const {data,error}=await supabaseClient.from('employee_attendance').select('*').eq('employee_name',name).eq('attendance_date',today()).maybeSingle();
- $('status').classList.remove('hidden');
- if(error){$('status').textContent='Unable to load attendance.';return}
- if(!data){$('status').innerHTML='<strong>Today:</strong> No attendance marked yet.';return}
- $('status').innerHTML='<strong>Today:</strong> '+data.status+'<br>Check-in: '+(data.check_in?new Date(data.check_in).toLocaleTimeString():'—')+'<br>Check-out: '+(data.check_out?new Date(data.check_out).toLocaleTimeString():'—');
-}
-async function checkIn(){
- const name=$('employee').value;if(!name)return setMsg('Please select your name.',true);
- const {data:existing}=await supabaseClient.from('employee_attendance').select('*').eq('employee_name',name).eq('attendance_date',today()).maybeSingle();
- if(existing?.check_in)return setMsg('You are already checked in today.',true);
- const {error}=await supabaseClient.from('employee_attendance').upsert({employee_name:name,attendance_date:today(),status:'Present',check_in:new Date().toISOString()},{onConflict:'employee_name,attendance_date'});
- if(error)setMsg(error.message,true);else{setMsg('✅ Check-in recorded.');refresh()}
-}
-async function checkOut(){
- const name=$('employee').value;if(!name)return setMsg('Please select your name.',true);
- const {data:existing}=await supabaseClient.from('employee_attendance').select('*').eq('employee_name',name).eq('attendance_date',today()).maybeSingle();
- if(!existing?.check_in)return setMsg('Please check in first.',true);
- if(existing.check_out)return setMsg('You are already checked out today.',true);
- const {error}=await supabaseClient.from('employee_attendance').update({check_out:new Date().toISOString()}).eq('id',existing.id);
- if(error)setMsg(error.message,true);else{setMsg('✅ Check-out recorded.');refresh()}
-}
-function setMsg(text,error=false){$('message').textContent=text;$('message').className=error?'error':'success'}
-$('employee').addEventListener('change',refresh);
-</script>
-</body>
-</html>
+async function callAttendance(action){const employee=$('employee').value,code=$('code').value.trim();if(!employee||!code)return msg('Please select your name and enter your code.',true);try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,employee,code})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');msg(action==='check_in'?'✅ Check-in recorded.':'✅ Check-out recorded.');show(d.record)}catch(e){msg(e.message,true)}}
+async function refresh(){const employee=$('employee').value,code=$('code').value.trim();if(!employee||!code){$('status').textContent='Select your name and enter your code.';return}try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',employee,code})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load');show(d.record)}catch(e){$('status').textContent=e.message}}
+function show(x){if(!x){$('status').innerHTML='<strong>Today:</strong> No attendance marked yet.';return}$('status').innerHTML='<strong>Today:</strong> '+x.status+'<br>Check-in: '+(x.check_in?new Date(x.check_in).toLocaleTimeString():'—')+'<br>Check-out: '+(x.check_out?new Date(x.check_out).toLocaleTimeString():'—')}
+function msg(t,e=false){$('message').textContent=t;$('message').className=e?'error':'success'}
+$('employee').addEventListener('change',refresh);$('code').addEventListener('change',refresh);
+</script></body></html>
