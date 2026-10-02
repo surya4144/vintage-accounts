@@ -239,8 +239,8 @@ const employeeNames = [
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
+  // Cash Drawer is a standalone physical cash-counting tool. It never affects accounting calculations.
   const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
-  const drawerDifference = actualDrawerTotal - totalCashInHand;
 
   // --- HANDLERS ---
   const addArrItem = (setter, arr, defaults) => setter([...arr, { id: Date.now(), ...defaults }]);
@@ -270,7 +270,7 @@ const employeeNames = [
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived, drawer_difference: drawerDifference }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -615,7 +615,8 @@ const employeeNames = [
           </div>
 
           <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
-            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Count Physical Cash Drawer</h3>
+            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Cash Drawer — Daily Count Only</h3>
+            <p style={{ marginTop: 0, color: '#6b7280' }}>Count the physical cash in the drawer. This is a separate counting tool and does not change any accounting balance. The drawer starts fresh for each date.</p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
               <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
@@ -626,17 +627,9 @@ const employeeNames = [
               <label style={{ flex: 1.5 }}>Coins (Total ₹): <input type="number" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} style={inputStyle}/></label>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px' }}>
-              <div>
-                <p style={{ margin: 0, color: '#6b7280' }}>Actual Physical Cash:</p>
-                <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal}</h2>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, color: '#6b7280' }}>Discrepancy (Physical vs System):</p>
-                <h2 style={{ margin: 0, color: drawerDifference === 0 ? 'green' : 'red' }}>
-                  {drawerDifference > 0 ? `+ ₹${drawerDifference} (Over)` : drawerDifference < 0 ? `- ₹${Math.abs(drawerDifference)} (Short)` : 'Perfect Match ✓'}
-                </h2>
-              </div>
+            <div style={{ marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{ margin: 0, color: '#6b7280' }}>Total Physical Cash Counted</p>
+              <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal.toLocaleString('en-IN')}</h2>
             </div>
           </div>
 
