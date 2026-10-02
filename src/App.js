@@ -878,6 +878,148 @@ export default function App() {
         </div>
       )}
 
+      {activeTab === 'attendance' && (
+        <div>
+          <div style={{ ...cardStyle, borderTop: '4px solid #0ea5e9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+              <div>
+                <h2 style={{ color: '#0284c7', margin: 0 }}>👥 Employee Attendance</h2>
+                <p style={{ color: '#6b7280', marginBottom: 0 }}>Manage daily attendance, check-in/check-out times, and monthly payroll.</p>
+              </div>
+              <a href="/attendance.html" target="_blank" rel="noreferrer" style={{ ...btnStyle, backgroundColor: '#0ea5e9', textDecoration: 'none' }}>📱 Employee Phone Page</a>
+            </div>
+            <div style={{ display: 'flex', gap: '15px', marginTop: '20px', alignItems: 'end', flexWrap: 'wrap' }}>
+              <label style={{ minWidth: '220px', flex: 1 }}>
+                Attendance Date:
+                <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} style={inputStyle}/>
+              </label>
+              <button onClick={() => loadAttendance(attendanceDate)} disabled={isLoadingAttendance} style={{ ...btnStyle, backgroundColor: '#0284c7' }}>
+                {isLoadingAttendance ? '⏳ Loading...' : '🔄 Refresh Attendance'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
+              {Object.entries(attendanceSummary).map(([status, count]) => (
+                <div key={status} style={{ padding: '10px 14px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                  <strong>{status}:</strong> {count}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle, overflowX: 'auto' }}>
+            <h3 style={{ marginTop: 0 }}>Daily Attendance — {attendanceDate}</h3>
+            {isLoadingAttendance ? <p>Loading attendance...</p> : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Employee</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employeeNames.map(name => {
+                    const row = attendanceLogs.find(r => r.employee_name === name);
+                    const saveStatus = async (status) => {
+                      if (row) {
+                        await updateAttendance(row.id, { status });
+                      } else {
+                        const { error } = await supabase.from('employee_attendance').insert({
+                          employee_name: name,
+                          attendance_date: attendanceDate,
+                          status
+                        });
+                        if (error) alert('Attendance save failed: ' + error.message);
+                        else await loadAttendance(attendanceDate);
+                      }
+                    };
+                    return (
+                      <tr key={name} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>{name}</td>
+                        <td style={{ padding: '10px' }}>
+                          <select value={row?.status || ''} onChange={e => saveStatus(e.target.value)} style={{ ...inputStyle, minWidth: '140px' }}>
+                            <option value="">Not Marked</option>
+                            <option value="Present">Present</option>
+                            <option value="Absent">Absent</option>
+                            <option value="Half Day">Half Day</option>
+                            <option value="Leave">Leave</option>
+                            <option value="Weekly Off">Weekly Off</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '10px' }}>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
+                        <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
+                        <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
+                        <td style={{ padding: '10px' }}>
+                          <button onClick={async () => {
+                            const note = window.prompt('Attendance note (optional):', row?.notes || '');
+                            if (note === null) return;
+                            if (row) await updateAttendance(row.id, { notes: note });
+                            else {
+                              const { error } = await supabase.from('employee_attendance').insert({ employee_name: name, attendance_date: attendanceDate, status: 'Present', notes: note });
+                              if (error) alert('Attendance save failed: ' + error.message);
+                              else await loadAttendance(attendanceDate);
+                            }
+                          }} style={{ ...btnStyle, backgroundColor: '#64748b', padding: '7px 10px' }}>📝 Note</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={{ ...cardStyle, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>💰 Monthly Attendance & Payroll</h3>
+                <p style={{ color: '#6b7280', marginBottom: 0 }}>Payroll is an estimate from attendance and salary values saved in this browser.</p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' }}>
+                <label>
+                  Month:
+                  <input type="month" value={payrollMonth} onChange={e => setPayrollMonth(e.target.value)} style={inputStyle}/>
+                </label>
+                <button onClick={() => loadPayroll(payrollMonth)} disabled={isLoadingPayroll} style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}>
+                  {isLoadingPayroll ? '⏳ Loading...' : '🔄 Refresh Payroll'}
+                </button>
+                <button onClick={exportPayroll} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Export Payroll Excel</button>
+              </div>
+            </div>
+            <div style={{ marginTop: '15px', overflowX: 'auto' }}>
+              {isLoadingPayroll ? <p>Loading payroll...</p> : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
+                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Estimated Pay'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payrollRows.map(r => (
+                      <tr key={r.name} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '9px', fontWeight: 'bold' }}>{r.name}</td>
+                        <td style={{ padding: '9px' }}><input type="number" min="0" value={r.monthlySalary || ''} placeholder="₹ Salary" onChange={e => saveSalary(r.name, e.target.value)} style={{ ...inputStyle, minWidth: '120px' }}/></td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.present}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.half}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.leave}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.absent}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.weeklyOff}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.hours.toFixed(2)}</td>
+                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.payableDays}</td>
+                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold' }}>₹{r.estimatedPay.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'tasks' && (
         <div style={{ ...cardStyle, maxWidth: '600px', margin: '0 auto' }}>
           <h2>🔔 Front Desk Tasks & Reminders</h2>
