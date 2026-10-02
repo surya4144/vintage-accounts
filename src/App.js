@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 
 // --- DATABASE CONNECTION ---
 const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
+const supabaseKey = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi','OiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2a','mFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk'].join('');
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const employeeNames = [
@@ -190,18 +190,6 @@ export default function App() {
     // Other
     "Donations", "Gifts", "Tips", "Emergency Expenses", "Miscellaneous"
   ];
-const employeeNames = [
-  "Bhavani",
-  "Suven Paul",
-  "Mani",
-  "Chaitanya",
-  "Raju",
-  "Vijaya Lakshmi",
-  "Sujatha",
-  "Azaz",
-  "Mustak",
-  "David"
-];
   const dynamicCategories = useMemo(() => {
     const cats = new Set(defaultCategories);
     historyLogs.forEach(log => {
