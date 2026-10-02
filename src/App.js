@@ -235,7 +235,8 @@ const employeeNames = [
   // Therefore, do not subtract expense entries again from the closing balances.
   // Expenses remain recorded separately for reporting/analytics.
   const totalCashInHand = yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash;
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline;
+  // Online expenses are paid from the online balance, so deduct them from the available online amount.
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
