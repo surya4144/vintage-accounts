@@ -213,7 +213,7 @@ const employeeNames = [
   const totalStaffCredit = staffPayments.filter(s => s.method === 'Credit').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffTeja = staffPayments.filter(s => s.method === 'Teja').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalStaffAnil = staffPayments.filter(s => s.method === 'Anil').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalStaffOnline = 0;
+  const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
   const totalCreditSales = creditSales.reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
@@ -235,8 +235,8 @@ const employeeNames = [
   // Therefore, do not subtract expense entries again from the closing balances.
   // Expenses remain recorded separately for reporting/analytics.
   const totalCashInHand = yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash;
-  // Online expenses are paid from the online balance, so deduct them from the available online amount.
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses;
+  // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   const actualDrawerTotal = (Number(notes[500]) * 500) + (Number(notes[200]) * 200) + (Number(notes[100]) * 100) + (Number(notes[50]) * 50) + (Number(notes[20]) * 20) + (Number(notes[10]) * 10) + Number(notes.coins);
@@ -606,6 +606,7 @@ const employeeNames = [
                   <option value="Credit">Credit (Owe Later)</option>
                   <option value="Teja">Teja Paid</option>
                   <option value="Anil">Anil Paid</option>
+                  <option value="Online">Online (Deduct from Online Balance)</option>
                 </select>
                 <button onClick={() => removeArrItem(setStaffPayments, staffPayments, s.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
               </div>
