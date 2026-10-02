@@ -7,6 +7,19 @@ const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const employeeNames = [
+  "Bhavani",
+  "Suven Paul",
+  "Mani",
+  "Chaitanya",
+  "Raju",
+  "Vijaya Lakshmi",
+  "Sujatha",
+  "Azaz",
+  "Mustak",
+  "David"
+];
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
@@ -54,18 +67,7 @@ export default function App() {
   const [payrollLogs, setPayrollLogs] = useState([]);
   const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
   const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
-  const employeeNames = [
-    "Bhavani",
-    "Suven Paul",
-    "Mani",
-    "Chaitanya",
-    "Raju",
-    "Vijaya Lakshmi",
-    "Sujatha",
-    "Azaz",
-    "Mustak",
-    "David"
-  ];
+  
 
   // --- 1. SUPABASE AUTHENTICATION ---
   useEffect(() => {
@@ -915,4 +917,3 @@ const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 
 const inputStyle = { padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px', width: '100%', boxSizing: 'border-box' };
 const btnStyle = { padding: '10px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const tabStyle = { flex: 1, padding: '15px', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' };
-// Trigger clean production rebuild after payroll initialization fix.
