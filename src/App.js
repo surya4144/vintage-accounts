@@ -50,6 +50,10 @@ export default function App() {
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
+  const [payrollMonth, setPayrollMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [payrollLogs, setPayrollLogs] = useState([]);
+  const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
+  const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
 
   // --- 1. SUPABASE AUTHENTICATION ---
   useEffect(() => {
@@ -105,6 +109,45 @@ export default function App() {
     attendanceLogs.forEach(row => { if (counts[row.status] !== undefined) counts[row.status] += 1; });
     return counts;
   }, [attendanceLogs]);
+
+  const loadPayroll = async (month = payrollMonth) => {
+    setIsLoadingPayroll(true);
+    const start = month + '-01';
+    const endDate = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0).toISOString().split('T')[0];
+    const { data, error } = await supabase.from('employee_attendance').select('*').gte('attendance_date', start).lte('attendance_date', endDate).order('attendance_date');
+    if (error) console.error('Payroll attendance fetch error:', error);
+    setPayrollLogs(data || []);
+    setIsLoadingPayroll(false);
+  };
+
+  useEffect(() => { if (session && activeTab === 'attendance') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
+
+  const payrollRows = useMemo(() => employeeNames.map(name => {
+    const rows = payrollLogs.filter(r => r.employee_name === name);
+    const present = rows.filter(r => r.status === 'Present').length;
+    const absent = rows.filter(r => r.status === 'Absent').length;
+    const half = rows.filter(r => r.status === 'Half Day').length;
+    const leave = rows.filter(r => r.status === 'Leave').length;
+    const weeklyOff = rows.filter(r => r.status === 'Weekly Off').length;
+    const hours = rows.reduce((sum,r) => sum + (r.check_in && r.check_out ? Math.max(0,(new Date(r.check_out)-new Date(r.check_in))/3600000) : 0),0);
+    const monthlySalary = Number(salaryMap[name] || 0);
+    const payableDays = present + half * 0.5;
+    const calendarDays = new Date(Number(payrollMonth.slice(0,4)), Number(payrollMonth.slice(5,7)), 0).getDate();
+    const dailyRate = calendarDays ? monthlySalary / calendarDays : 0;
+    const estimatedPay = dailyRate * payableDays;
+    return { name, present, absent, half, leave, weeklyOff, hours, monthlySalary, payableDays, estimatedPay };
+  }), [payrollLogs, payrollMonth, salaryMap]);
+
+  const saveSalary = (name, value) => {
+    const next = { ...salaryMap, [name]: value };
+    setSalaryMap(next);
+    localStorage.setItem('vintage_staff_salaries', JSON.stringify(next));
+  };
+
+  const exportPayroll = () => {
+    const rows = payrollRows.map(r => ({ Employee:r.name, 'Monthly Salary (₹)':r.monthlySalary, Present:r.present, 'Half Day':r.half, Leave:r.leave, Absent:r.absent, 'Weekly Off':r.weeklyOff, 'Hours Worked':Number(r.hours.toFixed(2)), 'Payable Days':r.payableDays, 'Estimated Pay (₹)':Number(r.estimatedPay.toFixed(2)) }));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Payroll'); XLSX.writeFile(wb, `Attendance-Payroll-${payrollMonth}.xlsx`);
+  };
 
   // --- 3. SMART CATEGORY LEARNING ---
   const defaultCategories = [
