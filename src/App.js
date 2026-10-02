@@ -47,6 +47,9 @@ export default function App() {
     let d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
 
   // --- 1. SUPABASE AUTHENTICATION ---
   useEffect(() => {
@@ -72,6 +75,36 @@ export default function App() {
   };
 
   useEffect(() => { if (session) loadHistory(); }, [session]);
+
+  const loadAttendance = async (targetDate = attendanceDate) => {
+    setIsLoadingAttendance(true);
+    const { data, error } = await supabase.from('employee_attendance').select('*').eq('attendance_date', targetDate).order('employee_name');
+    if (error) console.error('Attendance fetch error:', error);
+    setAttendanceLogs(data || []);
+    setIsLoadingAttendance(false);
+  };
+
+  useEffect(() => {
+    if (session && activeTab === 'attendance') loadAttendance(attendanceDate);
+  }, [session, activeTab, attendanceDate]);
+
+  const updateAttendance = async (id, changes) => {
+    const { error } = await supabase.from('employee_attendance').update(changes).eq('id', id);
+    if (error) return alert('Attendance update failed: ' + error.message);
+    await loadAttendance(attendanceDate);
+  };
+
+  const attendanceHours = (row) => {
+    if (!row.check_in || !row.check_out) return '—';
+    const hours = (new Date(row.check_out) - new Date(row.check_in)) / 3600000;
+    return hours >= 0 ? hours.toFixed(2) + ' h' : '—';
+  };
+
+  const attendanceSummary = useMemo(() => {
+    const counts = { Present: 0, Absent: 0, 'Half Day': 0, Leave: 0, 'Weekly Off': 0 };
+    attendanceLogs.forEach(row => { if (counts[row.status] !== undefined) counts[row.status] += 1; });
+    return counts;
+  }, [attendanceLogs]);
 
   // --- 3. SMART CATEGORY LEARNING ---
   const defaultCategories = [
@@ -478,6 +511,7 @@ const employeeNames = [
         <button onClick={() => setActiveTab('ledger')} style={{ ...tabStyle, backgroundColor: activeTab === 'ledger' ? '#ec4899' : '#e5e7eb', color: activeTab === 'ledger' ? 'white' : 'black' }}>📒 Customer Khata</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
         <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
+        <button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
         <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
       </div>
 
