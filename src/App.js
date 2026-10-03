@@ -124,9 +124,16 @@ export default function App() {
     return counts;
   }, [attendanceLogs]);
 
+  const getPreviousMonth = (month) => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const d = new Date(year, monthNumber - 2, 1);
+    return d.toISOString().slice(0, 7);
+  };
+
   const loadPayroll = async (month = payrollMonth) => {
     setIsLoadingPayroll(true);
-    const start = month + '-01';
+    const previousMonth = getPreviousMonth(month);
+    const start = previousMonth + '-01';
     const endDate = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0).toISOString().split('T')[0];
     const { data, error } = await supabase.from('employee_attendance').select('*').gte('attendance_date', start).lte('attendance_date', endDate).order('attendance_date');
     if (error) console.error('Payroll attendance fetch error:', error);
@@ -137,39 +144,60 @@ export default function App() {
   useEffect(() => { if (session && activeTab === 'payroll') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
 
   const payrollRows = useMemo(() => employeeNames.map(name => {
-    const rows = payrollLogs.filter(r => r.employee_name === name);
+    const previousMonth = getPreviousMonth(payrollMonth);
+    const rows = payrollLogs.filter(r => r.employee_name === name && r.attendance_date?.slice(0, 7) === payrollMonth);
+    const previousRows = payrollLogs.filter(r => r.employee_name === name && r.attendance_date?.slice(0, 7) === previousMonth);
+
     const present = rows.filter(r => r.status === 'Present').length;
     const absent = rows.filter(r => r.status === 'Absent').length;
     const half = rows.filter(r => r.status === 'Half Day').length;
     const leave = rows.filter(r => r.status === 'Leave').length;
     const weeklyOff = rows.filter(r => r.status === 'Weekly Off').length;
     const hours = rows.reduce((sum,r) => sum + (r.check_in && r.check_out ? Math.max(0,(new Date(r.check_out)-new Date(r.check_in))/3600000) : 0),0);
+
+    const previousPresent = previousRows.filter(r => r.status === 'Present').length;
+    const previousHalf = previousRows.filter(r => r.status === 'Half Day').length;
+    const previousPayableDays = previousPresent + previousHalf * 0.5;
+
     const monthlySalary = Number(salaryMap[name] || 0);
     const payableDays = present + half * 0.5;
     const calendarDays = new Date(Number(payrollMonth.slice(0,4)), Number(payrollMonth.slice(5,7)), 0).getDate();
+    const previousCalendarDays = new Date(Number(previousMonth.slice(0,4)), Number(previousMonth.slice(5,7)), 0).getDate();
     const dailyRate = calendarDays ? monthlySalary / calendarDays : 0;
+    const previousDailyRate = previousCalendarDays ? monthlySalary / previousCalendarDays : 0;
     const earnedPay = dailyRate * payableDays;
+    const previousEarnedPay = previousDailyRate * previousPayableDays;
 
-    // Staff payments recorded in the daily accounts for this month are treated as
-    // money already taken/paid to the employee, including advances and wages.
-    const monthPayments = historyLogs
-      .filter(log => log.date?.slice(0, 7) === payrollMonth)
-      .flatMap(log => log.expense_details?.staff || [])
+    const allStaffPayments = historyLogs
+      .flatMap(log => (log.expense_details?.staff || []).map(payment => ({
+        ...payment,
+        paymentDate: log.date,
+        dueFor: payment.dueFor || log.date?.slice(0, 7)
+      })))
       .filter(payment => payment.name === name);
 
-    const totalTaken = monthPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const cashAdvance = monthPayments
-      .filter(payment => payment.type === 'Cash Advance')
+    const currentPayments = allStaffPayments.filter(payment => payment.dueFor === payrollMonth);
+    const previousPayments = allStaffPayments.filter(payment => payment.dueFor === previousMonth);
+
+    const totalTaken = currentPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const cashAdvance = currentPayments.filter(payment => payment.type === 'Cash Advance').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const wagesPaid = currentPayments.filter(payment => payment.type !== 'Cash Advance').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+    const paidTowardPreviousDues = previousPayments
+      .filter(payment => payment.paymentDate?.slice(0, 7) === payrollMonth)
       .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const wagesPaid = monthPayments
-      .filter(payment => payment.type !== 'Cash Advance')
-      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const balanceToPay = Math.max(0, earnedPay - totalTaken);
+    const previousTotalPaid = previousPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const previousDue = Math.max(0, previousEarnedPay - previousTotalPaid);
+    const previousDueAfterPayment = Math.max(0, previousDue - paidTowardPreviousDues);
+    const currentBalanceToPay = Math.max(0, earnedPay - totalTaken);
+    const totalBalanceToPay = previousDueAfterPayment + currentBalanceToPay;
     const overpaid = Math.max(0, totalTaken - earnedPay);
 
     return {
       name, present, absent, half, leave, weeklyOff, hours, monthlySalary,
-      payableDays, earnedPay, totalTaken, cashAdvance, wagesPaid, balanceToPay, overpaid
+      payableDays, earnedPay, totalTaken, cashAdvance, wagesPaid, balanceToPay: currentBalanceToPay,
+      previousMonth, previousEarnedPay, previousDue, paidTowardPreviousDues,
+      previousDueAfterPayment, totalBalanceToPay, overpaid
     };
   }), [payrollLogs, payrollMonth, salaryMap, historyLogs]);
 
@@ -191,10 +219,12 @@ export default function App() {
       'Hours Worked':Number(r.hours.toFixed(2)),
       'Payable Days':r.payableDays,
       'Earned Salary (₹)':Number(r.earnedPay.toFixed(2)),
-      'Already Taken/Paid (₹)':Number(r.totalTaken.toFixed(2)),
+      'Already Taken/Paid For Month (₹)':Number(r.totalTaken.toFixed(2)),
       'Cash Advances (₹)':Number(r.cashAdvance.toFixed(2)),
       'Wages Paid (₹)':Number(r.wagesPaid.toFixed(2)),
-      'Balance To Pay (₹)':Number(r.balanceToPay.toFixed(2)),
+      'Previous Month Due (₹)':Number(r.previousDueAfterPayment.toFixed(2)),
+      'Paid Toward Previous Dues (₹)':Number(r.paidTowardPreviousDues.toFixed(2)),
+      'Total Balance To Pay (₹)':Number(r.totalBalanceToPay.toFixed(2)),
       'Overpaid (₹)':Number(r.overpaid.toFixed(2))
     }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Payroll'); XLSX.writeFile(wb, `Attendance-Payroll-${payrollMonth}.xlsx`);
@@ -366,7 +396,13 @@ export default function App() {
   const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
   const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', description: '', amount: 0 });
   const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
-  const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, { name: '', amount: 0, type: 'Full Wage', method: 'Cash' });
+  const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, {
+    name: '',
+    amount: 0,
+    type: 'Full Wage',
+    method: 'Cash',
+    dueFor: date?.slice(0, 7) || new Date().toISOString().slice(0, 7)
+  });
 
   const handleAddTask = () => { if (newTask.trim()) { setTasks([{ id: Date.now(), text: newTask, done: false }, ...tasks]); setNewTask(''); }};
   const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
@@ -709,6 +745,7 @@ export default function App() {
 
           <div style={cardStyle}>
             <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
+            <p style={{ color: '#6b7280', marginTop: 0 }}>“Salary / Dues For” is the month this payment belongs to. Example: if you pay September salary on October 5, select <strong>September</strong>.</p>
             {staffPayments.map(s => (
               <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}>
@@ -716,6 +753,7 @@ export default function App() {
                   {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
                 <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
+                <input type="month" value={s.dueFor || date?.slice(0, 7) || new Date().toISOString().slice(0, 7)} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'dueFor', e.target.value)} title="Salary / dues this payment belongs to" style={{...inputStyle, flex: 1}}/>
                 <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
                   <option value="Cash">Cash (Deduct from Till)</option>
@@ -1018,7 +1056,7 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
               <div>
                 <h3 style={{ margin: 0 }}>💰 Monthly Attendance & Payroll</h3>
-                <p style={{ color: '#6b7280', marginBottom: 0 }}>Payroll is an estimate from attendance and salary values saved in this browser.</p>
+                <p style={{ color: '#6b7280', marginBottom: 0 }}>Assign each staff payment to the salary/dues month it belongs to. Payments made this month for last month's dues will reduce the previous month's balance, not this month's salary.</p>
               </div>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' }}>
                 <label>
@@ -1033,10 +1071,10 @@ export default function App() {
             </div>
             <div style={{ marginTop: '15px', overflowX: 'auto' }}>
               {isLoadingPayroll ? <p>Loading payroll...</p> : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1350px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
-                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Earned Salary','Taken/Paid','Balance To Pay'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
+                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Earned Salary','Paid For Month','Previous Due','Paid Toward Previous','Total Balance'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -1056,8 +1094,14 @@ export default function App() {
                           {formatINR(r.totalTaken)}
                           {r.cashAdvance > 0 && <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#6b7280' }}>Advance: {formatINR(r.cashAdvance)}</div>}
                         </td>
-                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold', color: r.overpaid > 0 ? '#dc2626' : '#059669' }}>
-                          {r.overpaid > 0 ? `Overpaid ${formatINR(r.overpaid)}` : formatINR(r.balanceToPay)}
+                        <td style={{ padding: '9px', textAlign: 'right', color: r.previousDueAfterPayment > 0 ? '#dc2626' : '#059669', fontWeight: 'bold' }}>
+                          {formatINR(r.previousDueAfterPayment)}
+                        </td>
+                        <td style={{ padding: '9px', textAlign: 'right', color: '#2563eb', fontWeight: 'bold' }}>
+                          {formatINR(r.paidTowardPreviousDues)}
+                        </td>
+                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold', color: r.totalBalanceToPay > 0 ? '#dc2626' : '#059669' }}>
+                          {formatINR(r.totalBalanceToPay)}
                         </td>
                       </tr>
                     ))}
