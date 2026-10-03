@@ -846,7 +846,10 @@ export default function App() {
             <div style={{ ...cardStyle, borderTop: '4px solid #2563eb' }}>
               <h2 style={{ marginTop: 0 }}>Daily Sales Entry</h2>
               <p style={{ color: '#6b7280' }}>Record today's cash, online, parcel and credit transactions.</p>
-              <label>Date<input type="date" value={cashierDate} onChange={async e => { setCashierDate(e.target.value); await loadCashierDateEntry(e.target.value); }} style={inputStyle}/></label>
+              <div style={{ display:'flex', gap:'10px', alignItems:'end', flexWrap:'wrap' }}>
+                <label style={{ flex:1, minWidth:'220px' }}>Date<input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/></label>
+                <button onClick={() => loadCashierDateEntry(cashierDate)} style={{ ...btnStyle, backgroundColor:'#2563eb', minWidth:'120px' }}>📥 Fetch Data</button>
+              </div>
               <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '15px' }}>
                 <label style={{ flex: 1, minWidth: '180px' }}>Cash Sales<input type="number" min="0" value={cashierCashSale} onChange={e => setCashierCashSale(e.target.value)} style={inputStyle}/></label>
                 <label style={{ flex: 1, minWidth: '180px' }}>Online Sales<input type="number" min="0" value={cashierOnlineSale} onChange={e => setCashierOnlineSale(e.target.value)} style={inputStyle}/></label>
@@ -900,7 +903,10 @@ export default function App() {
             <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
               <h2 style={{ marginTop: 0, color: '#b91c1c' }}>💸 Daily Expenses</h2>
               <p style={{ color: '#6b7280' }}>Record online and cash expenses for the selected date. These are stored separately from the main admin accounting ledger.</p>
-              <label>Date<input type="date" value={cashierDate} onChange={async e => { setCashierDate(e.target.value); await loadCashierDateEntry(e.target.value); }} style={inputStyle}/></label>
+              <div style={{ display:'flex', gap:'10px', alignItems:'end', flexWrap:'wrap' }}>
+                <label style={{ flex:1, minWidth:'220px' }}>Date<input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/></label>
+                <button onClick={() => loadCashierDateEntry(cashierDate)} style={{ ...btnStyle, backgroundColor:'#2563eb', minWidth:'120px' }}>📥 Fetch Data</button>
+              </div>
               <div style={{ marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <div style={{ ...cardStyle, flex: 1, minWidth: '320px', border: '1px solid #bfdbfe' }}>
                   <h3 style={{ color: '#2563eb' }}>💳 Online Expenses</h3>
@@ -957,7 +963,10 @@ export default function App() {
             <div style={{ ...cardStyle, borderTop: '4px solid #0284c7' }}>
               <h2 style={{ color:'#0369a1', marginTop:0 }}>👥 Employee Attendance</h2>
               <p style={{ color:'#6b7280' }}>Mark attendance for the team. Check-in/out from the employee phone page remains available.</p>
-              <label>Date<input type="date" value={cashierAttendanceDate} onChange={e => setCashierAttendanceDate(e.target.value)} style={inputStyle}/></label>
+              <div style={{ display:'flex', gap:'10px', alignItems:'end', flexWrap:'wrap' }}>
+                <label style={{ flex:1, minWidth:'220px' }}>Date<input type="date" value={cashierAttendanceDate} onChange={e => setCashierAttendanceDate(e.target.value)} style={inputStyle}/></label>
+                <button onClick={() => loadAttendance(cashierAttendanceDate)} style={{ ...btnStyle, backgroundColor:'#0284c7', minWidth:'120px' }}>📥 Fetch Data</button>
+              </div>
               <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'15px' }}>
                 {Object.entries(attendanceSummary).map(([status,count]) => <div key={status} style={{padding:'8px 12px',background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:'8px'}}><strong>{status}:</strong> {count}</div>)}
               </div>
