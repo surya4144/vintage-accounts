@@ -139,21 +139,6 @@ export default function App() {
 
   useEffect(() => { if (session && (role === 'admin' || role === 'manager')) loadHistory(); }, [session, role]);
 
-  const loadCashierEntries = async () => {
-    setIsLoadingCashierEntries(true);
-    const { data, error } = await supabase
-      .from('cashier_daily_entries')
-      .select('*')
-      .order('entry_date', { ascending: false });
-    if (error) console.error('Cashier entries fetch error:', error);
-    setCashierEntries(data || []);
-    setIsLoadingCashierEntries(false);
-  };
-
-  useEffect(() => {
-    if (session && (role === 'admin' || role === 'manager') && activeTab === 'cashierEntries') loadCashierEntries();
-  }, [session, role, activeTab]);
-
   const loadAttendance = async (targetDate = attendanceDate) => {
     setIsLoadingAttendance(true);
     const { data, error } = await supabase.from('employee_attendance').select('*').eq('attendance_date', targetDate).order('employee_name');
@@ -481,26 +466,37 @@ export default function App() {
 
   const loadCashierDateEntry = async (targetDate) => {
     if (!session || role !== 'cashier') return;
-    const { data, error } = await supabase.from('cashier_daily_entries').select('*').eq('entry_date', targetDate).maybeSingle();
+    const { data, error } = await supabase.from('cashier_daily_entries').select('*').eq('entry_date', targetDate  const loadCashierOwnEntries = async () => {
+    if (!session || role !== 'cashier') return;
+    const { data, error } = await supabase.rpc('get_cashier_daily_entries');
+    if (error) console.error('Central accounting fetch error:', error);
+    setCashierEntries(data || []);
+  };
+
+  const loadCashierDateEntry = async (targetDate) => {
+    if (!session || role !== 'cashier') return;
+    const { data, error } = await supabase.rpc('get_cashier_daily_entry', { p_entry_date: targetDate });
     if (error) {
-      console.error('Cashier date fetch error:', error);
+      console.error('Central accounting date fetch error:', error);
+      setCashierMessage('❌ Unable to fetch central accounting data: ' + error.message);
       return;
     }
-    if (data) {
-      setCashierCashSale(data.cash_sale || 0);
-      setCashierOnlineSale(data.online_sale || 0);
-      setCashierParcelCash(data.parcel_counter_cash || 0);
-      setCashierParcelOnline(data.parcel_counter_online || 0);
-      setCashierCreditSales(data.credit_sales || []);
-      setCashierCreditReceived(data.credit_received || []);
-      setCashierOnlineExpenses(data.online_expenses || []);
-      setCashierCashExpenses(data.cash_expenses || []);
-      setCashierMessage('');
+    const row = data?.[0];
+    if (row) {
+      setCashierCashSale(row.cash_sale || 0);
+      setCashierOnlineSale(row.online_sale || 0);
+      setCashierParcelCash(row.parcel_counter_cash || 0);
+      setCashierParcelOnline(row.parcel_counter_online || 0);
+      setCashierCreditSales(row.credit_sales || []);
+      setCashierCreditReceived(row.credit_received || []);
+      setCashierOnlineExpenses(row.online_expenses || []);
+      setCashierCashExpenses(row.cash_expenses || []);
+      setCashierMessage('✅ Central accounting data loaded.');
     } else {
       setCashierCashSale(0); setCashierOnlineSale(0); setCashierParcelCash(0); setCashierParcelOnline(0);
       setCashierCreditSales([]); setCashierCreditReceived([]);
       setCashierOnlineExpenses([]); setCashierCashExpenses([]);
-      setCashierMessage('');
+      setCashierMessage('ℹ️ No central accounting record exists for this date.');
     }
   };
 
@@ -523,45 +519,28 @@ export default function App() {
     if (!session || role !== 'cashier' || cashierSaving) return;
     setCashierSaving(true);
     setCashierMessage('');
-    const payload = {
-      entry_date: cashierDate,
-      cash_sale: Number(cashierCashSale || 0),
-      online_sale: Number(cashierOnlineSale || 0),
-      parcel_counter_cash: Number(cashierParcelCash || 0),
-      parcel_counter_online: Number(cashierParcelOnline || 0),
-      credit_sales: cashierCreditSales,
-      credit_received: cashierCreditReceived,
-      online_expenses: cashierOnlineExpenses,
-      cash_expenses: cashierCashExpenses,
-      submitted_by: session.user.id,
-      updated_at: new Date().toISOString()
-    };
-    const { error } = await supabase
-      .from('cashier_daily_entries')
-      .upsert(payload, { onConflict: 'entry_date' });
+    const { error } = await supabase.rpc('save_cashier_daily_entry', {
+      p_entry_date: cashierDate,
+      p_cash_sale: Number(cashierCashSale || 0),
+      p_online_sale: Number(cashierOnlineSale || 0),
+      p_parcel_counter_cash: Number(cashierParcelCash || 0),
+      p_parcel_counter_online: Number(cashierParcelOnline || 0),
+      p_credit_sales: cashierCreditSales,
+      p_credit_received: cashierCreditReceived,
+      p_online_expenses: cashierOnlineExpenses,
+      p_cash_expenses: cashierCashExpenses
+    });
     if (error) {
-      setCashierMessage('❌ Unable to save: ' + error.message);
+      setCashierMessage('❌ Unable to save central accounting data: ' + error.message);
     } else {
-      setCashierMessage('✅ Daily sales submitted successfully.');
+      setCashierMessage('✅ Saved to the central accounting ledger.');
+      await loadCashierDateEntry(cashierDate);
+      await loadCashierOwnEntries();
     }
     setCashierSaving(false);
   };
 
-  const clearCashierForm = () => {
-    setCashierCashSale(0);
-    setCashierOnlineSale(0);
-    setCashierParcelCash(0);
-    setCashierParcelOnline(0);
-    setCashierCreditSales([]);
-    setCashierCreditReceived([]);
-    setCashierOnlineExpenses([]);
-    setCashierCashExpenses([]);
-    setCashierMessage('');
-  };
-
-  const clearUnsavedForm = () => {
-    if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
-    setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
+nline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
     setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
     localStorage.removeItem(`vintage_draft_${date}`);
   };
@@ -902,7 +881,7 @@ export default function App() {
           <div>
             <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
               <h2 style={{ marginTop: 0, color: '#b91c1c' }}>💸 Daily Expenses</h2>
-              <p style={{ color: '#6b7280' }}>Record online and cash expenses for the selected date. These are stored separately from the main admin accounting ledger.</p>
+              <p style={{ color: '#6b7280' }}>Record online and cash expenses for the selected date. These are saved directly into the same central accounting ledger used by Accounts.</p>
               <div style={{ display:'flex', gap:'10px', alignItems:'end', flexWrap:'wrap' }}>
                 <label style={{ flex:1, minWidth:'220px' }}>Date<input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/></label>
                 <button onClick={() => loadCashierDateEntry(cashierDate)} style={{ ...btnStyle, backgroundColor:'#2563eb', minWidth:'120px' }}>📥 Fetch Data</button>
@@ -1011,7 +990,7 @@ export default function App() {
         <button onClick={() => setActiveTab('ledger')} style={{ ...tabStyle, backgroundColor: activeTab === 'ledger' ? '#ec4899' : '#e5e7eb', color: activeTab === 'ledger' ? 'white' : 'black' }}>📒 Customer Khata</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
         <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
-        <button onClick={() => setActiveTab('cashierEntries')} style={{ ...tabStyle, backgroundColor: activeTab === 'cashierEntries' ? '#2563eb' : '#e5e7eb', color: activeTab === 'cashierEntries' ? 'white' : 'black' }}>🧾 Cashier Entries</button><button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
+<button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
         <button onClick={() => setActiveTab('payroll')} style={{ ...tabStyle, backgroundColor: activeTab === 'payroll' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'payroll' ? 'white' : 'black' }}>💰 Employee Payroll</button>
         <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
       </div>
