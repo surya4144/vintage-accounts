@@ -41,6 +41,7 @@ export default function App() {
   const [cashierCashExpenses, setCashierCashExpenses] = useState([]);
   const [cashierAttendanceDate, setCashierAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [cashierActualCash, setCashierActualCash] = useState(0);
+  const [cashierStaffPayments, setCashierStaffPayments] = useState([]);
 
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
@@ -483,11 +484,12 @@ export default function App() {
       setCashierCreditReceived(row.credit_received || []);
       setCashierOnlineExpenses(row.online_expenses || []);
       setCashierCashExpenses(row.cash_expenses || []);
+      setCashierStaffPayments(row.staff_payments || []);
       setCashierMessage('✅ Central accounting data loaded.');
     } else {
       setCashierCashSale(0); setCashierOnlineSale(0); setCashierParcelCash(0); setCashierParcelOnline(0);
       setCashierCreditSales([]); setCashierCreditReceived([]);
-      setCashierOnlineExpenses([]); setCashierCashExpenses([]);
+      setCashierOnlineExpenses([]); setCashierCashExpenses([]); setCashierStaffPayments([]);
       setCashierMessage('ℹ️ No central accounting record exists for this date.');
     }
   };
@@ -528,7 +530,8 @@ export default function App() {
       p_credit_sales: cashierCreditSales,
       p_credit_received: cashierCreditReceived,
       p_online_expenses: cashierOnlineExpenses,
-      p_cash_expenses: cashierCashExpenses
+      p_cash_expenses: cashierCashExpenses,
+      p_staff_payments: cashierStaffPayments
     });
     if (error) {
       setCashierMessage('❌ Unable to save central accounting data: ' + error.message);
@@ -549,6 +552,7 @@ export default function App() {
     setCashierCreditReceived([]);
     setCashierOnlineExpenses([]);
     setCashierCashExpenses([]);
+    setCashierStaffPayments([]);
     setCashierMessage('');
   };
 
@@ -785,10 +789,18 @@ export default function App() {
     const cashierCashPayments = cashierCreditReceived
       .filter(item => (item.method || 'Cash') === 'Cash')
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierOnlineExpenseTotal = cashierOnlineExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const cashierCashExpenseTotal = cashierCashExpenses
       .filter(item => !item.type || item.type === 'Cash')
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const cashierExpectedDailyCash = cashierCashSaleAmount + cashierCashPayments - cashierCashExpenseTotal;
+    const cashierStaffCashTotal = cashierStaffPayments
+      .filter(item => (item.method || 'Cash') === 'Cash')
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierStaffOnlineTotal = cashierStaffPayments
+      .filter(item => item.method === 'Online')
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierStaffTotal = cashierStaffPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierExpectedDailyCash = cashierCashSaleAmount + cashierCashPayments - cashierCashExpenseTotal - cashierStaffCashTotal;
     const cashierCashDifference = Number(cashierActualCash || 0) - cashierExpectedDailyCash;
 
     const cashierLedger = (() => {
@@ -849,7 +861,7 @@ export default function App() {
           {[
             ['sales', '🧾 Sales', '#2563eb'],
             ['khata', '📒 Khata', '#db2777'],
-            ['expenses', '💵 Cash Expenses', '#dc2626'],
+            ['expenses', '💸 Expenses', '#dc2626'],
             ['attendance', '👥 Attendance', '#0284c7']
           ].map(([tab, label, color]) => (
             <button
@@ -956,6 +968,88 @@ export default function App() {
               </div>
             </div>
           </>
+        )}
+
+        {cashierActiveTab === 'expenses' && (
+          <div>
+            <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ marginTop: 0, color: '#b91c1c', marginBottom: '4px' }}>💸 Daily Expenses & Staff Payments</h2>
+                  <p style={{ color: '#6b7280', margin: 0 }}>Record online expenses, cash expenses, and staff payments for this business date.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'end', flexWrap: 'wrap' }}>
+                  <label style={{ minWidth: '190px' }}>Date<input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/></label>
+                  <button onClick={() => loadCashierDateEntry(cashierDate)} style={{ ...btnStyle, backgroundColor: '#2563eb' }}>📥 Fetch Data</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '18px', padding: '16px', background: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
+                <h3 style={{ color: '#1d4ed8', marginTop: 0 }}>💳 Online Expenses</h3>
+                {cashierOnlineExpenses.map(exp => (
+                  <div key={exp.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 150px auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
+                    <input list="common-expenses" placeholder="Category" value={exp.category || ''} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
+                    <input placeholder="Description" value={exp.description || ''} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
+                    <input type="number" min="0" step="0.01" placeholder="Amount ₹" value={exp.amount ?? ''} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                    <button onClick={() => removeArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => addArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, { category: '', description: '', amount: 0 })} style={{ ...btnStyle, backgroundColor: '#2563eb' }}>+ Add Online Expense</button>
+                <strong style={{ display: 'block', marginTop: '12px', color: '#1d4ed8' }}>Online Expenses Total: ₹{cashierFormat(cashierOnlineExpenseTotal)}</strong>
+              </div>
+
+              <div style={{ marginTop: '18px', padding: '16px', background: '#fef2f2', borderRadius: '10px', border: '1px solid #fecaca' }}>
+                <h3 style={{ color: '#b91c1c', marginTop: 0 }}>💵 Cash Expenses</h3>
+                {cashierCashExpenses.map(exp => (
+                  <div key={exp.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 150px auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
+                    <input list="common-expenses" placeholder="Category" value={exp.category || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
+                    <input placeholder="Description" value={exp.description || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
+                    <input type="number" min="0" step="0.01" placeholder="Amount ₹" value={exp.amount ?? ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                    <button onClick={() => removeArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => addArrItem(setCashierCashExpenses, cashierCashExpenses, { category: '', description: '', amount: 0, type: 'Cash' })} style={{ ...btnStyle, backgroundColor: '#dc2626' }}>+ Add Cash Expense</button>
+                <strong style={{ display: 'block', marginTop: '12px', color: '#b91c1c' }}>Cash Expenses Total: ₹{cashierFormat(cashierCashExpenseTotal)}</strong>
+              </div>
+
+              <div style={{ marginTop: '18px', padding: '16px', background: '#f5f3ff', borderRadius: '10px', border: '1px solid #ddd6fe' }}>
+                <h3 style={{ color: '#6d28d9', marginTop: 0 }}>👨‍🍳 Staff Payments</h3>
+                {cashierStaffPayments.map(payment => (
+                  <div key={payment.id} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 140px 140px auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
+                    <select value={payment.name || ''} onChange={e => updateArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id, 'name', e.target.value)} style={inputStyle}>
+                      <option value="">Select Staff</option>
+                      {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                    <select value={payment.type || 'Full Wage'} onChange={e => updateArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id, 'type', e.target.value)} style={inputStyle}>
+                      <option value="Full Wage">Full Wage</option>
+                      <option value="Cash Advance">Cash Advance</option>
+                    </select>
+                    <input type="month" value={payment.dueFor || cashierDate.slice(0,7)} onChange={e => updateArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id, 'dueFor', e.target.value)} title="Salary / dues month" style={inputStyle}/>
+                    <input type="number" min="0" step="0.01" placeholder="Amount ₹" value={payment.amount ?? ''} onChange={e => updateArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id, 'amount', e.target.value)} style={inputStyle}/>
+                    <select value={payment.method || 'Cash'} onChange={e => updateArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id, 'method', e.target.value)} style={inputStyle}>
+                      <option value="Cash">Cash</option>
+                      <option value="Online">Online</option>
+                    </select>
+                    <button onClick={() => removeArrItem(setCashierStaffPayments, cashierStaffPayments, payment.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => addArrItem(setCashierStaffPayments, cashierStaffPayments, { name: '', amount: 0, type: 'Full Wage', method: 'Cash', dueFor: cashierDate.slice(0,7) })} style={{ ...btnStyle, backgroundColor: '#7c3aed' }}>+ Add Staff Payment</button>
+                <strong style={{ display: 'block', marginTop: '12px', color: '#6d28d9' }}>Staff Payments Total: ₹{cashierFormat(cashierStaffTotal)}</strong>
+              </div>
+            </div>
+
+            <div style={{ ...cardStyle, background: '#111827', color: 'white' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '12px' }}>
+                <div><div style={{ color: '#9ca3af' }}>Online Expenses</div><strong style={{ fontSize: '20px' }}>₹{cashierFormat(cashierOnlineExpenseTotal + cashierStaffOnlineTotal)}</strong></div>
+                <div><div style={{ color: '#9ca3af' }}>Cash Expenses + Staff</div><strong style={{ fontSize: '20px' }}>₹{cashierFormat(cashierCashExpenseTotal + cashierStaffCashTotal)}</strong></div>
+                <div><div style={{ color: '#9ca3af' }}>All Staff Payments</div><strong style={{ fontSize: '20px' }}>₹{cashierFormat(cashierStaffTotal)}</strong></div>
+              </div>
+              {cashierMessage && <p>{cashierMessage}</p>}
+              <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: '#10b981', marginTop: '14px', width: '100%' }}>
+                {cashierSaving ? '⏳ Saving...' : '💾 Save Expenses & Staff Payments'}
+              </button>
+            </div>
+          </div>
         )}
 
         {cashierActiveTab === 'khata' && (
