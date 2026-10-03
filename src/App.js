@@ -134,7 +134,7 @@ export default function App() {
     setIsLoadingPayroll(false);
   };
 
-  useEffect(() => { if (session && activeTab === 'attendance') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
+  useEffect(() => { if (session && activeTab === 'payroll') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
 
   const payrollRows = useMemo(() => employeeNames.map(name => {
     const rows = payrollLogs.filter(r => r.employee_name === name);
@@ -594,6 +594,7 @@ export default function App() {
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
         <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
         <button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
+        <button onClick={() => setActiveTab('payroll')} style={{ ...tabStyle, backgroundColor: activeTab === 'payroll' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'payroll' ? 'white' : 'black' }}>💰 Employee Payroll</button>
         <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
       </div>
 
@@ -1009,6 +1010,8 @@ export default function App() {
             )}
           </div>
 
+      {activeTab === 'payroll' && (
+        <>
           <div style={{ ...cardStyle, overflowX: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
               <div>
@@ -1062,6 +1065,8 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
       {activeTab === 'tasks' && (
