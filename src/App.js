@@ -36,6 +36,10 @@ export default function App() {
   const [cashierCreditReceived, setCashierCreditReceived] = useState([]);
   const [cashierSaving, setCashierSaving] = useState(false);
   const [cashierMessage, setCashierMessage] = useState('');
+  const [cashierActiveTab, setCashierActiveTab] = useState('sales');
+  const [cashierOnlineExpenses, setCashierOnlineExpenses] = useState([]);
+  const [cashierCashExpenses, setCashierCashExpenses] = useState([]);
+  const [cashierAttendanceDate, setCashierAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
@@ -468,6 +472,53 @@ export default function App() {
   const addCashierCreditSale = () => addArrItem(setCashierCreditSales, cashierCreditSales, { id: Date.now(), name: '', amount: 0 });
   const addCashierCreditReceived = () => addArrItem(setCashierCreditReceived, cashierCreditReceived, { id: Date.now(), name: '', amount: 0, method: 'Cash' });
 
+  const loadCashierOwnEntries = async () => {
+    if (!session || role !== 'cashier') return;
+    const { data, error } = await supabase.from('cashier_daily_entries').select('*').order('entry_date', { ascending: false });
+    if (error) console.error('Cashier own entries fetch error:', error);
+    setCashierEntries(data || []);
+  };
+
+  const loadCashierDateEntry = async (targetDate) => {
+    if (!session || role !== 'cashier') return;
+    const { data, error } = await supabase.from('cashier_daily_entries').select('*').eq('entry_date', targetDate).maybeSingle();
+    if (error) {
+      console.error('Cashier date fetch error:', error);
+      return;
+    }
+    if (data) {
+      setCashierCashSale(data.cash_sale || 0);
+      setCashierOnlineSale(data.online_sale || 0);
+      setCashierParcelCash(data.parcel_counter_cash || 0);
+      setCashierParcelOnline(data.parcel_counter_online || 0);
+      setCashierCreditSales(data.credit_sales || []);
+      setCashierCreditReceived(data.credit_received || []);
+      setCashierOnlineExpenses(data.online_expenses || []);
+      setCashierCashExpenses(data.cash_expenses || []);
+      setCashierMessage('');
+    } else {
+      setCashierCashSale(0); setCashierOnlineSale(0); setCashierParcelCash(0); setCashierParcelOnline(0);
+      setCashierCreditSales([]); setCashierCreditReceived([]);
+      setCashierOnlineExpenses([]); setCashierCashExpenses([]);
+      setCashierMessage('');
+    }
+  };
+
+  useEffect(() => {
+    if (session && role === 'cashier') {
+      loadCashierOwnEntries();
+      loadCashierDateEntry(cashierDate);
+    }
+  }, [session, role]);
+
+  useEffect(() => {
+    if (session && role === 'cashier' && cashierActiveTab === 'khata') loadCashierOwnEntries();
+  }, [session, role, cashierActiveTab]);
+
+  useEffect(() => {
+    if (session && role === 'cashier' && cashierActiveTab === 'attendance') loadAttendance(cashierAttendanceDate);
+  }, [session, role, cashierActiveTab, cashierAttendanceDate]);
+
   const saveCashierEntry = async () => {
     if (!session || role !== 'cashier' || cashierSaving) return;
     setCashierSaving(true);
@@ -480,6 +531,8 @@ export default function App() {
       parcel_counter_online: Number(cashierParcelOnline || 0),
       credit_sales: cashierCreditSales,
       credit_received: cashierCreditReceived,
+      online_expenses: cashierOnlineExpenses,
+      cash_expenses: cashierCashExpenses,
       submitted_by: session.user.id,
       updated_at: new Date().toISOString()
     };
@@ -501,6 +554,8 @@ export default function App() {
     setCashierParcelOnline(0);
     setCashierCreditSales([]);
     setCashierCreditReceived([]);
+    setCashierOnlineExpenses([]);
+    setCashierCashExpenses([]);
     setCashierMessage('');
   };
 
@@ -734,72 +789,201 @@ export default function App() {
     const cashierTotalSales = Number(cashierCashSale || 0) + Number(cashierOnlineSale || 0) + Number(cashierParcelCash || 0) + Number(cashierParcelOnline || 0);
     const cashierCreditGiven = cashierCreditSales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const cashierCreditPaid = cashierCreditReceived.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierExpenseTotal = cashierOnlineExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0) + cashierCashExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierLedger = (() => {
+      const balances = {};
+      cashierEntries.forEach(log => {
+        [...(log.credit_sales || []).map(x => ({...x, kind:'given'})), ...(log.credit_received || []).map(x => ({...x, kind:'received'}))].forEach(item => {
+          const key = item.name?.trim().toUpperCase();
+          if (!key) return;
+          if (!balances[key]) balances[key] = { name: item.name.trim(), given: 0, received: 0 };
+          if (item.kind === 'given') balances[key].given += Number(item.amount || 0);
+          else balances[key].received += Number(item.amount || 0);
+        });
+      });
+      return Object.values(balances).map(x => ({...x, balance: x.given - x.received})).filter(x => x.balance !== 0).sort((a,b) => b.balance-a.balance);
+    })();
+
+    const cashierSaveAttendanceStatus = async (name, status) => {
+      const row = attendanceLogs.find(r => r.employee_name === name);
+      if (row) {
+        await updateAttendance(row.id, { status });
+      } else {
+        const { error } = await supabase.from('employee_attendance').insert({
+          employee_name: name, attendance_date: cashierAttendanceDate, status
+        });
+        if (error) alert('Attendance save failed: ' + error.message);
+        else await loadAttendance(cashierAttendanceDate);
+      }
+    };
+
     return (
-      <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '900px', margin: '0 auto', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div>
-            <div><h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1><div style={{ color: role === 'admin' ? '#7c3aed' : '#2563eb', fontSize: '13px', fontWeight: 'bold', marginTop: '3px' }}>{role === 'admin' ? '🛡️ Admin Dashboard' : '👔 Manager Dashboard'}</div></div>
-            <div style={{ color: '#2563eb', fontWeight: 'bold', marginTop: '4px' }}>🧾 Cashier Portal</div>
+            <h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1>
+            <div style={{ color: '#2563eb', fontSize: '13px', fontWeight: 'bold', marginTop: '4px' }}>🧾 Cashier Portal</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '13px', color: '#6b7280' }}>{session?.user?.email}</span><button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button></div>
-        </div>
-
-        <div style={{ ...cardStyle, borderTop: '4px solid #2563eb' }}>
-          <h2 style={{ marginTop: 0 }}>Daily Sales Entry</h2>
-          <p style={{ color: '#6b7280' }}>Enter sales and customer credit activity only. Expenses, payroll, balances, analytics, and attendance are not available to cashier accounts.</p>
-          <label>Date
-            <input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/>
-          </label>
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '15px' }}>
-            <label style={{ flex: 1, minWidth: '180px' }}>Cash Sales<input type="number" min="0" value={cashierCashSale} onChange={e => setCashierCashSale(e.target.value)} style={inputStyle}/></label>
-            <label style={{ flex: 1, minWidth: '180px' }}>Online Sales<input type="number" min="0" value={cashierOnlineSale} onChange={e => setCashierOnlineSale(e.target.value)} style={inputStyle}/></label>
-            <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Cash<input type="number" min="0" value={cashierParcelCash} onChange={e => setCashierParcelCash(e.target.value)} style={inputStyle}/></label>
-            <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Online<input type="number" min="0" value={cashierParcelOnline} onChange={e => setCashierParcelOnline(e.target.value)} style={inputStyle}/></label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '13px', color: '#6b7280' }}>{session?.user?.email}</span>
+            <button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button>
           </div>
         </div>
 
-        <div style={{ ...cardStyle, borderTop: '4px solid #e11d48' }}>
-          <h3 style={{ color: '#e11d48' }}>🔴 Credit Sales</h3>
-          {cashierCreditSales.map(c => (
-            <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-              <input placeholder="Customer / App" value={c.name} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
-              <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
-              <button onClick={() => removeArrItem(setCashierCreditSales, cashierCreditSales, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
-            </div>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {[
+            ['sales','🧾 Daily Sales','#2563eb'],
+            ['expenses','💸 Expenses','#dc2626'],
+            ['khata','📒 Customer Khata','#db2777'],
+            ['attendance','👥 Attendance','#0284c7']
+          ].map(([tab,label,color]) => (
+            <button key={tab} onClick={() => setCashierActiveTab(tab)} style={{ ...tabStyle, minWidth: '170px', backgroundColor: cashierActiveTab === tab ? color : '#e5e7eb', color: cashierActiveTab === tab ? 'white' : '#111827' }}>{label}</button>
           ))}
-          <button onClick={addCashierCreditSale} style={{ ...btnStyle, backgroundColor: '#e11d48' }}>+ Add Credit Sale</button>
         </div>
 
-        <div style={{ ...cardStyle, borderTop: '4px solid #10b981' }}>
-          <h3 style={{ color: '#059669' }}>🟢 Credit Payments Received</h3>
-          {cashierCreditReceived.map(c => (
-            <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-              <input placeholder="Customer" value={c.name} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
-              <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
-              <select value={c.method} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'method', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}>
-                <option>Cash</option><option>Online</option>
-              </select>
-              <button onClick={() => removeArrItem(setCashierCreditReceived, cashierCreditReceived, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+        {cashierActiveTab === 'sales' && (
+          <>
+            <div style={{ ...cardStyle, borderTop: '4px solid #2563eb' }}>
+              <h2 style={{ marginTop: 0 }}>Daily Sales Entry</h2>
+              <p style={{ color: '#6b7280' }}>Record today's cash, online, parcel and credit transactions.</p>
+              <label>Date<input type="date" value={cashierDate} onChange={async e => { setCashierDate(e.target.value); await loadCashierDateEntry(e.target.value); }} style={inputStyle}/></label>
+              <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '15px' }}>
+                <label style={{ flex: 1, minWidth: '180px' }}>Cash Sales<input type="number" min="0" value={cashierCashSale} onChange={e => setCashierCashSale(e.target.value)} style={inputStyle}/></label>
+                <label style={{ flex: 1, minWidth: '180px' }}>Online Sales<input type="number" min="0" value={cashierOnlineSale} onChange={e => setCashierOnlineSale(e.target.value)} style={inputStyle}/></label>
+                <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Cash<input type="number" min="0" value={cashierParcelCash} onChange={e => setCashierParcelCash(e.target.value)} style={inputStyle}/></label>
+                <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Online<input type="number" min="0" value={cashierParcelOnline} onChange={e => setCashierParcelOnline(e.target.value)} style={inputStyle}/></label>
+              </div>
             </div>
-          ))}
-          <button onClick={addCashierCreditReceived} style={{ ...btnStyle, backgroundColor: '#059669' }}>+ Add Payment Received</button>
-        </div>
 
-        <div style={{ ...cardStyle, backgroundColor: '#111827', color: 'white' }}>
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Sales Total</div><strong style={{ fontSize: '22px' }}>₹{cashierTotalSales.toLocaleString('en-IN')}</strong></div>
-            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Given</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditGiven.toLocaleString('en-IN')}</strong></div>
-            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Received</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditPaid.toLocaleString('en-IN')}</strong></div>
+            <div style={{ ...cardStyle, borderTop: '4px solid #e11d48' }}>
+              <h3 style={{ color: '#e11d48' }}>🔴 Credit Sales / Khata</h3>
+              {cashierCreditSales.map(c => (
+                <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <input placeholder="Customer / App" value={c.name} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
+                  <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+                  <button onClick={() => removeArrItem(setCashierCreditSales, cashierCreditSales, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                </div>
+              ))}
+              <button onClick={addCashierCreditSale} style={{ ...btnStyle, backgroundColor: '#e11d48' }}>+ Add Credit Sale</button>
+            </div>
+
+            <div style={{ ...cardStyle, borderTop: '4px solid #10b981' }}>
+              <h3 style={{ color: '#059669' }}>🟢 Credit Payments Received</h3>
+              {cashierCreditReceived.map(c => (
+                <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <input placeholder="Customer" value={c.name} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
+                  <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+                  <select value={c.method} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'method', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}><option>Cash</option><option>Online</option></select>
+                  <button onClick={() => removeArrItem(setCashierCreditReceived, cashierCreditReceived, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                </div>
+              ))}
+              <button onClick={addCashierCreditReceived} style={{ ...btnStyle, backgroundColor: '#059669' }}>+ Add Payment Received</button>
+            </div>
+
+            <div style={{ ...cardStyle, backgroundColor: '#111827', color: 'white' }}>
+              <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Sales Total</div><strong style={{ fontSize: '22px' }}>₹{cashierTotalSales.toLocaleString('en-IN')}</strong></div>
+                <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Given</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditGiven.toLocaleString('en-IN')}</strong></div>
+                <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Received</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditPaid.toLocaleString('en-IN')}</strong></div>
+              </div>
+              {cashierMessage && <p style={{ marginBottom: 0, marginTop: '15px', fontWeight: 'bold' }}>{cashierMessage}</p>}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button onClick={clearCashierForm} style={{ ...btnStyle, backgroundColor: '#6b7280', flex: 1 }}>Clear</button>
+                <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: cashierSaving ? '#9ca3af' : '#10b981', flex: 2, fontSize: '17px' }}>{cashierSaving ? '⏳ Submitting...' : '💾 Submit Daily Sales'}</button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {cashierActiveTab === 'expenses' && (
+          <div>
+            <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
+              <h2 style={{ marginTop: 0, color: '#b91c1c' }}>💸 Daily Expenses</h2>
+              <p style={{ color: '#6b7280' }}>Record online and cash expenses for the selected date. These are stored separately from the main admin accounting ledger.</p>
+              <label>Date<input type="date" value={cashierDate} onChange={async e => { setCashierDate(e.target.value); await loadCashierDateEntry(e.target.value); }} style={inputStyle}/></label>
+              <div style={{ marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ ...cardStyle, flex: 1, minWidth: '320px', border: '1px solid #bfdbfe' }}>
+                  <h3 style={{ color: '#2563eb' }}>💳 Online Expenses</h3>
+                  {cashierOnlineExpenses.map(exp => (
+                    <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                      <input list="common-expenses" placeholder="Category" value={exp.category || ''} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'category', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '120px' }}/>
+                      <input placeholder="Details" value={exp.description || ''} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'description', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+                      <input type="number" min="0" placeholder="Amount" value={exp.amount || 0} onChange={e => updateArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id, 'amount', e.target.value)} style={{ ...inputStyle, width: '120px' }}/>
+                      <button onClick={() => removeArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, exp.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={() => addArrItem(setCashierOnlineExpenses, cashierOnlineExpenses, { category:'', description:'', amount:0 })} style={btnStyle}>+ Add Online Expense</button>
+                </div>
+                <div style={{ ...cardStyle, flex: 1, minWidth: '320px', border: '1px solid #bbf7d0' }}>
+                  <h3 style={{ color: '#059669' }}>💵 Cash / Offline Expenses</h3>
+                  {cashierCashExpenses.map(exp => (
+                    <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                      <input list="common-expenses" placeholder="Category" value={exp.category || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'category', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '120px' }}/>
+                      <input placeholder="Details" value={exp.description || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'description', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+                      <input type="number" min="0" placeholder="Amount" value={exp.amount || 0} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'amount', e.target.value)} style={{ ...inputStyle, width: '120px' }}/>
+                      <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'type', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '150px' }}><option value="Cash">Cash (Deduct from Till)</option><option value="Counter">Counter (Net Sale)</option><option value="Credit">Credit (Owe Later)</option></select>
+                      <button onClick={() => removeArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={() => addArrItem(setCashierCashExpenses, cashierCashExpenses, { category:'', description:'', amount:0, type:'Cash' })} style={{ ...btnStyle, backgroundColor: '#059669' }}>+ Add Cash Expense</button>
+                </div>
+              </div>
+            </div>
+            <div style={{ ...cardStyle, backgroundColor: '#111827', color: 'white' }}>
+              <strong>Total Expenses: ₹{cashierExpenseTotal.toLocaleString('en-IN')}</strong>
+              <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: '#10b981', marginLeft: '15px' }}>{cashierSaving ? '⏳ Saving...' : '💾 Save Expenses'}</button>
+              {cashierMessage && <span style={{ marginLeft: '15px' }}>{cashierMessage}</span>}
+            </div>
           </div>
-          {cashierMessage && <p style={{ marginBottom: 0, marginTop: '15px', fontWeight: 'bold' }}>{cashierMessage}</p>}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <button onClick={clearCashierForm} style={{ ...btnStyle, backgroundColor: '#6b7280', flex: 1 }}>Clear</button>
-            <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: cashierSaving ? '#9ca3af' : '#10b981', flex: 2, fontSize: '17px' }}>{cashierSaving ? '⏳ Submitting...' : '💾 Submit Daily Sales'}</button>
+        )}
+
+        {cashierActiveTab === 'khata' && (
+          <div style={{ ...cardStyle, borderTop: '4px solid #db2777' }}>
+            <h2 style={{ color: '#be185d', marginTop: 0 }}>📒 Customer Khata</h2>
+            <p style={{ color: '#6b7280' }}>Outstanding credit based on cashier-entered sales and payments.</p>
+            {cashierLedger.length === 0 ? <p>No outstanding balances.</p> : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead><tr style={{ borderBottom:'2px solid #e5e7eb', background:'#fdf2f8' }}><th style={{padding:'10px',textAlign:'left'}}>Customer / App</th><th style={{padding:'10px',textAlign:'right'}}>Credit Given</th><th style={{padding:'10px',textAlign:'right'}}>Paid Back</th><th style={{padding:'10px',textAlign:'right'}}>Balance Due</th></tr></thead>
+                  <tbody>{cashierLedger.map(row => <tr key={row.name} style={{borderBottom:'1px solid #eee'}}><td style={{padding:'10px',fontWeight:'bold'}}>{row.name}</td><td style={{padding:'10px',textAlign:'right',color:'#e11d48'}}>₹{row.given.toLocaleString('en-IN')}</td><td style={{padding:'10px',textAlign:'right',color:'#059669'}}>₹{row.received.toLocaleString('en-IN')}</td><td style={{padding:'10px',textAlign:'right',fontWeight:'bold',color:row.balance>0?'#e11d48':'#059669'}}>₹{row.balance.toLocaleString('en-IN')}</td></tr>)}</tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+
+        {cashierActiveTab === 'attendance' && (
+          <div>
+            <div style={{ ...cardStyle, borderTop: '4px solid #0284c7' }}>
+              <h2 style={{ color:'#0369a1', marginTop:0 }}>👥 Employee Attendance</h2>
+              <p style={{ color:'#6b7280' }}>Mark attendance for the team. Check-in/out from the employee phone page remains available.</p>
+              <label>Date<input type="date" value={cashierAttendanceDate} onChange={e => setCashierAttendanceDate(e.target.value)} style={inputStyle}/></label>
+              <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'15px' }}>
+                {Object.entries(attendanceSummary).map(([status,count]) => <div key={status} style={{padding:'8px 12px',background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:'8px'}}><strong>{status}:</strong> {count}</div>)}
+              </div>
+            </div>
+            <div style={{ ...cardStyle, overflowX:'auto' }}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:'760px'}}>
+                <thead><tr style={{borderBottom:'2px solid #e5e7eb',background:'#f8fafc'}}><th style={{padding:'10px',textAlign:'left'}}>Employee</th><th style={{padding:'10px',textAlign:'left'}}>Status</th><th style={{padding:'10px',textAlign:'left'}}>Check In</th><th style={{padding:'10px',textAlign:'left'}}>Check Out</th><th style={{padding:'10px',textAlign:'left'}}>Hours</th><th style={{padding:'10px',textAlign:'left'}}>Note</th></tr></thead>
+                <tbody>{employeeNames.map(name => {
+                  const row=attendanceLogs.find(r=>r.employee_name===name);
+                  return <tr key={name} style={{borderBottom:'1px solid #eee'}}>
+                    <td style={{padding:'10px',fontWeight:'bold'}}>{name}</td>
+                    <td style={{padding:'10px'}}><select value={row?.status||''} onChange={e=>cashierSaveAttendanceStatus(name,e.target.value)} style={{...inputStyle,minWidth:'140px'}}><option value="">Not Marked</option><option>Present</option><option>Absent</option><option>Half Day</option><option>Leave</option><option>Weekly Off</option></select></td>
+                    <td style={{padding:'10px'}}>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                    <td style={{padding:'10px'}}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                    <td style={{padding:'10px'}}>{row ? attendanceHours(row) : '—'}</td>
+                    <td style={{padding:'10px'}}><button onClick={async()=>{const note=window.prompt('Attendance note (optional):',row?.notes||'');if(note===null)return;if(row) await updateAttendance(row.id,{notes:note});else {const {error}=await supabase.from('employee_attendance').insert({employee_name:name,attendance_date:cashierAttendanceDate,status:'Present',notes:note});if(error)alert('Attendance save failed: '+error.message);else await loadAttendance(cashierAttendanceDate);}}} style={{...btnStyle,backgroundColor:'#64748b',padding:'7px 10px'}}>📝 Note</button></td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
+
 
   // --- MAIN APP UI ---
   return (
