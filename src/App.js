@@ -1091,43 +1091,6 @@ export default function App() {
           </div>
         )}
 
-        {cashierActiveTab === 'expenses' && (
-          <div>
-            <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div>
-                  <h2 style={{ marginTop: 0, color: '#b91c1c', marginBottom: '4px' }}>💵 Daily Cash Expenses</h2>
-                  <p style={{ color: '#6b7280', margin: 0 }}>Enter only expenses paid from the physical cash drawer.</p>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'end', flexWrap: 'wrap' }}>
-                  <label style={{ minWidth: '190px' }}>Date<input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/></label>
-                  <button onClick={() => loadCashierDateEntry(cashierDate)} style={{ ...btnStyle, backgroundColor: '#2563eb' }}>📥 Fetch Data</button>
-                </div>
-              </div>
-
-              <div style={{ marginTop: '18px' }}>
-                {cashierCashExpenses.map(exp => (
-                  <div key={exp.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 150px auto', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
-                    <input list="common-expenses" placeholder="Category" value={exp.category || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
-                    <input placeholder="Description" value={exp.description || ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
-                    <input type="number" min="0" step="0.01" placeholder="Amount ₹" value={exp.amount ?? ''} onChange={e => updateArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
-                    <button onClick={() => removeArrItem(setCashierCashExpenses, cashierCashExpenses, exp.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
-                  </div>
-                ))}
-                <button onClick={() => addArrItem(setCashierCashExpenses, cashierCashExpenses, { category: '', description: '', amount: 0, type: 'Cash' })} style={{ ...btnStyle, backgroundColor: '#dc2626' }}>+ Add Cash Expense</button>
-              </div>
-            </div>
-
-            <div style={{ ...cardStyle, background: '#111827', color: 'white' }}>
-              <div style={{ fontSize: '20px', fontWeight: '800' }}>Total Cash Expenses: ₹{cashierFormat(cashierCashExpenseTotal)}</div>
-              <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: '#10b981', marginTop: '14px', width: '100%' }}>
-                {cashierSaving ? '⏳ Saving...' : '💾 Save Cash Expenses'}
-              </button>
-              {cashierMessage && <p style={{ marginBottom: 0 }}>{cashierMessage}</p>}
-            </div>
-          </div>
-        )}
-
         {cashierActiveTab === 'attendance' && (
           <div>
             <div style={{ ...cardStyle, borderTop: '4px solid #0284c7' }}>
