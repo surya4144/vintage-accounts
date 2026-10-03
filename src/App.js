@@ -1009,6 +1009,8 @@ export default function App() {
               </table>
             )}
           </div>
+        </div>
+      )}
 
       {activeTab === 'payroll' && (
         <>
