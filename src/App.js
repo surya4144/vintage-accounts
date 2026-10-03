@@ -459,15 +459,6 @@ export default function App() {
 
   const loadCashierOwnEntries = async () => {
     if (!session || role !== 'cashier') return;
-    const { data, error } = await supabase.from('cashier_daily_entries').select('*').order('entry_date', { ascending: false });
-    if (error) console.error('Cashier own entries fetch error:', error);
-    setCashierEntries(data || []);
-  };
-
-  const loadCashierDateEntry = async (targetDate) => {
-    if (!session || role !== 'cashier') return;
-    const { data, error } = await supabase.from('cashier_daily_entries').select('*').eq('entry_date', targetDate  const loadCashierOwnEntries = async () => {
-    if (!session || role !== 'cashier') return;
     const { data, error } = await supabase.rpc('get_cashier_daily_entries');
     if (error) console.error('Central accounting fetch error:', error);
     setCashierEntries(data || []);
@@ -540,7 +531,21 @@ export default function App() {
     setCashierSaving(false);
   };
 
-nline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
+  const clearCashierForm = () => {
+    setCashierCashSale(0);
+    setCashierOnlineSale(0);
+    setCashierParcelCash(0);
+    setCashierParcelOnline(0);
+    setCashierCreditSales([]);
+    setCashierCreditReceived([]);
+    setCashierOnlineExpenses([]);
+    setCashierCashExpenses([]);
+    setCashierMessage('');
+  };
+
+  const clearUnsavedForm = () => {
+    if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
+    setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
     setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
     localStorage.removeItem(`vintage_draft_${date}`);
   };
