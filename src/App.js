@@ -148,9 +148,30 @@ export default function App() {
     const payableDays = present + half * 0.5;
     const calendarDays = new Date(Number(payrollMonth.slice(0,4)), Number(payrollMonth.slice(5,7)), 0).getDate();
     const dailyRate = calendarDays ? monthlySalary / calendarDays : 0;
-    const estimatedPay = dailyRate * payableDays;
-    return { name, present, absent, half, leave, weeklyOff, hours, monthlySalary, payableDays, estimatedPay };
-  }), [payrollLogs, payrollMonth, salaryMap]);
+    const earnedPay = dailyRate * payableDays;
+
+    // Staff payments recorded in the daily accounts for this month are treated as
+    // money already taken/paid to the employee, including advances and wages.
+    const monthPayments = historyLogs
+      .filter(log => log.date?.slice(0, 7) === payrollMonth)
+      .flatMap(log => log.expense_details?.staff || [])
+      .filter(payment => payment.name === name);
+
+    const totalTaken = monthPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const cashAdvance = monthPayments
+      .filter(payment => payment.type === 'Cash Advance')
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const wagesPaid = monthPayments
+      .filter(payment => payment.type !== 'Cash Advance')
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const balanceToPay = Math.max(0, earnedPay - totalTaken);
+    const overpaid = Math.max(0, totalTaken - earnedPay);
+
+    return {
+      name, present, absent, half, leave, weeklyOff, hours, monthlySalary,
+      payableDays, earnedPay, totalTaken, cashAdvance, wagesPaid, balanceToPay, overpaid
+    };
+  }), [payrollLogs, payrollMonth, salaryMap, historyLogs]);
 
   const saveSalary = (name, value) => {
     const next = { ...salaryMap, [name]: value };
@@ -159,7 +180,23 @@ export default function App() {
   };
 
   const exportPayroll = () => {
-    const rows = payrollRows.map(r => ({ Employee:r.name, 'Monthly Salary (₹)':r.monthlySalary, Present:r.present, 'Half Day':r.half, Leave:r.leave, Absent:r.absent, 'Weekly Off':r.weeklyOff, 'Hours Worked':Number(r.hours.toFixed(2)), 'Payable Days':r.payableDays, 'Estimated Pay (₹)':Number(r.estimatedPay.toFixed(2)) }));
+    const rows = payrollRows.map(r => ({
+      Employee:r.name,
+      'Monthly Salary (₹)':r.monthlySalary,
+      Present:r.present,
+      'Half Day':r.half,
+      Leave:r.leave,
+      Absent:r.absent,
+      'Weekly Off':r.weeklyOff,
+      'Hours Worked':Number(r.hours.toFixed(2)),
+      'Payable Days':r.payableDays,
+      'Earned Salary (₹)':Number(r.earnedPay.toFixed(2)),
+      'Already Taken/Paid (₹)':Number(r.totalTaken.toFixed(2)),
+      'Cash Advances (₹)':Number(r.cashAdvance.toFixed(2)),
+      'Wages Paid (₹)':Number(r.wagesPaid.toFixed(2)),
+      'Balance To Pay (₹)':Number(r.balanceToPay.toFixed(2)),
+      'Overpaid (₹)':Number(r.overpaid.toFixed(2))
+    }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Payroll'); XLSX.writeFile(wb, `Attendance-Payroll-${payrollMonth}.xlsx`);
   };
 
@@ -994,7 +1031,7 @@ export default function App() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
-                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Estimated Pay'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
+                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Earned Salary','Taken/Paid','Balance To Pay'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -1009,7 +1046,14 @@ export default function App() {
                         <td style={{ padding: '9px', textAlign: 'right' }}>{r.weeklyOff}</td>
                         <td style={{ padding: '9px', textAlign: 'right' }}>{r.hours.toFixed(2)}</td>
                         <td style={{ padding: '9px', textAlign: 'right' }}>{r.payableDays}</td>
-                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold' }}>₹{r.estimatedPay.toFixed(2)}</td>
+                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold' }}>{formatINR(r.earnedPay)}</td>
+                        <td style={{ padding: '9px', textAlign: 'right', color: '#b45309', fontWeight: 'bold' }}>
+                          {formatINR(r.totalTaken)}
+                          {r.cashAdvance > 0 && <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#6b7280' }}>Advance: {formatINR(r.cashAdvance)}</div>}
+                        </td>
+                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold', color: r.overpaid > 0 ? '#dc2626' : '#059669' }}>
+                          {r.overpaid > 0 ? `Overpaid ${formatINR(r.overpaid)}` : formatINR(r.balanceToPay)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
