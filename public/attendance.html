@@ -1,20 +1,81 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vintage Accounts - Employee Attendance</title>
 <style>
-body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px;color:#111827}.card{max-width:520px;margin:20px auto;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08)}h1{text-align:center;margin-top:0}.muted{color:#6b7280}select,input,button{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;box-sizing:border-box;margin-top:8px}button{background:#2563eb;color:#fff;border:0;font-weight:700;cursor:pointer;margin-top:12px}.secondary{background:#059669}.status{padding:14px;border-radius:10px;background:#eff6ff;margin:15px 0;line-height:1.7}.success{color:#047857;font-weight:700}.error{color:#b91c1c;font-weight:700}
+body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px;color:#111827}.card{max-width:520px;margin:20px auto;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.08)}h1{text-align:center;margin-top:0}.muted{color:#6b7280}select,input,button{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;box-sizing:border-box;margin-top:8px}button{background:#2563eb;color:#fff;border:0;font-weight:700;cursor:pointer;margin-top:12px}.secondary{background:#059669}.status{padding:14px;border-radius:10px;background:#eff6ff;margin:15px 0;line-height:1.7}.success{color:#047857;font-weight:700}.error{color:#b91c1c;font-weight:700}.location{padding:12px;border-radius:10px;background:#f0fdf4;margin:12px 0;font-size:14px;line-height:1.5}
+button:disabled{opacity:.65;cursor:not-allowed}
 </style></head>
 <body><div class="card"><h1>👥 Employee Attendance</h1><p class="muted" style="text-align:center">Select your name, enter your employee code, then check in or check out.</p>
 <label>Employee</label><select id="employee"><option value="">Select your name</option><option>Bhavani</option><option>Suven Paul</option><option>Mani</option><option>Chaitanya</option><option>Raju</option><option>Vijaya Lakshmi</option><option>Sujatha</option><option>Azaz</option><option>Mustak</option><option>David</option></select>
 <label>Employee Code</label><input id="code" type="password" placeholder="Enter your code" autocomplete="off">
 <div id="status" class="status">Select your name to view today's attendance.</div>
-<button onclick="callAttendance('check_in')">🟢 Check In</button><button class="secondary" onclick="callAttendance('check_out')">🔴 Check Out</button><p id="message"></p>
+<div id="location" class="location">📍 Your location is checked when you Check In or Check Out. You must be at the authorized workplace.</div>
+<button id="checkInBtn" onclick="callAttendance('check_in')">🟢 Check In</button><button id="checkOutBtn" class="secondary" onclick="callAttendance('check_out')">🔴 Check Out</button><p id="message"></p>
 </div>
 <script>
 const endpoint='https://gsscocpxmsmtevjadxjd.supabase.co/functions/v1/employee-attendance';
 const $=id=>document.getElementById(id);
-async function callAttendance(action){const employee=$('employee').value,code=$('code').value.trim();if(!employee||!code)return msg('Please select your name and enter your code.',true);try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,employee,code})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');msg(action==='check_in'?'✅ Check-in recorded.':'✅ Check-out recorded.');show(d.record)}catch(e){msg(e.message,true)}}
-async function refresh(){const employee=$('employee').value,code=$('code').value.trim();if(!employee||!code){$('status').textContent='Select your name and enter your code.';return}try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',employee,code})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load');show(d.record)}catch(e){$('status').textContent=e.message}}
-function show(x){if(!x){$('status').innerHTML='<strong>Today:</strong> No attendance marked yet.';return}$('status').innerHTML='<strong>Today:</strong> '+x.status+'<br>Check-in: '+(x.check_in?new Date(x.check_in).toLocaleTimeString():'—')+'<br>Check-out: '+(x.check_out?new Date(x.check_out).toLocaleTimeString():'—')}
+
+async function callAttendance(action){
+  const employee=$('employee').value,code=$('code').value.trim();
+  if(!employee||!code)return msg('Please select your name and enter your code.',true);
+  if(!navigator.geolocation)return msg('Location services are not supported on this device.',true);
+
+  const btn=action==='check_in'?$('checkInBtn'):$('checkOutBtn');
+  btn.disabled=true;
+  msg('📍 Checking your location...');
+  $('location').textContent='📍 Requesting GPS location...';
+
+  navigator.geolocation.getCurrentPosition(async position=>{
+    const {latitude,longitude,accuracy}=position.coords;
+    $('location').textContent='📍 GPS location found. Verifying workplace location...';
+    try{
+      const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        action,employee,code,latitude,longitude,accuracy
+      })});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Request failed');
+      msg(action==='check_in'?'✅ Check-in recorded.':'✅ Check-out recorded.');
+      if(typeof d.distance_meters==='number'){
+        $('location').textContent='📍 Location verified • '+Math.round(d.distance_meters)+' meters from workplace';
+      }else{
+        $('location').textContent='📍 Location verified.';
+      }
+      show(d.record);
+    }catch(e){
+      msg(e.message,true);
+      $('location').textContent='📍 Location verification failed.';
+    }finally{
+      btn.disabled=false;
+      refresh();
+    }
+  },error=>{
+    const messages={
+      1:'Location permission was denied. Please allow location access and try again.',
+      2:'Your location could not be determined. Please turn on GPS/location services and try again.',
+      3:'Location request timed out. Please try again.'
+    };
+    msg(messages[error.code]||'Unable to get your location.',true);
+    $('location').textContent='📍 Location required for attendance.';
+    btn.disabled=false;
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+
+async function refresh(){
+  const employee=$('employee').value,code=$('code').value.trim();
+  if(!employee||!code){$('status').textContent='Select your name and enter your code.';return}
+  try{
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',employee,code})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Unable to load');
+    show(d.record);
+  }catch(e){$('status').textContent=e.message}
+}
+
+function show(x){
+  if(!x){$('status').innerHTML='<strong>Today:</strong> No attendance marked yet.';return}
+  $('status').innerHTML='<strong>Today:</strong> '+x.status+'<br>Check-in: '+(x.check_in?new Date(x.check_in).toLocaleTimeString():'—')+'<br>Check-out: '+(x.check_out?new Date(x.check_out).toLocaleTimeString():'—')
+}
 function msg(t,e=false){$('message').textContent=t;$('message').className=e?'error':'success'}
-$('employee').addEventListener('change',refresh);$('code').addEventListener('change',refresh);
+$('employee').addEventListener('change',refresh);
+$('code').addEventListener('change',refresh);
 </script></body></html>
