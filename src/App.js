@@ -24,6 +24,18 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState(null);
+  const [roleLoading, setRoleLoading] = useState(false);
+
+  const [cashierDate, setCashierDate] = useState(new Date().toISOString().split('T')[0]);
+  const [cashierCashSale, setCashierCashSale] = useState(0);
+  const [cashierOnlineSale, setCashierOnlineSale] = useState(0);
+  const [cashierParcelCash, setCashierParcelCash] = useState(0);
+  const [cashierParcelOnline, setCashierParcelOnline] = useState(0);
+  const [cashierCreditSales, setCashierCreditSales] = useState([]);
+  const [cashierCreditReceived, setCashierCreditReceived] = useState([]);
+  const [cashierSaving, setCashierSaving] = useState(false);
+  const [cashierMessage, setCashierMessage] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily');
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
@@ -66,6 +78,8 @@ export default function App() {
   const [payrollMonth, setPayrollMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrollLogs, setPayrollLogs] = useState([]);
   const [isLoadingPayroll, setIsLoadingPayroll] = useState(false);
+  const [cashierEntries, setCashierEntries] = useState([]);
+  const [isLoadingCashierEntries, setIsLoadingCashierEntries] = useState(false);
   const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
   
 
@@ -92,7 +106,49 @@ export default function App() {
     setIsLoadingHistory(false);
   };
 
-  useEffect(() => { if (session) loadHistory(); }, [session]);
+  useEffect(() => {
+    if (!session) {
+      setRole(null);
+      return;
+    }
+    let cancelled = false;
+    const loadRole = async () => {
+      setRoleLoading(true);
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if (!cancelled) {
+        if (error) {
+          console.error('Role fetch error:', error);
+          setRole(null);
+        } else {
+          setRole(data?.role || null);
+        }
+        setRoleLoading(false);
+      }
+    };
+    loadRole();
+    return () => { cancelled = true; };
+  }, [session]);
+
+  useEffect(() => { if (session && (role === 'admin' || role === 'manager')) loadHistory(); }, [session, role]);
+
+  const loadCashierEntries = async () => {
+    setIsLoadingCashierEntries(true);
+    const { data, error } = await supabase
+      .from('cashier_daily_entries')
+      .select('*')
+      .order('entry_date', { ascending: false });
+    if (error) console.error('Cashier entries fetch error:', error);
+    setCashierEntries(data || []);
+    setIsLoadingCashierEntries(false);
+  };
+
+  useEffect(() => {
+    if (session && (role === 'admin' || role === 'manager') && activeTab === 'cashierEntries') loadCashierEntries();
+  }, [session, role, activeTab]);
 
   const loadAttendance = async (targetDate = attendanceDate) => {
     setIsLoadingAttendance(true);
@@ -409,6 +465,45 @@ export default function App() {
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
   useEffect(() => { localStorage.setItem('vintage_tasks', JSON.stringify(tasks)); }, [tasks]);
 
+  const addCashierCreditSale = () => addArrItem(setCashierCreditSales, cashierCreditSales, { id: Date.now(), name: '', amount: 0 });
+  const addCashierCreditReceived = () => addArrItem(setCashierCreditReceived, cashierCreditReceived, { id: Date.now(), name: '', amount: 0, method: 'Cash' });
+
+  const saveCashierEntry = async () => {
+    if (!session || role !== 'cashier' || cashierSaving) return;
+    setCashierSaving(true);
+    setCashierMessage('');
+    const payload = {
+      entry_date: cashierDate,
+      cash_sale: Number(cashierCashSale || 0),
+      online_sale: Number(cashierOnlineSale || 0),
+      parcel_counter_cash: Number(cashierParcelCash || 0),
+      parcel_counter_online: Number(cashierParcelOnline || 0),
+      credit_sales: cashierCreditSales,
+      credit_received: cashierCreditReceived,
+      submitted_by: session.user.id,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase
+      .from('cashier_daily_entries')
+      .upsert(payload, { onConflict: 'entry_date' });
+    if (error) {
+      setCashierMessage('❌ Unable to save: ' + error.message);
+    } else {
+      setCashierMessage('✅ Daily sales submitted successfully.');
+    }
+    setCashierSaving(false);
+  };
+
+  const clearCashierForm = () => {
+    setCashierCashSale(0);
+    setCashierOnlineSale(0);
+    setCashierParcelCash(0);
+    setCashierParcelOnline(0);
+    setCashierCreditSales([]);
+    setCashierCreditReceived([]);
+    setCashierMessage('');
+  };
+
   const clearUnsavedForm = () => {
     if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
     setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
@@ -601,12 +696,106 @@ export default function App() {
         <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '400px', width: '100%' }}>
           <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '80px', marginBottom: '10px' }}/>
           <h2 style={{marginTop: 0, color: '#1f2937'}}>Vintage Restaurant</h2>
-          <p style={{color: '#6b7280', marginBottom: '20px'}}>Secure Admin Portal</p>
+          <p style={{color: '#6b7280', marginBottom: '20px'}}>Secure Admin / Manager Portal</p>
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <input type="email" placeholder="Admin Email" value={email} onChange={e => setEmail(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
+            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
             <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{...inputStyle, padding: '15px'}} required/>
             <button type="submit" style={{ ...btnStyle, width: '100%', fontSize: '18px', padding: '15px' }}>Secure Login</button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (roleLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb', padding: '20px' }}>
+        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '420px', width: '100%' }}>
+          <h2 style={{ marginTop: 0 }}>Checking access…</h2>
+          <p style={{ color: '#6b7280' }}>Verifying your Vintage Accounts role.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!role) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb', padding: '20px' }}>
+        <div style={{ ...cardStyle, textAlign: 'center', padding: '40px', maxWidth: '460px', width: '100%' }}>
+          <h2 style={{ color: '#dc2626', marginTop: 0 }}>Access Not Assigned</h2>
+          <p style={{ color: '#6b7280' }}>Your account is authenticated, but no Vintage Accounts role has been assigned.</p>
+          <button onClick={handleLogout} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>🚪 Log Out</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (role === 'cashier') {
+    const cashierTotalSales = Number(cashierCashSale || 0) + Number(cashierOnlineSale || 0) + Number(cashierParcelCash || 0) + Number(cashierParcelOnline || 0);
+    const cashierCreditGiven = cashierCreditSales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const cashierCreditPaid = cashierCreditReceived.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    return (
+      <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '900px', margin: '0 auto', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div>
+            <div><h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1><div style={{ color: role === 'admin' ? '#7c3aed' : '#2563eb', fontSize: '13px', fontWeight: 'bold', marginTop: '3px' }}>{role === 'admin' ? '🛡️ Admin Dashboard' : '👔 Manager Dashboard'}</div></div>
+            <div style={{ color: '#2563eb', fontWeight: 'bold', marginTop: '4px' }}>🧾 Cashier Portal</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '13px', color: '#6b7280' }}>{session?.user?.email}</span><button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button></div>
+        </div>
+
+        <div style={{ ...cardStyle, borderTop: '4px solid #2563eb' }}>
+          <h2 style={{ marginTop: 0 }}>Daily Sales Entry</h2>
+          <p style={{ color: '#6b7280' }}>Enter sales and customer credit activity only. Expenses, payroll, balances, analytics, and attendance are not available to cashier accounts.</p>
+          <label>Date
+            <input type="date" value={cashierDate} onChange={e => setCashierDate(e.target.value)} style={inputStyle}/>
+          </label>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '15px' }}>
+            <label style={{ flex: 1, minWidth: '180px' }}>Cash Sales<input type="number" min="0" value={cashierCashSale} onChange={e => setCashierCashSale(e.target.value)} style={inputStyle}/></label>
+            <label style={{ flex: 1, minWidth: '180px' }}>Online Sales<input type="number" min="0" value={cashierOnlineSale} onChange={e => setCashierOnlineSale(e.target.value)} style={inputStyle}/></label>
+            <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Cash<input type="number" min="0" value={cashierParcelCash} onChange={e => setCashierParcelCash(e.target.value)} style={inputStyle}/></label>
+            <label style={{ flex: 1, minWidth: '180px' }}>Parcel Counter Online<input type="number" min="0" value={cashierParcelOnline} onChange={e => setCashierParcelOnline(e.target.value)} style={inputStyle}/></label>
+          </div>
+        </div>
+
+        <div style={{ ...cardStyle, borderTop: '4px solid #e11d48' }}>
+          <h3 style={{ color: '#e11d48' }}>🔴 Credit Sales</h3>
+          {cashierCreditSales.map(c => (
+            <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <input placeholder="Customer / App" value={c.name} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
+              <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditSales, cashierCreditSales, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+              <button onClick={() => removeArrItem(setCashierCreditSales, cashierCreditSales, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+            </div>
+          ))}
+          <button onClick={addCashierCreditSale} style={{ ...btnStyle, backgroundColor: '#e11d48' }}>+ Add Credit Sale</button>
+        </div>
+
+        <div style={{ ...cardStyle, borderTop: '4px solid #10b981' }}>
+          <h3 style={{ color: '#059669' }}>🟢 Credit Payments Received</h3>
+          {cashierCreditReceived.map(c => (
+            <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <input placeholder="Customer" value={c.name} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'name', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '180px' }}/>
+              <input type="number" min="0" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'amount', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}/>
+              <select value={c.method} onChange={e => updateArrItem(setCashierCreditReceived, cashierCreditReceived, c.id, 'method', e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '140px' }}>
+                <option>Cash</option><option>Online</option>
+              </select>
+              <button onClick={() => removeArrItem(setCashierCreditReceived, cashierCreditReceived, c.id)} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>✕</button>
+            </div>
+          ))}
+          <button onClick={addCashierCreditReceived} style={{ ...btnStyle, backgroundColor: '#059669' }}>+ Add Payment Received</button>
+        </div>
+
+        <div style={{ ...cardStyle, backgroundColor: '#111827', color: 'white' }}>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Sales Total</div><strong style={{ fontSize: '22px' }}>₹{cashierTotalSales.toLocaleString('en-IN')}</strong></div>
+            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Given</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditGiven.toLocaleString('en-IN')}</strong></div>
+            <div style={{ flex: 1, minWidth: '180px' }}><div style={{ color: '#9ca3af' }}>Credit Received</div><strong style={{ fontSize: '22px' }}>₹{cashierCreditPaid.toLocaleString('en-IN')}</strong></div>
+          </div>
+          {cashierMessage && <p style={{ marginBottom: 0, marginTop: '15px', fontWeight: 'bold' }}>{cashierMessage}</p>}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            <button onClick={clearCashierForm} style={{ ...btnStyle, backgroundColor: '#6b7280', flex: 1 }}>Clear</button>
+            <button onClick={saveCashierEntry} disabled={cashierSaving} style={{ ...btnStyle, backgroundColor: cashierSaving ? '#9ca3af' : '#10b981', flex: 2, fontSize: '17px' }}>{cashierSaving ? '⏳ Submitting...' : '💾 Submit Daily Sales'}</button>
+          </div>
         </div>
       </div>
     );
@@ -629,7 +818,7 @@ export default function App() {
         <button onClick={() => setActiveTab('ledger')} style={{ ...tabStyle, backgroundColor: activeTab === 'ledger' ? '#ec4899' : '#e5e7eb', color: activeTab === 'ledger' ? 'white' : 'black' }}>📒 Customer Khata</button>
         <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
         <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
-        <button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
+        <button onClick={() => setActiveTab('cashierEntries')} style={{ ...tabStyle, backgroundColor: activeTab === 'cashierEntries' ? '#2563eb' : '#e5e7eb', color: activeTab === 'cashierEntries' ? 'white' : 'black' }}>🧾 Cashier Entries</button><button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
         <button onClick={() => setActiveTab('payroll')} style={{ ...tabStyle, backgroundColor: activeTab === 'payroll' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'payroll' ? 'white' : 'black' }}>💰 Employee Payroll</button>
         <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
       </div>
