@@ -8,7 +8,7 @@ button:disabled{opacity:.65;cursor:not-allowed}
 <label>Employee</label><select id="employee"><option value="">Select your name</option><option>Bhavani</option><option>Suven Paul</option><option>Mani</option><option>Chaitanya</option><option>Raju</option><option>Vijaya Lakshmi</option><option>Sujatha</option><option>Azaz</option><option>Mustak</option><option>David</option></select>
 <label>Employee Code</label><input id="code" type="password" placeholder="Enter your code" autocomplete="off">
 <div id="status" class="status">Select your name to view today's attendance.</div>
-<div id="location" class="location">📍 Your location is checked when you Check In or Check Out. You must be at the authorized workplace.</div>
+<div id="location" class="location">🛡️ Attendance security is loading...</div>
 <button id="checkInBtn" onclick="callAttendance('check_in')">🟢 Check In</button><button id="checkOutBtn" class="secondary" onclick="callAttendance('check_out')">🔴 Check Out</button><p id="message"></p>
 </div>
 <script>
@@ -18,46 +18,50 @@ const $=id=>document.getElementById(id);
 async function callAttendance(action){
   const employee=$('employee').value,code=$('code').value.trim();
   if(!employee||!code)return msg('Please select your name and enter your code.',true);
-  if(!navigator.geolocation)return msg('Location services are not supported on this device.',true);
-
   const btn=action==='check_in'?$('checkInBtn'):$('checkOutBtn');
-  btn.disabled=true;
-  msg('📍 Checking your location...');
-  $('location').textContent='📍 Requesting GPS location...';
-
-  navigator.geolocation.getCurrentPosition(async position=>{
-    const {latitude,longitude,accuracy}=position.coords;
-    $('location').textContent='📍 GPS location found. Verifying workplace location...';
-    try{
-      const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        action,employee,code,latitude,longitude,accuracy
-      })});
-      const d=await r.json();
-      if(!r.ok)throw new Error(d.error||'Request failed');
-      msg(action==='check_in'?'✅ Check-in recorded.':'✅ Check-out recorded.');
-      if(typeof d.distance_meters==='number'){
-        $('location').textContent='📍 Location verified • '+Math.round(d.distance_meters)+' meters from workplace';
-      }else{
-        $('location').textContent='📍 Location verified.';
-      }
-      show(d.record);
-    }catch(e){
-      msg(e.message,true);
-      $('location').textContent='📍 Location verification failed.';
-    }finally{
-      btn.disabled=false;
-      refresh();
+  btn.disabled=true; msg('⏳ Processing attendance...');
+  try{
+    const statusResp=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',employee,code})});
+    const statusData=await statusResp.json();
+    if(!statusResp.ok)throw new Error(statusData.error||'Unable to verify employee');
+    const locationRequired=Boolean(statusData.location_required);
+    if(locationRequired){
+      if(!navigator.geolocation)throw new Error('Location services are not supported on this device.');
+      $('location').textContent='📍 Location verification is ON. Checking GPS...';
+      await new Promise((resolve,reject)=>{
+        navigator.geolocation.getCurrentPosition(async position=>{
+          try{
+            await submitAttendance(action,employee,code,{latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy});
+            resolve();
+          }catch(e){reject(e)}
+        },error=>{
+          const messages={1:'Location permission was denied. Please allow location access and try again.',2:'Your location could not be determined. Please turn on GPS/location services and try again.',3:'Location request timed out. Please try again.'};
+          reject(new Error(messages[error.code]||'Unable to get your location.'));
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+      });
+    }else{
+      $('location').textContent='🟢 Location verification is OFF. You can check in/out without GPS.';
+      await submitAttendance(action,employee,code,{});
     }
-  },error=>{
-    const messages={
-      1:'Location permission was denied. Please allow location access and try again.',
-      2:'Your location could not be determined. Please turn on GPS/location services and try again.',
-      3:'Location request timed out. Please try again.'
-    };
-    msg(messages[error.code]||'Unable to get your location.',true);
-    $('location').textContent='📍 Location required for attendance.';
-    btn.disabled=false;
-  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  }catch(e){
+    msg(e.message,true);
+    $('location').textContent='🛡️ '+e.message;
+  }finally{
+    btn.disabled=false; refresh();
+  }
+}
+
+async function submitAttendance(action,employee,code,locationData){
+  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,employee,code,...locationData})});
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.error||'Request failed');
+  msg(action==='check_in'?'✅ Check-in recorded.':'✅ Check-out recorded.');
+  if(d.location_required){
+    $('location').textContent='📍 Location verified.';
+  }else{
+    $('location').textContent='🟢 Attendance recorded without GPS.';
+  }
+  show(d.record);
 }
 
 async function refresh(){
