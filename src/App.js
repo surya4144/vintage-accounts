@@ -881,8 +881,8 @@ export default function App() {
     const cashierFormat = value => Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
     return (
-      <div style={{ fontFamily: 'sans-serif', padding: '16px', maxWidth: '1100px', margin: '0 auto', backgroundColor: '#f3f4f6', minHeight: '100vh' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', backgroundColor: 'white', padding: '16px 18px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', flexWrap: 'wrap' }}>
+      <div style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: '24px 16px', maxWidth: '1180px', margin: '0 auto', background: 'linear-gradient(180deg,#f8fafc 0%,#eef2ff 100%)', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', background: 'rgba(255,255,255,.96)', padding: '18px 20px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ color: '#111827', margin: 0 }}>Vintage Restaurant</h1>
             <div style={{ color: '#2563eb', fontSize: '14px', fontWeight: '800', marginTop: '4px' }}>🧾 CASHIER PORTAL</div>
@@ -1182,10 +1182,7 @@ export default function App() {
                         <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
                         <td style={{ padding: '10px' }}>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            <button onClick={() => manualAttendanceAction(name, 'check_in')} disabled={Boolean(row?.check_in)} style={{ ...btnStyle, backgroundColor: row?.check_in ? '#cbd5e1' : '#16a34a', padding: '7px 9px' }}>🟢 In</button>
-                            <button onClick={() => manualAttendanceAction(name, 'check_out')} disabled={!row?.check_in || Boolean(row?.check_out)} style={{ ...btnStyle, backgroundColor: !row?.check_in || row?.check_out ? '#cbd5e1' : '#dc2626', padding: '7px 9px' }}>🔴 Out</button>
-                          </div>
+                          
                         </td>
                         <td style={{ padding: '10px' }}>
                           <button onClick={async () => {
@@ -1603,7 +1600,7 @@ export default function App() {
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Manual Clock</th><th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
