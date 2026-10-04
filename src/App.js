@@ -80,6 +80,7 @@ export default function App() {
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [attendanceLocationRequired, setAttendanceLocationRequired] = useState(false);
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
   const [payrollMonth, setPayrollMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrollLogs, setPayrollLogs] = useState([]);
@@ -141,6 +142,18 @@ export default function App() {
 
   useEffect(() => { if (session && (role === 'admin' || role === 'manager')) loadHistory(); }, [session, role]);
 
+  const loadAttendanceSettings = async () => {
+    if (!session || !['admin','manager'].includes(role)) return;
+    const { data, error } = await supabase.from('attendance_settings').select('location_required').eq('id', 1).maybeSingle();
+    if (!error) setAttendanceLocationRequired(Boolean(data?.location_required));
+  };
+
+  const setAttendanceLocation = async (required) => {
+    const { error } = await supabase.from('attendance_settings').update({ location_required: required, updated_at: new Date().toISOString() }).eq('id', 1);
+    if (error) return alert('Unable to update attendance location setting: ' + error.message);
+    setAttendanceLocationRequired(required);
+  };
+
   const loadAttendance = async (targetDate = attendanceDate) => {
     setIsLoadingAttendance(true);
     const { data, error } = await supabase.from('employee_attendance').select('*').eq('attendance_date', targetDate).order('employee_name');
@@ -150,13 +163,34 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (session && activeTab === 'attendance') loadAttendance(attendanceDate);
-  }, [session, activeTab, attendanceDate]);
+    if (session && activeTab === 'attendance') {
+      loadAttendance(attendanceDate);
+      loadAttendanceSettings();
+    }
+  }, [session, role, activeTab, attendanceDate]);
 
   const updateAttendance = async (id, changes) => {
     const { error } = await supabase.from('employee_attendance').update(changes).eq('id', id);
     if (error) return alert('Attendance update failed: ' + error.message);
     await loadAttendance(attendanceDate);
+  };
+
+  const manualAttendanceAction = async (name, action) => {
+    const now = new Date().toISOString();
+    const row = attendanceLogs.find(r => r.employee_name === name);
+    if (action === 'check_in') {
+      if (row?.check_in) return alert(`${name} is already checked in.`);
+      if (row) await updateAttendance(row.id, { status: 'Present', check_in: now });
+      else {
+        const { error } = await supabase.from('employee_attendance').insert({ employee_name: name, attendance_date: attendanceDate, status: 'Present', check_in: now });
+        if (error) return alert('Manual check-in failed: ' + error.message);
+        await loadAttendance(attendanceDate);
+      }
+    } else {
+      if (!row?.check_in) return alert(`${name} must be checked in first.`);
+      if (row?.check_out) return alert(`${name} is already checked out.`);
+      await updateAttendance(row.id, { check_out: now });
+    }
   };
 
   const attendanceHours = (row) => {
@@ -1148,6 +1182,12 @@ export default function App() {
                         <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
                         <td style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button onClick={() => manualAttendanceAction(name, 'check_in')} disabled={Boolean(row?.check_in)} style={{ ...btnStyle, backgroundColor: row?.check_in ? '#cbd5e1' : '#16a34a', padding: '7px 9px' }}>🟢 In</button>
+                            <button onClick={() => manualAttendanceAction(name, 'check_out')} disabled={!row?.check_in || Boolean(row?.check_out)} style={{ ...btnStyle, backgroundColor: !row?.check_in || row?.check_out ? '#cbd5e1' : '#dc2626', padding: '7px 9px' }}>🔴 Out</button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px' }}>
                           <button onClick={async () => {
                             const note = window.prompt('Attendance note (optional):', row?.notes || '');
                             if (note === null) return;
@@ -1178,7 +1218,7 @@ export default function App() {
 
   // --- MAIN APP UI ---
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '1000px', margin: '0 auto', backgroundColor: '#f9fafb' }}>
+    <div style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: '24px 16px', maxWidth: '1180px', margin: '0 auto', background: 'linear-gradient(180deg,#f8fafc 0%,#eef2ff 100%)', minHeight: '100vh' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -1287,14 +1327,14 @@ export default function App() {
             </div>
 
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
-              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
+              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3><p style={{color:'#6b7280',fontSize:'13px',marginTop:'-8px'}}>Choose <strong>Cash in Hand</strong> when this expense was paid from the physical till.</p>
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option value="Cash">Cash (Deduct from Till)</option>
+                  <select value={exp.type === 'Cash' ? 'Cash in Hand' : (exp.type || 'Cash in Hand')} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value === 'Cash in Hand' ? 'Cash' : e.target.value)} style={{...inputStyle, flex: 1}}>
+                    <option value="Cash in Hand">💵 Cash in Hand</option>
                     <option value="Counter">Counter (Net Sale)</option>
                     <option value="Credit">Credit (Owe Later)</option>
                     <option value="Teja">Teja Paid</option>
@@ -1537,6 +1577,12 @@ export default function App() {
                 {isLoadingAttendance ? '⏳ Loading...' : '🔄 Refresh Attendance'}
               </button>
             </div>
+            <div style={{ marginTop: '18px', padding: '16px', borderRadius: '14px', background: attendanceLocationRequired ? 'linear-gradient(135deg,#fff7ed,#ffedd5)' : 'linear-gradient(135deg,#ecfdf5,#d1fae5)', border: `1px solid ${attendanceLocationRequired ? '#fed7aa' : '#a7f3d0'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div><strong>{attendanceLocationRequired ? '📍 Location verification ON' : '🟢 Location verification OFF'}</strong><div style={{ color: '#6b7280', fontSize: '13px', marginTop: '4px' }}>{attendanceLocationRequired ? 'Employees must be within the workplace geofence.' : 'Employees can check in/out without GPS.'}</div></div>
+                <button onClick={() => setAttendanceLocation(!attendanceLocationRequired)} style={{ ...btnStyle, backgroundColor: attendanceLocationRequired ? '#dc2626' : '#059669' }}>{attendanceLocationRequired ? 'Turn Location Off' : 'Turn Location On'}</button>
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
               {Object.entries(attendanceSummary).map(([status, count]) => (
                 <div key={status} style={{ padding: '10px 14px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
@@ -1557,7 +1603,7 @@ export default function App() {
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Manual Clock</th><th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1699,8 +1745,8 @@ export default function App() {
   );
 }
 
-const cardStyle = { backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' };
+const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
-const inputStyle = { padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px', width: '100%', boxSizing: 'border-box' };
-const btnStyle = { padding: '10px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
-const tabStyle = { flex: 1, padding: '15px', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' };
+const inputStyle = { padding: '11px 13px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '15px', width: '100%', boxSizing: 'border-box', background: '#fff', outline: 'none' };
+const btnStyle = { padding: '11px 16px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', boxShadow: '0 6px 14px rgba(37,99,235,.18)' };
+const tabStyle = { flex: 1, padding: '13px 14px', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '800', cursor: 'pointer', transition: '0.2s', minHeight: '48px' };
