@@ -1158,6 +1158,7 @@ export default function App() {
                     <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Manual Clock</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Manual Clock</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Note</th>
@@ -1642,6 +1643,22 @@ export default function App() {
                         </td>
                         <td style={{ padding: '10px' }}>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
                         <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
+                        <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => manualAttendanceAction(name, 'check_in')}
+                            disabled={Boolean(row?.check_in)}
+                            style={{ ...btnStyle, backgroundColor: row?.check_in ? '#cbd5e1' : '#16a34a', padding: '7px 9px', marginRight: '6px' }}
+                          >
+                            🟢 Check In
+                          </button>
+                          <button
+                            onClick={() => manualAttendanceAction(name, 'check_out')}
+                            disabled={!row?.check_in || Boolean(row?.check_out)}
+                            style={{ ...btnStyle, backgroundColor: !row?.check_in || row?.check_out ? '#cbd5e1' : '#dc2626', padding: '7px 9px' }}
+                          >
+                            🔴 Check Out
+                          </button>
+                        </td>
                         <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
                         <td style={{ padding: '10px' }}>
                           <button onClick={async () => {
