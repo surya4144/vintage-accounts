@@ -429,7 +429,7 @@ export default function App() {
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -1159,6 +1159,7 @@ export default function App() {
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Manual Clock</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Note</th>
                   </tr>
                 </thead>
@@ -1181,6 +1182,12 @@ export default function App() {
                         <td style={{ padding: '10px' }}>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
+                        <td style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button onClick={() => manualAttendanceAction(name, 'check_in')} disabled={Boolean(row?.check_in)} style={{ ...btnStyle, backgroundColor: row?.check_in ? '#cbd5e1' : '#16a34a', padding: '7px 9px' }}>🟢 Check In</button>
+                            <button onClick={() => manualAttendanceAction(name, 'check_out')} disabled={!row?.check_in || Boolean(row?.check_out)} style={{ ...btnStyle, backgroundColor: !row?.check_in || row?.check_out ? '#cbd5e1' : '#dc2626', padding: '7px 9px' }}>🔴 Check Out</button>
+                          </div>
+                        </td>
                         <td style={{ padding: '10px' }}>
                           
                         </td>
@@ -1330,8 +1337,9 @@ export default function App() {
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type === 'Cash' ? 'Cash in Hand' : (exp.type || 'Cash in Hand')} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value === 'Cash in Hand' ? 'Cash' : e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option value="Cash in Hand">💵 Cash in Hand</option>
+                  <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
+                    <option value="Cash">💰 Cash (Deduct from Till)</option>
+                    <option value="Cash in Hand">💵 Cash in Hand (from Sale Cash)</option>
                     <option value="Counter">Counter (Net Sale)</option>
                     <option value="Credit">Credit (Owe Later)</option>
                     <option value="Teja">Teja Paid</option>
