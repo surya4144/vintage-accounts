@@ -1455,6 +1455,40 @@ export default function App() {
     };
   }, [historyLogs, purchases, supplierPayments, analyticsStart, analyticsEnd]);
   
+  const smartInsights = useMemo(() => {
+    const insights = [];
+    const sales = Number(analyticsData.totalSales || 0);
+    const expenses = Number(analyticsData.totalExpenses || 0);
+    const staff = Number(analyticsData.staffCost || 0);
+    const purchasesCost = Number(analyticsData.purchaseCosts || 0);
+    const profit = sales - expenses - purchasesCost;
+    const expenseRatio = sales ? (expenses / sales) * 100 : 0;
+    const purchaseRatio = sales ? (purchasesCost / sales) * 100 : 0;
+    const receivables = Number(khataSummary.outstanding || 0);
+    const payables = Number(supplierPayableSummary.totalOutstanding || 0);
+    const cashConversion = sales ? ((Number(cashFlowData.salesCash || 0) + Number(cashFlowData.salesOnline || 0) + Number(cashFlowData.creditReceived || 0)) / sales) * 100 : 0;
+    const trend = (financialDashboardData?.trend || []).filter(x => Number(x.sales || 0) > 0);
+    const firstSales = trend.length ? Number(trend[0].sales || 0) : 0;
+    const lastSales = trend.length ? Number(trend[trend.length - 1].sales || 0) : 0;
+    const salesTrend = firstSales ? ((lastSales - firstSales) / firstSales) * 100 : 0;
+
+    if (!sales) insights.push({type:'info', icon:'📊', title:'No sales recorded', text:'There is no sales activity in the selected period. Record daily sales to unlock meaningful performance insights.', action:'daily'});
+    if (sales && profit < 0) insights.push({type:'danger', icon:'🔴', title:'Profit is negative', text:`The selected period is showing a loss of ${formatINR(Math.abs(profit))}. Review operating expenses and purchase costs before adding new commitments.`, action:'analytics'});
+    else if (sales && profit > 0) insights.push({type:'success', icon:'🟢', title:'Business is profitable', text:`Estimated profit after purchases is ${formatINR(profit)}, a ${((profit / sales) * 100).toFixed(1)}% margin on sales.`, action:'analytics'});
+
+    if (sales && expenseRatio > 35) insights.push({type:'warning', icon:'⚠️', title:'Operating expenses are elevated', text:`Operating expenses are ${expenseRatio.toFixed(1)}% of sales. Review recurring and discretionary expenses for savings opportunities.`, action:'analytics'});
+    if (sales && purchaseRatio > 25) insights.push({type:'warning', icon:'🛒', title:'Purchase costs are high', text:`Purchases represent ${purchaseRatio.toFixed(1)}% of sales. Check supplier pricing, wastage and stock usage.`, action:'inventory'});
+    if (receivables > 0 && sales && receivables / sales > 0.5) insights.push({type:'warning', icon:'📒', title:'Receivables need attention', text:`Customer credit outstanding is ${formatINR(receivables)}, above half of the selected-period sales. Prioritize collections.`, action:'ledger'});
+    if (payables > 0 && purchasesCost > 0 && payables / purchasesCost > 0.35) insights.push({type:'warning', icon:'📦', title:'Supplier exposure is building', text:`Supplier payables are ${formatINR(payables)}, more than 35% of selected-period purchases. Plan settlements around cash availability.`, action:'inventory'});
+    if (sales && cashConversion < 70) insights.push({type:'warning', icon:'💵', title:'Cash conversion is weak', text:`Only ${cashConversion.toFixed(1)}% of recorded sales have converted to collected cash/online receipts in the selected period.`, action:'cashflow'});
+    if (Math.abs(salesTrend) >= 10) insights.push({type:salesTrend > 0 ? 'success' : 'warning', icon:salesTrend > 0 ? '📈' : '📉', title:salesTrend > 0 ? 'Sales momentum is improving' : 'Sales momentum is declining', text:`The recent sales trend has moved ${Math.abs(salesTrend).toFixed(1)}% ${salesTrend > 0 ? 'up' : 'down'} from the start to the latest available day in the dashboard trend.`, action:'analytics'});
+    if (supplierPayableSummary.due30 > 0) insights.push({type:'danger', icon:'⏰', title:'Aged supplier balances', text:`${supplierPayableSummary.due30} supplier balance${supplierPayableSummary.due30 === 1 ? '' : 's'} are 30+ days old. Review the supplier statement and settle priority accounts.`, action:'inventory'});
+    if (staff > 0 && sales && staff / sales > 0.2) insights.push({type:'info', icon:'👥', title:'Staff cost is material', text:`Staff cost is ${((staff / sales) * 100).toFixed(1)}% of sales for the selected period. Track staffing against sales volume.`, action:'payroll'});
+
+    const priority = {danger:0, warning:1, info:2, success:3};
+    return insights.sort((a,b) => priority[a.type] - priority[b.type]).slice(0, 6);
+  }, [analyticsData, khataSummary, supplierPayableSummary, cashFlowData, financialDashboardData]);
+
   const financialDashboardData = useMemo(() => {
     const sales = Number(analyticsData.totalSales || 0);
     const operatingExpenses = Number(analyticsData.totalExpenses || 0);
@@ -2203,7 +2237,24 @@ export default function App() {
             </section>
           </div>
 
-          <div className="va-financial-grid">
+                    <div className="va-smart-insights">
+            <div className="va-smart-insights-head">
+              <div><span className="va-eyebrow">SMART BUSINESS INTELLIGENCE</span><h3>What needs your attention?</h3><p>Automatic recommendations based on the selected financial period.</p></div>
+              <span className="va-smart-insights-badge">LIVE</span>
+            </div>
+            {smartInsights.length === 0 ? <div className="va-smart-empty">No immediate issues detected. Your current indicators are within the dashboard thresholds.</div> : (
+              <div className="va-smart-grid">
+                {smartInsights.map((item,i) => (
+                  <div key={i} className={`va-smart-card ${item.type}`}>
+                    <div className="va-smart-icon">{item.icon}</div>
+                    <div className="va-smart-body"><strong>{item.title}</strong><p>{item.text}</p><button onClick={() => setActiveTab(item.action)}>Review →</button></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+<div className="va-financial-grid">
             <section className="va-dashboard-card va-financial-card">
               <div className="va-dashboard-card-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button></div>
               <div className="va-cashflow-summary">
@@ -3305,6 +3356,19 @@ const dashboardCommandStyles = `
 @media(max-width:430px){.va-financial-kpis{grid-template-columns:1fr}.va-financial-hero-actions{display:grid;grid-template-columns:1fr}.va-financial-actions{grid-template-columns:1fr}}
 `;
 
+
+const smartInsightsStyles = `
+.va-smart-insights{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;margin:18px 0;box-shadow:0 8px 25px rgba(15,23,42,.055)}
+.va-smart-insights-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
+.va-smart-insights-head h3{margin:5px 0 3px;font-size:19px;color:#0f172a}.va-smart-insights-head p{margin:0;color:#64748b;font-size:11px}
+.va-smart-insights-badge{padding:6px 9px;border-radius:999px;background:#ecfdf5;color:#047857;font-size:9px;font-weight:900;letter-spacing:.06em}
+.va-smart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.va-smart-card{display:flex;gap:10px;padding:12px;border:1px solid #e2e8f0;border-left:4px solid #64748b;border-radius:11px;background:#f8fafc}
+.va-smart-card.danger{border-left-color:#dc2626;background:#fff7f7}.va-smart-card.warning{border-left-color:#f59e0b;background:#fffbeb}.va-smart-card.success{border-left-color:#10b981;background:#f0fdf4}.va-smart-card.info{border-left-color:#3b82f6;background:#eff6ff}
+.va-smart-icon{font-size:19px;line-height:1}.va-smart-body{min-width:0}.va-smart-body strong{display:block;font-size:12px;color:#0f172a}.va-smart-body p{margin:4px 0 7px;color:#475569;font-size:10px;line-height:1.5}.va-smart-body button{border:0;background:transparent;padding:0;color:#4338ca;font-size:10px;font-weight:900;cursor:pointer}
+.va-smart-empty{padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;color:#166534;font-size:11px}
+@media(max-width:700px){.va-smart-grid{grid-template-columns:1fr}.va-smart-insights{padding:15px}.va-smart-insights-head{display:block}.va-smart-insights-badge{display:inline-block;margin-top:9px}}
+`;
 
 const payablesUiStyles = `
 .va-payables-page{max-width:1500px;margin:0 auto}.va-payables-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#14532d 70%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-payables-hero h2{margin:6px 0;font-size:28px}.va-payables-hero p{margin:0;color:#cbd5e1;max-width:760px;font-size:13px}.va-payables-primary,.va-payables-save,.va-payables-secondary{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer}.va-payables-primary{background:#10b981;color:#fff}.va-payables-save{width:100%;margin-top:10px;background:#059669;color:#fff}.va-payables-secondary{background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe}.va-payables-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-payables-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-payables-kpis>div:nth-child(2){border-top-color:#6366f1}.va-payables-kpis>div.danger{border-top-color:#ef4444}.va-payables-kpis>div.success{border-top-color:#10b981}.va-payables-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-payables-kpis strong{display:block;color:#0f172a;font-size:22px;margin-top:6px}.va-payables-kpis small{display:block;color:#94a3b8;margin-top:3px;font-size:10px}.va-payables-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px;margin-bottom:18px}.va-payables-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-payables-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-payables-head h3{margin:3px 0;font-size:19px}.va-payables-head p{margin:0;color:#64748b;font-size:12px}.va-payables-head>span{padding:7px 10px;background:#f1f5f9;border-radius:999px;font-size:11px;font-weight:900;color:#475569}.va-payables-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payables-table{width:100%;border-collapse:collapse;min-width:850px}.va-payables-table th,.va-payables-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:left;font-size:11px}.va-payables-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-payables-table tbody tr{cursor:pointer}.va-payables-table tbody tr:hover,.va-payables-table tbody tr.selected{background:#f0fdf4}.va-payables-table td small{display:block;color:#94a3b8;margin-top:3px;font-size:9px}.va-payable-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.va-payable-status.due{background:#fff7ed;color:#c2410c}.va-payable-status.overdue{background:#fef2f2;color:#b91c1c}.va-payable-status.clear{background:#ecfdf5;color:#047857}.va-pay-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-pay-form-grid label{font-size:11px;font-weight:900;color:#475569}.va-pay-form-grid input,.va-pay-form-grid select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.va-payables-card textarea{width:100%;box-sizing:border-box;margin-top:12px;min-height:70px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-payable-preview{display:flex;justify-content:space-between;align-items:center;padding:12px;margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px}.va-payable-preview strong{font-size:20px;color:#047857}.va-payable-actions{display:flex;gap:7px;flex-wrap:wrap}.va-payables-note{padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px;color:#64748b;font-size:11px;line-height:1.5;margin-top:12px}@media(max-width:1100px){.va-payables-grid{grid-template-columns:1fr}.va-payables-kpis{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.va-payables-hero{display:block;padding:18px}.va-payables-primary{margin-top:14px;width:100%}.va-payables-kpis{grid-template-columns:1fr 1fr}.va-payables-card{padding:14px}.va-pay-form-grid{grid-template-columns:1fr}.va-payables-actions{margin-top:12px}}@media(max-width:430px){.va-payables-kpis{grid-template-columns:1fr}}
