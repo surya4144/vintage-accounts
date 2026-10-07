@@ -1455,6 +1455,49 @@ export default function App() {
     };
   }, [historyLogs, purchases, supplierPayments, analyticsStart, analyticsEnd]);
   
+  const financialDashboardData = useMemo(() => {
+    const sales = Number(analyticsData.totalSales || 0);
+    const operatingExpenses = Number(analyticsData.totalExpenses || 0);
+    const staffCost = Number(analyticsData.staffCost || 0);
+    const purchaseCosts = Number(analyticsData.purchaseCosts || 0);
+    const totalCosts = operatingExpenses + purchaseCosts;
+    const profitAfterPurchases = sales - totalCosts;
+    const receivables = Number(khataSummary.outstanding || 0);
+    const payables = Number(supplierPayableSummary.totalOutstanding || 0);
+    const trend = historyLogs
+      .filter(log => log.date >= analyticsStart && log.date <= analyticsEnd)
+      .slice()
+      .sort((a,b)=>a.date.localeCompare(b.date))
+      .slice(-10)
+      .map(log => {
+        const s=log.expense_details?.sales||{};
+        const daySales=Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+
+          (log.expense_details?.credit_sales||[]).reduce((sum,x)=>sum+Number(x.amount||0),0);
+        const dayOperating=(log.expense_details?.online||[]).reduce((sum,x)=>sum+Number(x.amount||0),0)+
+          (log.expense_details?.cash||[]).reduce((sum,x)=>['Counter','Credit','Teja','Anil'].includes(x.type)?sum:sum+Number(x.amount||0),0)+
+          (log.expense_details?.staff||[]).reduce((sum,x)=>sum+Number(x.amount||0),0);
+        const dayPurchases=Number((purchaseSummary.byDate[log.date]||{}).total||0);
+        return {date:log.date,sales:daySales,totalCosts:dayOperating+dayPurchases};
+      });
+    const cashCollected = Number(cashFlowData.salesCash||0)+Number(cashFlowData.salesOnline||0)+Number(cashFlowData.creditReceived||0);
+    return {
+      sales, operatingExpenses, staffCost, purchaseCosts, totalCosts, profitAfterPurchases,
+      profitMargin: sales ? ((profitAfterPurchases/sales)*100).toFixed(1) : '0.0',
+      expenseRatio: sales ? ((operatingExpenses/sales)*100).toFixed(1) : '0.0',
+      purchaseRatio: sales ? ((purchaseCosts/sales)*100).toFixed(1) : '0.0',
+      staffShare: operatingExpenses ? ((staffCost/operatingExpenses)*100).toFixed(1) : '0.0',
+      cashConversion: sales ? Math.min(999,((cashCollected/sales)*100)).toFixed(1) : '0.0',
+      receivables, payables,
+      customersDue:Number(khataSummary.customersWithDue||0),
+      suppliersDue:Number(supplierPayableSummary.suppliersDue||0),
+      workingCapitalExposure: receivables-payables,
+      todayLiquidFunds:Number(dashboardData.todayCash||0)+Number(dashboardData.todayOnline||0),
+      netCashMovement:Number(cashFlowData.net||0),
+      daysWithSales:trend.filter(x=>x.sales>0).length,
+      trend
+    };
+  }, [analyticsData, khataSummary, supplierPayableSummary, historyLogs, analyticsStart, analyticsEnd, purchaseSummary, cashFlowData, dashboardData]);
+
   const businessAlerts = useMemo(() => {
     const alerts = [];
     const today = new Date().toISOString().split('T')[0];
@@ -2092,62 +2135,131 @@ export default function App() {
           </div>
 
       {activeTab === 'dashboard' && (
-        <div className="va-dashboard">
-          <div className="va-dashboard-hero">
-            <div><span className="va-eyebrow">Restaurant management command center</span><h2>Good day 👋</h2><p>See today's money position, operating performance and the actions that need your attention.</p></div>
-            <div className="va-command-actions"><button onClick={() => setActiveTab('daily')} style={{...btnStyle, background:'#10b981'}}>＋ Enter Today's Accounts</button><button onClick={() => setActiveTab('ledger')} style={{...btnStyle, background:'#4f46e5'}}>📒 Collect Receivables</button></div>
+        <div className="va-dashboard va-financial-dashboard">
+          <div className="va-financial-hero">
+            <div>
+              <span className="va-eyebrow">FINANCIAL CONTROL CENTER</span>
+              <h2>Restaurant Financial Dashboard</h2>
+              <p>One view of sales, operating costs, purchases, payroll, receivables, payables and real cash movement.</p>
+            </div>
+            <div className="va-financial-hero-actions">
+              <button onClick={() => setActiveTab('daily')}>＋ Daily Accounts</button>
+              <button onClick={() => setActiveTab('cashflow')}>💵 Cash Flow</button>
+              <button onClick={() => setActiveTab('analytics')}>📈 Full Analytics</button>
+            </div>
           </div>
 
-          <div className="va-dashboard-filter">
-            <div><strong>Management period</strong><span>Use this period for the performance cards and trend view.</span></div>
-            <div className="va-dashboard-dates"><input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)} style={inputStyle}/><span>to</span><input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)} style={inputStyle}/><button onClick={() => setActiveTab('analytics')} style={{...btnStyle, background:'#334155'}}>View Reports</button></div>
+          <div className="va-dashboard-filter va-financial-filter">
+            <div><strong>Management period</strong><span>All performance metrics below follow this date range. Outstanding balances are current balances.</span></div>
+            <div className="va-dashboard-dates">
+              <input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)} style={inputStyle}/>
+              <span>to</span>
+              <input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)} style={inputStyle}/>
+            </div>
           </div>
 
-          <div className="va-dashboard-kpis">
-            <div className="va-dash-kpi sales"><span>Today's Sales</span><strong>{formatINR(dashboardData.todaySales)}</strong><small>Recorded sales</small></div>
-            <div className="va-dash-kpi cash"><span>Cash In Hand</span><strong>{formatINR(dashboardData.todayCash)}</strong><small>Expected physical cash</small></div>
-            <div className="va-dash-kpi online"><span>Online Balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong><small>Online funds</small></div>
-            <div className="va-dash-kpi expense"><span>Today's Expenses</span><strong>{formatINR(dashboardData.todayExpenses)}</strong><small>Operating + staff</small></div>
-            <div className="va-dash-kpi" style={{borderTopColor:'#059669'}}><span>Today's Purchases</span><strong>{formatINR(dashboardData.todayPurchases)}</strong><small>Inventory purchase value</small></div>
-            <div className="va-dash-kpi profit"><span>Today's Est. Profit</span><strong>{formatINR(dashboardData.todaySales - dashboardData.todayExpenses)}</strong><small>Sales less expenses</small></div>
+          <div className="va-financial-kpis">
+            <div className="primary"><span>Total Sales</span><strong>{formatINR(financialDashboardData.sales)}</strong><small>Including credit sales</small></div>
+            <div><span>Operating Expenses</span><strong>{formatINR(financialDashboardData.operatingExpenses)}</strong><small>Operating + staff</small></div>
+            <div><span>Purchase Costs</span><strong>{formatINR(financialDashboardData.purchaseCosts)}</strong><small>Inventory acquired</small></div>
+            <div className={financialDashboardData.profitAfterPurchases >= 0 ? 'positive' : 'negative'}><span>Profit After Purchases</span><strong>{formatINR(financialDashboardData.profitAfterPurchases)}</strong><small>{financialDashboardData.profitMargin}% margin</small></div>
+            <div><span>Net Cash Movement</span><strong>{formatINR(financialDashboardData.netCashMovement)}</strong><small>Actual inflows − outflows</small></div>
+            <div className={financialDashboardData.receivables > 0 ? 'warning' : 'positive'}><span>Customer Receivables</span><strong>{formatINR(financialDashboardData.receivables)}</strong><small>{financialDashboardData.customersDue} customers due</small></div>
+            <div className={financialDashboardData.payables > 0 ? 'warning' : 'positive'}><span>Supplier Payables</span><strong>{formatINR(financialDashboardData.payables)}</strong><small>{financialDashboardData.suppliersDue} suppliers due</small></div>
+            <div><span>Working Capital Exposure</span><strong>{formatINR(financialDashboardData.workingCapitalExposure)}</strong><small>Receivables − payables</small></div>
           </div>
 
-          <div className="va-dashboard-command-grid">
-            <div className="va-dashboard-card va-command-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Today's position</span><h3>💼 Money at a Glance</h3></div><span className="va-dashboard-badge">{dashboardData.todaySales > 0 ? 'Active day' : 'No sales yet'}</span></div>
-              <div className="va-money-grid">
-                <div><span>Cash + Online</span><strong>{formatINR(dashboardData.todayCash + dashboardData.todayOnline)}</strong></div>
-                <div><span>Credit Outstanding</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
-                <div><span>Period Profit</span><strong className={dashboardData.periodProfit >= 0 ? 'success-text' : 'danger-text'}>{formatINR(dashboardData.periodProfit)}</strong></div>
-                <div><span>Purchase Costs</span><strong>{formatINR(dashboardData.periodPurchases)}</strong></div>
-                <div><span>Supplier Dues</span><strong className={dashboardData.supplierDue > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.supplierDue)}</strong></div>
-                <div><span>Staff Cost</span><strong>{formatINR(dashboardData.staffCost)}</strong></div>
+          <div className="va-financial-grid va-financial-top-grid">
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head">
+                <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3></div>
+                <span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span>
               </div>
-              <div className="va-command-links"><button onClick={()=>setActiveTab('ledger')}>📒 Khata</button><button onClick={()=>setActiveTab('payroll')}>💰 Payroll</button><button onClick={()=>setActiveTab('funds')}>🔄 Transfers</button><button onClick={()=>setActiveTab('history')}>📋 History</button></div>
-            </div>
-            <div className="va-dashboard-card va-health-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Operating health</span><h3>📊 Period Scorecard</h3></div></div>
-              <div className="va-health-row"><span>Expense / Sales</span><strong>{dashboardData.periodSales ? Math.round((dashboardData.periodExpenses/dashboardData.periodSales)*100) : 0}%</strong></div>
-              <div className="va-health-track"><i style={{width:Math.min(100,dashboardData.periodSales ? (dashboardData.periodExpenses/dashboardData.periodSales)*100 : 0)+'%'}}></i></div>
-              <div className="va-health-row"><span>Sales recorded days</span><strong>{dashboardData.salesByDay.filter(x=>x.sales>0).length} / 7</strong></div>
-              <div className="va-health-row"><span>Receivables exposure</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
-              <div className="va-health-row"><span>Purchase / Sales</span><strong>{dashboardData.periodSales ? Math.round((dashboardData.periodPurchases/dashboardData.periodSales)*100) : 0}%</strong></div>
-              <div className="va-health-note">{dashboardData.periodSales > 0 ? (dashboardData.periodProfit >= 0 ? '✅ The selected period is currently profitable based on saved sales and expenses.' : '⚠️ The selected period is currently operating at a loss.') : '📝 Save daily accounts to build the management scorecard.'}</div>
-            </div>
+              <div className="va-profit-bridge">
+                <div><span>Sales</span><strong>{formatINR(financialDashboardData.sales)}</strong></div>
+                <i>−</i>
+                <div><span>Operating + Staff</span><strong>{formatINR(financialDashboardData.operatingExpenses)}</strong></div>
+                <i>−</i>
+                <div><span>Purchases</span><strong>{formatINR(financialDashboardData.purchaseCosts)}</strong></div>
+                <i>=</i>
+                <div className={financialDashboardData.profitAfterPurchases>=0?'result-good':'result-bad'}><span>Profit</span><strong>{formatINR(financialDashboardData.profitAfterPurchases)}</strong></div>
+              </div>
+              <div className="va-financial-ratios">
+                <div><span>Expense ratio</span><strong>{financialDashboardData.expenseRatio}%</strong></div>
+                <div><span>Purchase ratio</span><strong>{financialDashboardData.purchaseRatio}%</strong></div>
+                <div><span>Staff share of costs</span><strong>{financialDashboardData.staffShare}%</strong></div>
+                <div><span>Cash conversion</span><strong>{financialDashboardData.cashConversion}%</strong></div>
+              </div>
+            </section>
+
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">LIQUIDITY</span><h3>🏦 Current Money Position</h3></div></div>
+              <div className="va-liquidity-main"><span>Today's available balances</span><strong>{formatINR(financialDashboardData.todayLiquidFunds)}</strong></div>
+              <div className="va-liquidity-row"><span>💵 Cash in hand</span><strong>{formatINR(dashboardData.todayCash)}</strong></div>
+              <div className="va-liquidity-row"><span>💳 Online balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong></div>
+              <div className="va-liquidity-row"><span>📒 Customer receivables</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong></div>
+              <div className="va-liquidity-row"><span>📦 Supplier payables</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong></div>
+              <div className="va-liquidity-note">Receivables are money expected from customers; payables are money still owed to suppliers. Neither is treated as today's cash.</div>
+            </section>
           </div>
 
-          <div className="va-dashboard-alerts">
-            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Action queue</span><h3>🔔 Smart Business Alerts</h3></div><span className="va-dashboard-badge">{businessAlerts.length} active</span></div>
+          <div className="va-financial-grid">
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button></div>
+              <div className="va-cashflow-summary">
+                <div className="in"><span>Total inflow</span><strong>{formatINR(cashFlowData.inflow)}</strong></div>
+                <div className="out"><span>Total outflow</span><strong>{formatINR(cashFlowData.outflow)}</strong></div>
+                <div className={cashFlowData.net>=0?'net-good':'net-bad'}><span>Net movement</span><strong>{formatINR(cashFlowData.net)}</strong></div>
+              </div>
+              <div className="va-flow-bars">
+                <div><span>Sales collected</span><b>{formatINR(cashFlowData.salesCash+cashFlowData.salesOnline+cashFlowData.creditReceived)}</b><i style={{width:Math.min(100,financialDashboardData.sales ? ((cashFlowData.salesCash+cashFlowData.salesOnline+cashFlowData.creditReceived)/financialDashboardData.sales)*100:0)+'%'}}></i></div>
+                <div><span>Operating + staff</span><b>{formatINR(cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
+                <div><span>Purchase + supplier settlement</span><b>{formatINR(cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
+              </div>
+              <div className="va-financial-footnote">Internal Cash ↔ Online transfers are excluded from net cash movement because they move money between your own accounts.</div>
+            </section>
+
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">WORKING CAPITAL</span><h3>📊 Receivables vs Payables</h3></div></div>
+              <div className="va-balance-compare">
+                <div><span>Customer money to collect</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong><small>{financialDashboardData.customersDue} customers with outstanding credit</small></div>
+                <div><span>Supplier money to pay</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong><small>{financialDashboardData.suppliersDue} suppliers with outstanding balances</small></div>
+              </div>
+              <div className="va-working-capital-result"><span>Net working-capital exposure</span><strong className={financialDashboardData.workingCapitalExposure>=0?'success-text':'danger-text'}>{formatINR(financialDashboardData.workingCapitalExposure)}</strong></div>
+              <div className="va-financial-actions"><button onClick={()=>setActiveTab('ledger')}>📒 Collect Customer Dues</button><button onClick={()=>{setActiveTab('inventory');setInventoryView('suppliers')}}>📦 Settle Supplier Dues</button></div>
+            </section>
+          </div>
+
+          <div className="va-financial-grid">
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">PERIOD TREND</span><h3>📈 Sales vs Total Costs</h3></div><span className="va-dashboard-badge">{financialDashboardData.daysWithSales} selling days</span></div>
+              <div className="va-financial-trend">
+                {financialDashboardData.trend.length===0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : financialDashboardData.trend.map(row => {
+                  const max=Math.max(...financialDashboardData.trend.map(x=>Math.max(x.sales,x.totalCosts)),1);
+                  return <div className="va-financial-trend-day" key={row.date}>
+                    <div className="va-financial-trend-bars"><i className="sales" style={{height:Math.max(7,row.sales/max*145)}}></i><i className="costs" style={{height:Math.max(5,row.totalCosts/max*145)}}></i></div>
+                    <small>{row.date.slice(5)}</small>
+                    <span>{formatINR(row.sales)}</span>
+                  </div>;
+                })}
+              </div>
+              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>
+            </section>
+
+            <section className="va-dashboard-card va-financial-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">PEOPLE & INVENTORY</span><h3>👥 Cost Control</h3></div></div>
+              <div className="va-control-row"><span>Staff cost</span><strong>{formatINR(financialDashboardData.staffCost)}</strong></div>
+              <div className="va-control-row"><span>Purchase costs</span><strong>{formatINR(financialDashboardData.purchaseCosts)}</strong></div>
+              <div className="va-control-row"><span>Operating expenses</span><strong>{formatINR(financialDashboardData.operatingExpenses)}</strong></div>
+              <div className="va-control-row"><span>Total tracked costs</span><strong>{formatINR(financialDashboardData.totalCosts)}</strong></div>
+              <div className="va-control-note">{financialDashboardData.sales ? (financialDashboardData.profitAfterPurchases>=0 ? '✅ Costs are currently below sales for the selected period.' : '⚠️ Total tracked costs are above sales. Review expenses and purchasing.') : '📝 Save daily accounts to activate cost analysis.'}</div>
+              <div className="va-financial-actions"><button onClick={()=>setActiveTab('payroll')}>💰 Review Payroll</button><button onClick={()=>setActiveTab('inventory')}>📦 Review Purchases</button></div>
+            </section>
+          </div>
+
+          <div className="va-dashboard-card va-financial-card va-financial-alert-card">
+            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">ACTION QUEUE</span><h3>🔔 What Needs Attention</h3></div><span className="va-dashboard-badge">{businessAlerts.length} active</span></div>
             <div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div>
-          </div>
-
-          <div className="va-dashboard-grid">
-            <div className="va-dashboard-card va-trend-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Last 7 recorded days</span><h3>📈 Sales vs Expenses</h3></div><span className="va-dashboard-badge">{formatINR(dashboardData.periodSales)} sales</span></div>
-              <div className="va-bars">{dashboardData.salesByDay.length===0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : dashboardData.salesByDay.map(row=>{const max=Math.max(...dashboardData.salesByDay.map(x=>Math.max(x.sales,x.expenses)),1);return <div className="va-bar-day" key={row.date}><div className="va-bar-stack"><div className="va-bar sales-bar" style={{height:Math.max(8,(row.sales/max)*150)}} title={'Sales '+formatINR(row.sales)}></div><div className="va-bar expense-bar" style={{height:Math.max(6,(row.expenses/max)*150)}} title={'Expenses '+formatINR(row.expenses)}></div></div><span>{row.date.slice(5)}</span></div>})}</div>
-              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Expenses</span></div>
-            </div>
-            <div className="va-dashboard-card"><div className="va-dashboard-card-head"><div><span className="va-eyebrow">Recent activity</span><h3>🧾 Recent Saved Accounts</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('history')}>View all →</button></div>{dashboardData.recentTransactions.length===0 ? <div className="va-empty-state">No saved accounts yet.</div> : <div className="va-recent-table"><div className="va-recent-row head"><span>Date</span><span>Sales</span><span>Expenses</span><span>Cash</span><span>Online</span><span>Status</span></div>{dashboardData.recentTransactions.map(log=>{const sales=(()=>{const s=log.expense_details?.sales||{};return Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((a,x)=>a+Number(x.amount||0),0)})();const expenses=(()=>{let total=0;(log.expense_details?.online||[]).forEach(x=>total+=Number(x.amount||0));(log.expense_details?.cash||[]).forEach(x=>{if(x.type!=='Counter'&&x.type!=='Credit'&&x.type!=='Teja'&&x.type!=='Anil')total+=Number(x.amount||0)});(log.expense_details?.staff||[]).forEach(x=>total+=Number(x.amount||0));return total})();return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(expenses)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>})}</div>}</div>
           </div>
         </div>
       )}
@@ -3174,7 +3286,24 @@ const fundUiStyles = `
 const staffManagementStyles = `
 .va-staff-page{max-width:1500px;margin:0 auto}.va-staff-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#075985 62%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 18px 45px rgba(15,23,42,.14)}.va-staff-hero.payroll{background:linear-gradient(135deg,#111827,#312e81 65%,#0f766e)}.va-staff-eyebrow{font-size:10px;font-weight:900;letter-spacing:.1em;color:#93c5fd}.va-staff-hero h2{margin:6px 0;font-size:28px}.va-staff-hero p{margin:0;color:#cbd5e1;font-size:13px;line-height:1.5;max-width:720px}.va-staff-hero-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.va-staff-hero-actions label{font-size:10px;font-weight:900;color:#cbd5e1}.va-staff-hero-actions input{display:block;margin-top:5px;padding:10px;border:1px solid #475569;background:#fff;color:#0f172a;border-radius:9px}.va-staff-btn{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer}.va-staff-btn.primary{background:#2563eb;color:#fff}.va-staff-btn.secondary{background:#fff;color:#1e40af}.va-staff-btn.success{background:#10b981;color:#fff}.va-staff-btn.ghost{background:#f1f5f9;color:#334155}.va-staff-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:18px}.va-staff-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:15px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-staff-kpis>div:nth-child(2){border-top-color:#10b981}.va-staff-kpis>div:nth-child(3){border-top-color:#ef4444}.va-staff-kpis>div:nth-child(4){border-top-color:#8b5cf6}.va-staff-kpis>div:nth-child(5){border-top-color:#f59e0b}.va-staff-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-staff-kpis strong{display:block;color:#0f172a;font-size:23px;margin-top:6px}.va-staff-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-staff-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:18px;margin-bottom:18px}.va-staff-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-staff-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:15px}.va-staff-card-head h3{margin:2px 0;font-size:19px;color:#0f172a}.va-staff-card-head p{margin:3px 0 0;color:#64748b;font-size:12px}.va-staff-link{color:#2563eb;font-size:12px;font-weight:900;text-decoration:none}.va-staff-link-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:9px;padding:9px 11px;font-weight:900;cursor:pointer}.va-staff-list{display:flex;flex-direction:column;gap:7px}.va-staff-row{display:grid;grid-template-columns:minmax(180px,1.4fr) 135px 65px 65px 55px minmax(160px,.8fr);gap:8px;align-items:center;border:1px solid #e2e8f0;border-radius:12px;padding:9px;background:#fff}.va-staff-row:hover{background:#f8fafc}.va-staff-person{display:flex;gap:9px;align-items:center;border:0;background:none;text-align:left;padding:0;cursor:pointer}.va-staff-avatar{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:#e0e7ff;color:#4338ca;font-weight:900;font-size:11px;flex:none}.va-staff-person strong{display:block;font-size:12px;color:#0f172a}.va-staff-person small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-status-select{width:100%;padding:8px;border-radius:9px;border:1px solid #cbd5e1;font-size:11px;font-weight:800}.va-status-select.present{background:#ecfdf5;color:#047857}.va-status-select.absent{background:#fff1f2;color:#be123c}.va-status-select.leave{background:#f5f3ff;color:#6d28d9}.va-status-select.off{background:#f1f5f9;color:#475569}.va-status-select.half{background:#fffbeb;color:#92400e}.va-status-select.unmarked{background:#fff}.va-staff-time{padding:7px;background:#f8fafc;border-radius:8px;text-align:center}.va-staff-time span{display:block;font-size:11px;font-weight:900;color:#0f172a}.va-staff-time small{display:block;color:#94a3b8;font-size:8px;margin-top:2px}.va-staff-hours{text-align:center;font-size:11px;font-weight:900;color:#475569}.va-staff-actions{display:flex;gap:5px;flex-wrap:wrap}.va-staff-icon-btn{border:0;border-radius:7px;padding:7px 8px;font-size:9px;font-weight:900;cursor:pointer}.va-staff-icon-btn.in{background:#dcfce7;color:#166534}.va-staff-icon-btn.out{background:#fee2e2;color:#991b1b}.va-staff-icon-btn.note{background:#e2e8f0;color:#334155}.va-staff-icon-btn:disabled{opacity:.45;cursor:not-allowed}.va-staff-side{display:flex;flex-direction:column;gap:18px}.va-staff-status-list{display:flex;flex-direction:column;gap:2px}.va-staff-status-list>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #eef2f7;font-size:12px}.va-staff-status-list span{color:#64748b}.va-staff-status-list strong{color:#0f172a}.va-staff-note{margin-top:13px;padding:11px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:11px;line-height:1.5}.va-staff-wide-btn{width:100%;border:0;border-radius:9px;padding:10px;margin-top:10px;font-weight:900;cursor:pointer}.va-staff-wide-btn.success{background:#dcfce7;color:#166534}.va-staff-wide-btn.danger{background:#fee2e2;color:#991b1b}.va-staff-wide-btn.primary{background:#2563eb;color:#fff}.va-staff-loading,.va-staff-empty{padding:30px;text-align:center;color:#64748b}.va-payroll-employee-list{display:flex;flex-direction:column;gap:7px;max-height:520px;overflow:auto}.va-payroll-person{display:flex;align-items:center;gap:9px;width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:10px;text-align:left;cursor:pointer}.va-payroll-person:hover,.va-payroll-person.active{background:#eef2ff;border-color:#818cf8}.va-payroll-person-main{flex:1;min-width:0}.va-payroll-person-main strong{display:block;color:#0f172a;font-size:12px}.va-payroll-person-main small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-payroll-person-due{font-size:11px;font-weight:900}.va-payroll-person-due.due{color:#be123c}.va-payroll-person-due.clear{color:#059669}.va-payroll-priority-list{display:flex;flex-direction:column;gap:6px}.va-payroll-priority-list button{display:grid;grid-template-columns:25px 1fr auto;gap:7px;align-items:center;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:9px;cursor:pointer}.va-payroll-priority-list button:hover{background:#f8fafc}.va-payroll-priority-list strong{font-size:11px;color:#0f172a}.va-payroll-priority-list small{font-size:10px;color:#64748b}.va-payroll-priority-list span{font-size:13px}.va-staff-detail{background:#0f172a;color:#fff;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.12)}.va-staff-detail-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.va-staff-detail h3{margin:5px 0;font-size:23px}.va-staff-detail p{margin:0;color:#94a3b8;font-size:12px}.va-staff-detail-actions{display:flex;gap:7px;flex-wrap:wrap}.va-staff-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}.va-staff-detail-grid>div{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:11px}.va-staff-detail-grid span{display:block;color:#94a3b8;font-size:9px;text-transform:uppercase;font-weight:900}.va-staff-detail-grid strong{display:block;margin-top:5px;font-size:14px}.va-staff-detail-grid strong.due{color:#fda4af}.va-staff-detail-grid strong.clear{color:#6ee7b7}.va-staff-detail-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:#1e293b;border-radius:10px;color:#cbd5e1;font-size:11px}.va-staff-detail-note input{padding:8px 10px;border-radius:8px;border:1px solid #475569;min-width:160px}.va-payroll-table-card{margin-top:18px}.va-payroll-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payroll-table{width:100%;border-collapse:collapse;min-width:1050px}.va-payroll-table th,.va-payroll-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:right;font-size:11px;white-space:nowrap}.va-payroll-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-payroll-table th.left,.va-payroll-table td:first-child{text-align:left}.va-payroll-table td input{width:105px;padding:7px;border:1px solid #cbd5e1;border-radius:7px}.va-payroll-table .employee-cell small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-payroll-table .money{font-weight:900}.va-payroll-table .money.paid{color:#047857}.va-payroll-table .money.due{color:#be123c}.va-payroll-table .money.clear{color:#059669}.va-payroll-table .money.carry{color:#2563eb}.va-payroll-table .money small{display:block;font-size:8px;color:#d97706;margin-top:3px}@media(max-width:1150px){.va-staff-kpis{grid-template-columns:repeat(3,1fr)}.va-staff-row{grid-template-columns:1.5fr 125px 60px 60px 55px}.va-staff-actions{grid-column:1/-1}.va-staff-grid{grid-template-columns:1fr}.va-staff-side{display:grid;grid-template-columns:1fr 1fr}}@media(max-width:750px){.va-staff-hero{display:block}.va-staff-hero-actions{margin-top:15px}.va-staff-hero-actions>*{flex:1}.va-staff-kpis{grid-template-columns:1fr 1fr}.va-staff-row{grid-template-columns:1fr 1fr}.va-staff-person{grid-column:1/-1}.va-staff-actions{grid-column:1/-1}.va-staff-side{display:block}.va-staff-detail-grid{grid-template-columns:1fr 1fr}.va-staff-detail-head{display:block}.va-staff-detail-actions{margin-top:12px}.payroll-kpis{grid-template-columns:1fr 1fr}}@media(max-width:450px){.va-staff-kpis{grid-template-columns:1fr}.va-staff-detail-grid{grid-template-columns:1fr}.va-staff-card{padding:14px}.va-staff-row{padding:8px}.va-staff-hero{padding:18px}.va-staff-hero-actions{display:grid;grid-template-columns:1fr 1fr}.va-staff-hero-actions label{grid-column:1/-1}.va-staff-hero-actions>*{width:100%}}`;
 const dashboardCommandStyles = `
-.va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}`;
+.va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}
+.va-financial-hero{display:flex;justify-content:space-between;align-items:center;gap:22px;background:linear-gradient(135deg,#07111f,#12304a 55%,#075e54);color:#fff;border-radius:24px;padding:28px;box-shadow:0 18px 45px rgba(15,23,42,.16)}
+.va-financial-hero h2{font-size:30px;margin:7px 0}.va-financial-hero p{margin:0;color:#cbd5e1;font-size:13px;max-width:720px}.va-financial-hero-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.va-financial-hero-actions button{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;border-radius:10px;padding:10px 12px;font-weight:900;cursor:pointer}.va-financial-hero-actions button:first-child{background:#10b981;border-color:#10b981}
+.va-financial-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}.va-financial-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #64748b;border-radius:15px;padding:15px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-financial-kpis>div.primary{border-top-color:#2563eb}.va-financial-kpis>div.positive{border-top-color:#10b981}.va-financial-kpis>div.negative{border-top-color:#ef4444}.va-financial-kpis>div.warning{border-top-color:#f59e0b}.va-financial-kpis span{display:block;color:#64748b;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.va-financial-kpis strong{display:block;margin-top:6px;font-size:20px;color:#0f172a}.va-financial-kpis small{display:block;color:#94a3b8;font-size:9px;margin-top:4px}
+.va-financial-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.va-financial-card{min-width:0}.va-financial-pill{padding:7px 10px;border-radius:999px;font-size:10px;font-weight:900}.va-financial-pill.good{background:#dcfce7;color:#166534}.va-financial-pill.bad{background:#fee2e2;color:#991b1b}
+.va-profit-bridge{display:grid;grid-template-columns:1fr 20px 1fr 20px 1fr 20px 1.1fr;gap:7px;align-items:center}.va-profit-bridge>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-profit-bridge span{display:block;color:#64748b;font-size:10px}.va-profit-bridge strong{display:block;margin-top:5px;font-size:16px}.va-profit-bridge i{text-align:center;color:#94a3b8;font-style:normal;font-weight:900}.va-profit-bridge .result-good{background:#ecfdf5;border-color:#bbf7d0}.va-profit-bridge .result-good strong{color:#047857}.va-profit-bridge .result-bad{background:#fef2f2;border-color:#fecaca}.va-profit-bridge .result-bad strong{color:#b91c1c}
+.va-financial-ratios{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.va-financial-ratios>div{padding:9px;background:#fff;border:1px solid #eef2f7;border-radius:9px}.va-financial-ratios span{display:block;color:#94a3b8;font-size:9px}.va-financial-ratios strong{display:block;margin-top:3px;font-size:12px}
+.va-liquidity-main{padding:16px;background:#0f172a;color:#fff;border-radius:12px;margin-bottom:10px}.va-liquidity-main span{display:block;color:#94a3b8;font-size:10px}.va-liquidity-main strong{display:block;font-size:25px;margin-top:5px}.va-liquidity-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #eef2f7;font-size:11px}.va-liquidity-row span{color:#64748b}.va-liquidity-note,.va-financial-footnote,.va-control-note{margin-top:11px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;color:#64748b;font-size:10px;line-height:1.5}
+.warning-text{color:#d97706!important}
+.va-cashflow-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.va-cashflow-summary>div{padding:12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}.va-cashflow-summary span{display:block;color:#64748b;font-size:10px}.va-cashflow-summary strong{display:block;margin-top:5px;font-size:17px}.va-cashflow-summary .in{border-left:4px solid #10b981}.va-cashflow-summary .out{border-left:4px solid #ef4444}.va-cashflow-summary .net-good{border-left:4px solid #2563eb}.va-cashflow-summary .net-bad{border-left:4px solid #dc2626}
+.va-flow-bars{display:flex;flex-direction:column;gap:12px;margin-top:15px}.va-flow-bars>div{display:grid;grid-template-columns:1fr auto;gap:7px}.va-flow-bars span{font-size:10px;color:#64748b}.va-flow-bars b{font-size:10px}.va-flow-bars i{grid-column:1/-1;height:7px;background:#e2e8f0;border-radius:99px;overflow:hidden;position:relative}.va-flow-bars i:after{content:"";display:block;height:100%;width:100%;background:#2563eb;border-radius:99px}
+.va-balance-compare{display:grid;grid-template-columns:1fr 1fr;gap:9px}.va-balance-compare>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-balance-compare span{display:block;color:#64748b;font-size:10px}.va-balance-compare strong{display:block;font-size:19px;margin-top:5px}.va-balance-compare small{display:block;color:#94a3b8;margin-top:4px;font-size:9px;line-height:1.4}.va-working-capital-result{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:11px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;font-size:11px}.va-working-capital-result strong{font-size:16px}.va-financial-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}.va-financial-actions button{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:9px;padding:9px;font-weight:900;cursor:pointer}
+.va-financial-trend{height:190px;display:flex;align-items:flex-end;gap:12px;border-bottom:1px solid #e2e8f0;padding:8px 5px 0;overflow:hidden}.va-financial-trend-day{height:100%;min-width:42px;display:flex;flex:1;max-width:80px;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.va-financial-trend-bars{height:150px;display:flex;align-items:flex-end;gap:3px}.va-financial-trend-bars i{display:block;width:13px;border-radius:4px 4px 1px 1px;min-height:5px}.va-financial-trend-bars .sales{background:#2563eb}.va-financial-trend-bars .costs{background:#f97316}.va-financial-trend-day small{font-size:8px;color:#64748b}.va-financial-trend-day span{font-size:8px;font-weight:800;color:#334155}
+.va-control-row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #eef2f7;font-size:11px}.va-control-row span{color:#64748b}.va-control-row strong{color:#0f172a}.va-financial-alert-card{margin-bottom:0}
+@media(max-width:1100px){.va-financial-kpis{grid-template-columns:repeat(2,1fr)}.va-financial-grid{grid-template-columns:1fr}.va-financial-top-grid{grid-template-columns:1fr}.va-profit-bridge{grid-template-columns:1fr}.va-profit-bridge i{display:none}}
+@media(max-width:700px){.va-financial-hero{display:block;padding:20px}.va-financial-hero h2{font-size:24px}.va-financial-hero-actions{margin-top:15px;justify-content:stretch}.va-financial-hero-actions button{flex:1}.va-financial-filter{display:block}.va-dashboard-dates{min-width:0;margin-top:10px;flex-wrap:wrap}.va-dashboard-dates input{max-width:none;flex:1}.va-financial-kpis{grid-template-columns:1fr 1fr}.va-financial-ratios{grid-template-columns:1fr 1fr}.va-cashflow-summary{grid-template-columns:1fr}.va-balance-compare{grid-template-columns:1fr}.va-financial-card{padding:15px}}
+@media(max-width:430px){.va-financial-kpis{grid-template-columns:1fr}.va-financial-hero-actions{display:grid;grid-template-columns:1fr}.va-financial-actions{grid-template-columns:1fr}}
+`;
 
 
 const payablesUiStyles = `
