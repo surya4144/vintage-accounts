@@ -2042,6 +2042,7 @@ export default function App() {
   return (
     <>
         <style>{dashboardCommandStyles}</style>
+        <style>{smartInsightsStyles}</style>
         <style>{dailyUiStyles}</style>
         <style>{historyUiStyles}</style>
         <style>{alertUiStyles}</style>
