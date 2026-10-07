@@ -117,7 +117,7 @@ export default function App() {
   const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('Cash');
   const [purchaseInvoice, setPurchaseInvoice] = useState('');
   const [purchaseNotes, setPurchaseNotes] = useState('');
-  const [purchaseItems, setPurchaseItems] = useState([{ itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
+  const [purchaseItems, setPurchaseItems] = useState([{ id:Date.now(), itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryView, setInventoryView] = useState('overview');
 
@@ -146,6 +146,16 @@ export default function App() {
   useEffect(() => {
     if (session && activeTab === 'inventory') loadInventoryModule();
   }, [session, activeTab]);
+
+  useEffect(() => {
+    if (!session || !['admin','manager'].includes(role)) return;
+    const loadPurchaseLedger = async () => {
+      const { data, error } = await supabase.from('purchases').select('*').order('purchase_date', { ascending: false });
+      if (error) console.error('Purchase ledger fetch:', error);
+      setPurchases(data || []);
+    };
+    loadPurchaseLedger();
+  }, [session, role]);
 
   const addInventoryItem = async () => {
     const name = window.prompt('Item name (e.g. Rice, Chicken, Oil):');
@@ -200,7 +210,7 @@ export default function App() {
         reference_id:purchase.id, notes:purchaseInvoice || 'Purchase', created_by:session?.user?.id
       });
     }
-    setPurchaseItems([{ itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
+    setPurchaseItems([{ id:Date.now(), itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
     setPurchaseInvoice(''); setPurchaseNotes(''); setPurchaseSupplierId(''); setPurchasePaymentMethod('Cash');
     await loadInventoryModule();
     alert('Purchase recorded and stock updated.');
@@ -1039,6 +1049,29 @@ export default function App() {
   }, [historyLogs]);
   const fundLedgerSummary = useMemo(() => ({ original: fundLedger.reduce((s,f)=>s+f.original,0), repaid: fundLedger.reduce((s,f)=>s+f.repaid,0), outstanding: fundLedger.reduce((s,f)=>s+f.outstanding,0), open: fundLedger.filter(f=>f.outstanding>0).length }), [fundLedger]);
 
+  const purchaseSummary = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const byDate = {};
+    purchases.forEach(p => {
+      if (!p.purchase_date) return;
+      if (!byDate[p.purchase_date]) byDate[p.purchase_date] = { total:0, cash:0, online:0, credit:0, paid:0, due:0, count:0 };
+      const total = Number(p.subtotal || 0), paid = Number(p.paid_amount || 0), due = Number(p.due_amount || 0);
+      byDate[p.purchase_date].total += total; byDate[p.purchase_date].paid += paid; byDate[p.purchase_date].due += due; byDate[p.purchase_date].count += 1;
+      if (p.payment_method === 'Cash') byDate[p.purchase_date].cash += paid;
+      else if (p.payment_method === 'Online') byDate[p.purchase_date].online += paid;
+      else if (p.payment_method === 'Credit') byDate[p.purchase_date].credit += total;
+    });
+    const selected = purchases.filter(p => p.purchase_date >= analyticsStart && p.purchase_date <= analyticsEnd);
+    return {
+      byDate,
+      selectedTotal: selected.reduce((s,p)=>s+Number(p.subtotal||0),0),
+      selectedPaid: selected.reduce((s,p)=>s+Number(p.paid_amount||0),0),
+      selectedDue: selected.reduce((s,p)=>s+Number(p.due_amount||0),0),
+      totalDue: purchases.reduce((s,p)=>s+Number(p.due_amount||0),0),
+      today: byDate[today] || {total:0,cash:0,online:0,credit:0,paid:0,due:0,count:0}
+    };
+  }, [purchases, analyticsStart, analyticsEnd]);
+
   // --- AUTOMATIC ANALYTICS CALCULATOR ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
@@ -1113,6 +1146,7 @@ export default function App() {
 
     Object.keys(monthlyTotals).forEach(monthKey => {
       const monthLogs = filtered.filter(log => log.date?.slice(0, 7) === monthKey);
+      monthlyTotals[monthKey].purchases = purchases.filter(p => p.purchase_date?.slice(0, 7) === monthKey).reduce((s,p)=>s+Number(p.subtotal||0),0);
       let monthExpenses = 0;
       monthLogs.forEach(log => {
         (log.expense_details?.online || []).forEach(e => { monthExpenses += Number(e.amount || 0); });
@@ -1124,8 +1158,10 @@ export default function App() {
       monthlyTotals[monthKey].expenses = monthExpenses;
     });
 
+    const purchaseCosts = purchases.filter(p => p.purchase_date >= analyticsStart && p.purchase_date <= analyticsEnd).reduce((s,p)=>s+Number(p.subtotal||0),0);
     const totalSales = cashSales + onlineSales + creditSales + counterAdjustments;
     const estimatedProfit = totalSales - operatingExpenses;
+    const operatingProfitAfterPurchases = totalSales - operatingExpenses - purchaseCosts;
     const operatingDays = filtered.length;
     const averageDailySales = operatingDays ? totalSales / operatingDays : 0;
     const averageDailyExpenses = operatingDays ? operatingExpenses / operatingDays : 0;
@@ -1135,13 +1171,13 @@ export default function App() {
     const monthlyRows = Object.entries(monthlyTotals).sort((a,b) => b[0].localeCompare(a[0]));
 
     return {
-      totalSales, totalExpenses: operatingExpenses, estimatedProfit,
+      totalSales, totalExpenses: operatingExpenses, estimatedProfit, purchaseCosts, operatingProfitAfterPurchases,
       cashSales, onlineSales, creditSales, creditReceived,
       cashExpenses, onlineExpensesTotal, staffCost, creditOutstanding,
       operatingDays, averageDailySales, averageDailyExpenses,
       sortedCategories, maxCatVal, monthlyRows
     };
-  }, [historyLogs, analyticsStart, analyticsEnd]);
+  }, [historyLogs, analyticsStart, analyticsEnd, purchases]);
 
 
   const historyRows = useMemo(() => historyLogs.map(log => {
@@ -1158,7 +1194,8 @@ export default function App() {
     const repayments = (log.expense_details?.fund_repayments || []).reduce((a,x)=>a+Number(x.amount||0),0);
     const totalSales = cash + online + credit;
     const totalExpenses = onlineExpense + cashExpense + staff;
-    return { ...log, cash, online, credit, received, totalSales, totalExpenses, staff, transfers, fundsIn, repayments,
+    const purchase = purchaseSummary.byDate[log.date] || {total:0,paid:0,due:0,count:0};
+    return { ...log, cash, online, credit, received, totalSales, totalExpenses, purchaseTotal:purchase.total, purchasePaid:purchase.paid, purchaseDue:purchase.due, purchaseCount:purchase.count, staff, transfers, fundsIn, repayments,
       counts: {
         credit: (log.expense_details?.credit_sales || []).length,
         received: (log.expense_details?.credit_received || []).length,
@@ -1169,7 +1206,7 @@ export default function App() {
         repayments: (log.expense_details?.fund_repayments || []).length
       }
     };
-  }), [historyLogs]);
+  }), [historyLogs, purchaseSummary]);
 
   const filteredHistoryRows = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
@@ -1179,7 +1216,8 @@ export default function App() {
       if (historyType !== 'all') {
         const map = {
           sales: row.totalSales > 0,
-          expenses: row.totalExpenses > 0,
+          expenses: row.totalExpenses > 0 || row.purchaseTotal > 0,
+          purchases: row.purchaseTotal > 0,
           credit: row.credit > 0 || row.received > 0,
           staff: row.staff > 0,
           transfers: row.transfers > 0,
@@ -1198,6 +1236,7 @@ export default function App() {
     days: filteredHistoryRows.length,
     sales: filteredHistoryRows.reduce((s,r)=>s+r.totalSales,0),
     expenses: filteredHistoryRows.reduce((s,r)=>s+r.totalExpenses,0),
+    purchases: filteredHistoryRows.reduce((s,r)=>s+r.purchaseTotal,0),
     cash: filteredHistoryRows.reduce((s,r)=>s+Number(r.total_cash_in_hand||0),0),
     online: filteredHistoryRows.reduce((s,r)=>s+Number(r.total_online_balance||0),0)
   }), [filteredHistoryRows]);
@@ -1229,19 +1268,23 @@ export default function App() {
     const creditGiven = recent.reduce((sum, log) => sum + (log.expense_details?.credit_sales || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
     const creditReceived = recent.reduce((sum, log) => sum + (log.expense_details?.credit_received || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
     const staffCost = recent.reduce((sum, log) => sum + (log.expense_details?.staff || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
+    const periodPurchases = recent.reduce((sum, log) => sum + Number((purchaseSummary.byDate[log.date] || {}).total || 0), 0);
+    const todayPurchases = Number((purchaseSummary.byDate[today] || {}).total || 0);
     return {
       todaySales: todayLog ? getSales(todayLog) : 0,
       todayExpenses: todayLog ? getExpenses(todayLog) : 0,
+      todayPurchases,
       todayCash: todayLog ? Number(todayLog.total_cash_in_hand || 0) : 0,
       todayOnline: todayLog ? Number(todayLog.total_online_balance || 0) : 0,
-      periodSales, periodExpenses,
+      periodSales, periodExpenses, periodPurchases,
       periodProfit: periodSales - periodExpenses,
+      periodProfitAfterPurchases: periodSales - periodExpenses - periodPurchases,
       creditOutstanding: Math.max(0, creditGiven - creditReceived),
       staffCost,
       salesByDay,
-      recentTransactions: historyLogs.slice(0, 6)
+      recentTransactions: historyLogs.slice(0, 6), supplierDue: purchaseSummary.totalDue
     };
-  }, [historyLogs, analyticsStart, analyticsEnd]);
+  }, [historyLogs, analyticsStart, analyticsEnd, purchaseSummary]);
 
   const businessAlerts = useMemo(() => {
     const alerts = [];
@@ -1263,6 +1306,8 @@ export default function App() {
       });
     }
 
+    if (purchaseSummary.totalDue > 0) alerts.push({type:'warning', icon:'📦', title:'Supplier purchase dues pending', text:`${formatINR(purchaseSummary.totalDue)} is currently payable from recorded purchases.`, action:'inventory'});
+
     const payrollDue = payrollRows.reduce((sum, r) => sum + Number(r.totalBalanceToPay || 0), 0);
     if (payrollDue > 0) {
       alerts.push({
@@ -1272,10 +1317,10 @@ export default function App() {
       });
     }
 
-    if (analyticsData.totalSales > 0 && analyticsData.totalExpenses > analyticsData.totalSales * 0.75) {
+    if (analyticsData.totalSales > 0 && (analyticsData.totalExpenses + analyticsData.purchaseCosts) > analyticsData.totalSales * 0.75) {
       alerts.push({
         type: 'warning', icon: '📉', title: 'Expense pressure is high',
-        text: `Expenses are ${Math.round((analyticsData.totalExpenses / analyticsData.totalSales) * 100)}% of sales for the selected analytics period.`,
+        text: `Recorded expenses plus purchases are ${Math.round(((analyticsData.totalExpenses + analyticsData.purchaseCosts) / analyticsData.totalSales) * 100)}% of sales for the selected analytics period.`,
         action: 'analytics'
       });
     }
@@ -1298,7 +1343,7 @@ export default function App() {
     }
 
     return alerts.slice(0, 6);
-  }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs]);
+  }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs, purchaseSummary]);
 
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
@@ -1891,6 +1936,7 @@ export default function App() {
             <div className="va-dash-kpi cash"><span>Cash In Hand</span><strong>{formatINR(dashboardData.todayCash)}</strong><small>Expected physical cash</small></div>
             <div className="va-dash-kpi online"><span>Online Balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong><small>Online funds</small></div>
             <div className="va-dash-kpi expense"><span>Today's Expenses</span><strong>{formatINR(dashboardData.todayExpenses)}</strong><small>Operating + staff</small></div>
+            <div className="va-dash-kpi" style={{borderTopColor:'#059669'}}><span>Today's Purchases</span><strong>{formatINR(dashboardData.todayPurchases)}</strong><small>Inventory purchase value</small></div>
             <div className="va-dash-kpi profit"><span>Today's Est. Profit</span><strong>{formatINR(dashboardData.todaySales - dashboardData.todayExpenses)}</strong><small>Sales less expenses</small></div>
           </div>
 
@@ -1901,6 +1947,8 @@ export default function App() {
                 <div><span>Cash + Online</span><strong>{formatINR(dashboardData.todayCash + dashboardData.todayOnline)}</strong></div>
                 <div><span>Credit Outstanding</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
                 <div><span>Period Profit</span><strong className={dashboardData.periodProfit >= 0 ? 'success-text' : 'danger-text'}>{formatINR(dashboardData.periodProfit)}</strong></div>
+                <div><span>Purchase Costs</span><strong>{formatINR(dashboardData.periodPurchases)}</strong></div>
+                <div><span>Supplier Dues</span><strong className={dashboardData.supplierDue > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.supplierDue)}</strong></div>
                 <div><span>Staff Cost</span><strong>{formatINR(dashboardData.staffCost)}</strong></div>
               </div>
               <div className="va-command-links"><button onClick={()=>setActiveTab('ledger')}>📒 Khata</button><button onClick={()=>setActiveTab('payroll')}>💰 Payroll</button><button onClick={()=>setActiveTab('funds')}>🔄 Transfers</button><button onClick={()=>setActiveTab('history')}>📋 History</button></div>
@@ -1911,6 +1959,7 @@ export default function App() {
               <div className="va-health-track"><i style={{width:Math.min(100,dashboardData.periodSales ? (dashboardData.periodExpenses/dashboardData.periodSales)*100 : 0)+'%'}}></i></div>
               <div className="va-health-row"><span>Sales recorded days</span><strong>{dashboardData.salesByDay.filter(x=>x.sales>0).length} / 7</strong></div>
               <div className="va-health-row"><span>Receivables exposure</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
+              <div className="va-health-row"><span>Purchase / Sales</span><strong>{dashboardData.periodSales ? Math.round((dashboardData.periodPurchases/dashboardData.periodSales)*100) : 0}%</strong></div>
               <div className="va-health-note">{dashboardData.periodSales > 0 ? (dashboardData.periodProfit >= 0 ? '✅ The selected period is currently profitable based on saved sales and expenses.' : '⚠️ The selected period is currently operating at a loss.') : '📝 Save daily accounts to build the management scorecard.'}</div>
             </div>
           </div>
@@ -2175,6 +2224,11 @@ export default function App() {
 
           <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">STEP 4 • STAFF</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Cash</strong> payments reduce Cash In Hand. <strong>Cash From Till</strong> wages are already deducted from the daily cash you enter, so they count as expenses but are not deducted again.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Cash In Hand</option><option value="Till">🧾 Cash From Till — Already Deducted</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
           <div className="va-drawer-card"><div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div>
+          <div className="va-entry-card" style={{marginBottom:'18px',borderTop:'4px solid #059669'}}>
+            <div className="va-entry-head"><div><span className="va-eyebrow">STEP 5 • INVENTORY COST</span><h3>📦 Purchases Recorded for {date}</h3><p>Purchases are tracked separately from Daily Accounting expenses so the same cost is never counted twice.</p></div><span className="va-entry-total">{formatINR((purchaseSummary.byDate[date]||{}).total||0)}</span></div>
+            {(() => { const p = purchaseSummary.byDate[date] || {total:0,paid:0,due:0,cash:0,online:0}; return <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}><div style={{padding:'12px',background:'#f0fdf4',borderRadius:'10px'}}><small>Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.paid)}</strong></div><div style={{padding:'12px',background:'#eff6ff',borderRadius:'10px'}}><small>Cash Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.cash)}</strong></div><div style={{padding:'12px',background:'#eef2ff',borderRadius:'10px'}}><small>Online Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.online)}</strong></div><div style={{padding:'12px',background:'#fff7ed',borderRadius:'10px'}}><small>Supplier Due</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.due)}</strong></div></div>; })()}
+            <div className="va-helper" style={{marginTop:'10px'}}>💡 Cash/Online purchase payments are shown here as inventory outflows. Do not enter the same purchase again as a cash or online expense, or it will be double-counted.</div>
+          </div>
           <div className="va-final-card">
             <div className="va-final-head">
               <div>
@@ -2297,6 +2351,7 @@ export default function App() {
             <div><span>Recorded Days</span><strong>{historySummary.days}</strong></div>
             <div><span>Sales in View</span><strong>{formatINR(historySummary.sales)}</strong></div>
             <div><span>Expenses in View</span><strong>{formatINR(historySummary.expenses)}</strong></div>
+            <div><span>Purchases in View</span><strong>{formatINR(historySummary.purchases)}</strong></div>
             <div><span>Closing Cash Total</span><strong>{formatINR(historySummary.cash)}</strong></div>
           </div>
 
@@ -2306,7 +2361,7 @@ export default function App() {
               <label>From<input type="date" value={historyStart} onChange={e=>setHistoryStart(e.target.value)} /></label>
               <label>To<input type="date" value={historyEnd} onChange={e=>setHistoryEnd(e.target.value)} /></label>
               <label>Transaction Type<select value={historyType} onChange={e=>setHistoryType(e.target.value)}>
-                <option value="all">All records</option><option value="sales">Sales</option><option value="expenses">Expenses</option><option value="credit">Credit / Collections</option><option value="staff">Staff payments</option><option value="transfers">Transfers</option><option value="funds">Funds / Repayments</option>
+                <option value="all">All records</option><option value="sales">Sales</option><option value="expenses">Expenses</option><option value="purchases">Purchases</option><option value="credit">Credit / Collections</option><option value="staff">Staff payments</option><option value="transfers">Transfers</option><option value="funds">Funds / Repayments</option>
               </select></label>
               <button onClick={()=>{setHistorySearch('');setHistoryStart('');setHistoryEnd('');setHistoryType('all');setSelectedHistoryId(null)}} className="va-history-clear">Clear Filters</button>
             </div>
@@ -2316,17 +2371,18 @@ export default function App() {
             <div className="va-history-table-head"><div><h3>Saved Daily Accounts</h3><p>Click any row to inspect its accounting components.</p></div><span>{filteredHistoryRows.length} record{filteredHistoryRows.length===1?'':'s'}</span></div>
             {isLoadingHistory ? <p>Loading history...</p> : filteredHistoryRows.length === 0 ? <div className="va-empty-state">No records match your filters.</div> : (
               <div className="va-history-table-wrap">
-                <table className="va-history-table"><thead><tr><th>Date</th><th>Sales</th><th>Expenses</th><th>Cash</th><th>Online</th><th>Credit</th><th>Staff</th><th></th></tr></thead>
+                <table className="va-history-table"><thead><tr><th>Date</th><th>Sales</th><th>Expenses</th><th>Purchases</th><th>Cash</th><th>Online</th><th>Credit</th><th>Staff</th><th></th></tr></thead>
                   <tbody>{filteredHistoryRows.map(row => <React.Fragment key={row.id}>
                     <tr className={selectedHistoryId===row.id?'selected':''} onClick={()=>setSelectedHistoryId(selectedHistoryId===row.id?null:row.id)}>
                       <td><strong>{row.date}</strong><small>{row.id ? 'Saved record' : 'Record'}</small></td>
                       <td className="history-sales">{formatINR(row.totalSales)}</td><td className="history-expense">{formatINR(row.totalExpenses)}</td>
-                      <td>{formatINR(row.total_cash_in_hand)}</td><td>{formatINR(row.total_online_balance)}</td><td>{formatINR(row.credit)}</td><td>{formatINR(row.staff)}</td><td>⌄</td>
+                      <td>{formatINR(row.purchaseTotal)}</td><td>{formatINR(row.total_cash_in_hand)}</td><td>{formatINR(row.total_online_balance)}</td><td>{formatINR(row.credit)}</td><td>{formatINR(row.staff)}</td><td>⌄</td>
                     </tr>
-                    {selectedHistoryId===row.id && <tr className="va-history-detail-row"><td colSpan="8">
+                    {selectedHistoryId===row.id && <tr className="va-history-detail-row"><td colSpan="9">
                       <div className="va-history-detail">
                         <div><span>Sales</span><strong>{formatINR(row.totalSales)}</strong><small>Cash {formatINR(row.cash)} • Online {formatINR(row.online)} • Credit {formatINR(row.credit)}</small></div>
                         <div><span>Expenses</span><strong>{formatINR(row.totalExpenses)}</strong><small>Operating + staff entries</small></div>
+                        <div><span>Purchases</span><strong>{formatINR(row.purchaseTotal)}</strong><small>{row.purchaseCount} purchase record{row.purchaseCount===1?'':'s'} • Paid {formatINR(row.purchasePaid)} • Supplier due {formatINR(row.purchaseDue)}</small></div>
                         <div><span>Credit Activity</span><strong>{formatINR(row.received)} received</strong><small>{row.counts.credit} credit sales • {row.counts.received} collections</small></div>
                         <div><span>Staff</span><strong>{formatINR(row.staff)}</strong><small>{row.counts.staff} payment entries</small></div>
                         <div><span>Money Movement</span><strong>{formatINR(row.transfers)}</strong><small>{row.counts.transfers} transfers • Funds in {formatINR(row.fundsIn)} • Repayments {formatINR(row.repayments)}</small></div>
@@ -2359,7 +2415,9 @@ export default function App() {
                 const rows = [
                   {Metric:'Sales',Value:analyticsData.totalSales},
                   {Metric:'Operating Expenses',Value:analyticsData.totalExpenses},
+                  {Metric:'Purchase Costs',Value:analyticsData.purchaseCosts},
                   {Metric:'Estimated Profit',Value:analyticsData.estimatedProfit},
+                  {Metric:'Profit After Purchases',Value:analyticsData.operatingProfitAfterPurchases},
                   {Metric:'Credit Outstanding',Value:analyticsData.creditOutstanding},
                   {Metric:'Cash Sales',Value:analyticsData.cashSales},
                   {Metric:'Online Sales',Value:analyticsData.onlineSales},
@@ -2372,7 +2430,7 @@ export default function App() {
                 ];
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Summary');
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsData.monthlyRows.map(([month,row]) => ({Month:month,Sales:row.sales,Expenses:row.expenses,EstimatedProfit:row.sales-row.expenses,Days:row.days}))), 'Monthly');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsData.monthlyRows.map(([month,row]) => ({Month:month,Sales:row.sales,Expenses:row.expenses,Purchases:row.purchases||0,EstimatedProfit:row.sales-row.expenses,ProfitAfterPurchases:row.sales-row.expenses-(row.purchases||0),Days:row.days}))), 'Monthly');
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsData.sortedCategories.map(([category,amount]) => ({Category:category,Amount:amount}))), 'Expenses');
                 XLSX.writeFile(wb, `Vintage-Analytics-${analyticsStart}-to-${analyticsEnd}.xlsx`);
               }} className="va-analytics-btn">📥 Export Report</button>
@@ -2384,6 +2442,7 @@ export default function App() {
             <div className="expense"><span>💸 Total Expenses</span><strong>{formatINR(analyticsData.totalExpenses)}</strong><small>Operating + staff entries</small></div>
             <div className={analyticsData.estimatedProfit >= 0 ? 'profit' : 'loss'}><span>{analyticsData.estimatedProfit >= 0 ? '📈 Estimated Profit' : '📉 Estimated Loss'}</span><strong>{formatINR(analyticsData.estimatedProfit)}</strong><small>Sales less recorded expenses</small></div>
             <div className="credit"><span>📒 Credit Outstanding</span><strong>{formatINR(analyticsData.creditOutstanding)}</strong><small>Credit sales less collections</small></div>
+            <div className="expense"><span>📦 Purchase Costs</span><strong>{formatINR(analyticsData.purchaseCosts)}</strong><small>Inventory purchase value</small></div>
           </div>
 
           <div className="va-analytics-grid va-analytics-grid-top">
@@ -2405,6 +2464,8 @@ export default function App() {
                 <div><span>Staff Cost</span><strong>{formatINR(analyticsData.staffCost)}</strong></div>
                 <div><span>Avg. Daily Sales</span><strong>{formatINR(analyticsData.averageDailySales)}</strong></div>
                 <div><span>Avg. Daily Expense</span><strong>{formatINR(analyticsData.averageDailyExpenses)}</strong></div>
+                <div><span>Purchase Costs</span><strong>{formatINR(analyticsData.purchaseCosts)}</strong></div>
+                <div><span>Profit After Purchases</span><strong className={analyticsData.operatingProfitAfterPurchases >= 0 ? 'success-text' : 'danger-text'}>{formatINR(analyticsData.operatingProfitAfterPurchases)}</strong></div>
               </div>
             </div>
 
@@ -2427,7 +2488,7 @@ export default function App() {
             {analyticsData.monthlyRows.length === 0 ? <div className="va-empty-state">No records found in this date range.</div> : (
               <div className="va-analytics-table-wrap">
                 <table className="va-analytics-table">
-                  <thead><tr><th>Month</th><th>Sales</th><th>Expenses</th><th>Est. Profit</th><th>Days</th><th>Daily Avg. Sales</th></tr></thead>
+                  <thead><tr><th>Month</th><th>Sales</th><th>Expenses</th><th>Purchases</th><th>Profit After Purchases</th><th>Days</th><th>Daily Avg. Sales</th></tr></thead>
                   <tbody>
                     {analyticsData.monthlyRows.map(([month,row]) => {
                       const profit = row.sales - row.expenses;
@@ -2435,7 +2496,8 @@ export default function App() {
                         <td><strong>{month}</strong></td>
                         <td>{formatINR(row.sales)}</td>
                         <td>{formatINR(row.expenses)}</td>
-                        <td className={profit >= 0 ? 'success-text' : 'danger-text'}><strong>{formatINR(profit)}</strong></td>
+                        <td>{formatINR(row.purchases || 0)}</td>
+                        <td className={(profit-(row.purchases||0)) >= 0 ? 'success-text' : 'danger-text'}><strong>{formatINR(profit-(row.purchases||0))}</strong></td>
                         <td>{row.days}</td>
                         <td>{formatINR(row.days ? row.sales / row.days : 0)}</td>
                       </tr>;
@@ -2457,7 +2519,7 @@ export default function App() {
           </div>
 
           <div className="va-analytics-note">
-            <strong>Accounting note:</strong> Sales and expense figures are calculated from the saved daily accounting records. Estimated profit is an internal management estimate, not a statutory accounting or tax statement.
+            <strong>Accounting note:</strong> Sales and recorded operating expenses come from saved daily accounting records. Purchases come from the Purchases & Inventory ledger and are shown separately to prevent double-counting. Profit After Purchases is an internal management estimate, not a statutory accounting or tax statement.
           </div>
         </div>
       )}
