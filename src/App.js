@@ -1339,16 +1339,6 @@ export default function App() {
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
               <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
               <p style={{color:'#6b7280',fontSize:'13px',marginTop:'-8px'}}>Choose <strong>Cash – Till</strong> for business till cash. Choose <strong>Cash – Available Cash</strong> when you pay from the cash you currently hold or have taken home. This amount is deducted from the available-cash balance only.</p>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px', padding: '10px', borderRadius: '10px', background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-                <div>
-                  <strong>💵 Available Cash</strong>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>Previous available cash: {formatINR(yesterdayAvailableCash)}</div>
-                </div>
-                <label style={{ fontWeight: 600 }}>Cash Taken / Moved to Available Cash
-                  <input type="number" min="0" step="0.01" value={cashTakenToAvailable || ''} onChange={e => setCashTakenToAvailable(e.target.value)} placeholder="Amount ₹" style={{ ...inputStyle, marginLeft: '8px', width: '190px' }} />
-                </label>
-                <span style={{ fontWeight: 700, color: availableCashBalance < 0 ? '#dc2626' : '#166534' }}>Available Cash After Expenses: {formatINR(availableCashBalance)}</span>
-              </div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
