@@ -1619,6 +1619,7 @@ export default function App() {
   // --- MAIN APP UI ---
   return (
     <>
+        <style>{dashboardCommandStyles}</style>
         <style>{dailyUiStyles}</style>
         <style>{historyUiStyles}</style>
         <style>{alertUiStyles}</style>
@@ -1743,25 +1744,13 @@ export default function App() {
       {activeTab === 'dashboard' && (
         <div className="va-dashboard">
           <div className="va-dashboard-hero">
-            <div>
-              <span className="va-eyebrow">Restaurant financial control center</span>
-              <h2>Good day 👋</h2>
-              <p>Track today's performance and keep your restaurant's money under control.</p>
-            </div>
-            <button onClick={() => setActiveTab('daily')} style={{...btnStyle, background:'#10b981'}}>＋ Enter Today's Accounts</button>
+            <div><span className="va-eyebrow">Restaurant management command center</span><h2>Good day 👋</h2><p>See today's money position, operating performance and the actions that need your attention.</p></div>
+            <div className="va-command-actions"><button onClick={() => setActiveTab('daily')} style={{...btnStyle, background:'#10b981'}}>＋ Enter Today's Accounts</button><button onClick={() => setActiveTab('ledger')} style={{...btnStyle, background:'#4f46e5'}}>📒 Collect Receivables</button></div>
           </div>
 
           <div className="va-dashboard-filter">
-            <div>
-              <strong>Performance period</strong>
-              <span>Use the same period as Analytics for a consistent management view.</span>
-            </div>
-            <div className="va-dashboard-dates">
-              <input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)} style={inputStyle}/>
-              <span>to</span>
-              <input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)} style={inputStyle}/>
-              <button onClick={() => setActiveTab('analytics')} style={{...btnStyle, background:'#334155'}}>View Reports</button>
-            </div>
+            <div><strong>Management period</strong><span>Use this period for the performance cards and trend view.</span></div>
+            <div className="va-dashboard-dates"><input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)} style={inputStyle}/><span>to</span><input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)} style={inputStyle}/><button onClick={() => setActiveTab('analytics')} style={{...btnStyle, background:'#334155'}}>View Reports</button></div>
           </div>
 
           <div className="va-dashboard-kpis">
@@ -1772,69 +1761,39 @@ export default function App() {
             <div className="va-dash-kpi profit"><span>Today's Est. Profit</span><strong>{formatINR(dashboardData.todaySales - dashboardData.todayExpenses)}</strong><small>Sales less expenses</small></div>
           </div>
 
+          <div className="va-dashboard-command-grid">
+            <div className="va-dashboard-card va-command-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Today's position</span><h3>💼 Money at a Glance</h3></div><span className="va-dashboard-badge">{dashboardData.todaySales > 0 ? 'Active day' : 'No sales yet'}</span></div>
+              <div className="va-money-grid">
+                <div><span>Cash + Online</span><strong>{formatINR(dashboardData.todayCash + dashboardData.todayOnline)}</strong></div>
+                <div><span>Credit Outstanding</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
+                <div><span>Period Profit</span><strong className={dashboardData.periodProfit >= 0 ? 'success-text' : 'danger-text'}>{formatINR(dashboardData.periodProfit)}</strong></div>
+                <div><span>Staff Cost</span><strong>{formatINR(dashboardData.staffCost)}</strong></div>
+              </div>
+              <div className="va-command-links"><button onClick={()=>setActiveTab('ledger')}>📒 Khata</button><button onClick={()=>setActiveTab('payroll')}>💰 Payroll</button><button onClick={()=>setActiveTab('funds')}>🔄 Transfers</button><button onClick={()=>setActiveTab('history')}>📋 History</button></div>
+            </div>
+            <div className="va-dashboard-card va-health-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Operating health</span><h3>📊 Period Scorecard</h3></div></div>
+              <div className="va-health-row"><span>Expense / Sales</span><strong>{dashboardData.periodSales ? Math.round((dashboardData.periodExpenses/dashboardData.periodSales)*100) : 0}%</strong></div>
+              <div className="va-health-track"><i style={{width:Math.min(100,dashboardData.periodSales ? (dashboardData.periodExpenses/dashboardData.periodSales)*100 : 0)+'%'}}></i></div>
+              <div className="va-health-row"><span>Sales recorded days</span><strong>{dashboardData.salesByDay.filter(x=>x.sales>0).length} / 7</strong></div>
+              <div className="va-health-row"><span>Receivables exposure</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
+              <div className="va-health-note">{dashboardData.periodSales > 0 ? (dashboardData.periodProfit >= 0 ? '✅ The selected period is currently profitable based on saved sales and expenses.' : '⚠️ The selected period is currently operating at a loss.') : '📝 Save daily accounts to build the management scorecard.'}</div>
+            </div>
+          </div>
+
           <div className="va-dashboard-alerts">
-            <div className="va-dashboard-card-head">
-              <div><span className="va-eyebrow">Needs attention</span><h3>🔔 Smart Business Alerts</h3></div>
-              <span className="va-dashboard-badge">{businessAlerts.length} active</span>
-            </div>
-            <div className="va-alert-list">
-              {businessAlerts.map((alert, index) => (
-                <button key={index} className={'va-alert-item ' + alert.type} onClick={() => setActiveTab(alert.action)}>
-                  <span className="va-alert-icon">{alert.icon}</span>
-                  <span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span>
-                  <span className="va-alert-arrow">→</span>
-                </button>
-              ))}
-            </div>
+            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Action queue</span><h3>🔔 Smart Business Alerts</h3></div><span className="va-dashboard-badge">{businessAlerts.length} active</span></div>
+            <div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div>
           </div>
 
           <div className="va-dashboard-grid">
             <div className="va-dashboard-card va-trend-card">
               <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Last 7 recorded days</span><h3>📈 Sales vs Expenses</h3></div><span className="va-dashboard-badge">{formatINR(dashboardData.periodSales)} sales</span></div>
-              <div className="va-bars">
-                {dashboardData.salesByDay.length === 0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : dashboardData.salesByDay.map(row => {
-                  const max = Math.max(...dashboardData.salesByDay.map(x => Math.max(x.sales,x.expenses)), 1);
-                  return <div className="va-bar-day" key={row.date}>
-                    <div className="va-bar-stack">
-                      <div className="va-bar sales-bar" style={{height:Math.max(8,(row.sales/max)*150)}} title={'Sales '+formatINR(row.sales)}></div>
-                      <div className="va-bar expense-bar" style={{height:Math.max(6,(row.expenses/max)*150)}} title={'Expenses '+formatINR(row.expenses)}></div>
-                    </div>
-                    <span>{row.date.slice(5)}</span>
-                  </div>;
-                })}
-              </div>
+              <div className="va-bars">{dashboardData.salesByDay.length===0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : dashboardData.salesByDay.map(row=>{const max=Math.max(...dashboardData.salesByDay.map(x=>Math.max(x.sales,x.expenses)),1);return <div className="va-bar-day" key={row.date}><div className="va-bar-stack"><div className="va-bar sales-bar" style={{height:Math.max(8,(row.sales/max)*150)}} title={'Sales '+formatINR(row.sales)}></div><div className="va-bar expense-bar" style={{height:Math.max(6,(row.expenses/max)*150)}} title={'Expenses '+formatINR(row.expenses)}></div></div><span>{row.date.slice(5)}</span></div>})}</div>
               <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Expenses</span></div>
             </div>
-
-            <div className="va-dashboard-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Management snapshot</span><h3>💼 Money & Obligations</h3></div></div>
-              <div className="va-dashboard-list">
-                <div><span>💰 Total Money Today</span><strong>{formatINR(dashboardData.todayCash + dashboardData.todayOnline)}</strong></div>
-                <div><span>📒 Credit Outstanding</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
-                <div><span>👥 Staff Cost in Period</span><strong>{formatINR(dashboardData.staffCost)}</strong></div>
-                <div><span>📊 Period Profit</span><strong className={dashboardData.periodProfit >= 0 ? 'success-text' : 'danger-text'}>{formatINR(dashboardData.periodProfit)}</strong></div>
-              </div>
-              <div className="va-dashboard-actions">
-                <button onClick={()=>setActiveTab('ledger')}>📒 Open Khata</button>
-                <button onClick={()=>setActiveTab('payroll')}>💰 Open Payroll</button>
-                <button onClick={()=>setActiveTab('funds')}>🏦 Manage Funds</button>
-                <button onClick={()=>setActiveTab('history')}>📋 View History</button>
-              </div>
-            </div>
-          </div>
-
-          <div className="va-dashboard-card">
-            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Recent activity</span><h3>🧾 Recent Saved Accounts</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('history')}>View all →</button></div>
-            {dashboardData.recentTransactions.length === 0 ? <div className="va-empty-state">No saved accounts yet.</div> : (
-              <div className="va-recent-table">
-                <div className="va-recent-row head"><span>Date</span><span>Sales</span><span>Expenses</span><span>Cash</span><span>Online</span><span>Status</span></div>
-                {dashboardData.recentTransactions.map(log => {
-                  const sales = (()=>{const s=log.expense_details?.sales||{}; return Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((a,x)=>a+Number(x.amount||0),0)})();
-                  const expenses = (()=>{let total=0;(log.expense_details?.online||[]).forEach(x=>total+=Number(x.amount||0));(log.expense_details?.cash||[]).forEach(x=>{if(x.type!=='Counter'&&x.type!=='Credit'&&x.type!=='Teja'&&x.type!=='Anil')total+=Number(x.amount||0)});(log.expense_details?.staff||[]).forEach(x=>total+=Number(x.amount||0));return total})();
-                  return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(expenses)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>;
-                })}
-              </div>
-            )}
+            <div className="va-dashboard-card"><div className="va-dashboard-card-head"><div><span className="va-eyebrow">Recent activity</span><h3>🧾 Recent Saved Accounts</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('history')}>View all →</button></div>{dashboardData.recentTransactions.length===0 ? <div className="va-empty-state">No saved accounts yet.</div> : <div className="va-recent-table"><div className="va-recent-row head"><span>Date</span><span>Sales</span><span>Expenses</span><span>Cash</span><span>Online</span><span>Status</span></div>{dashboardData.recentTransactions.map(log=>{const sales=(()=>{const s=log.expense_details?.sales||{};return Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((a,x)=>a+Number(x.amount||0),0)})();const expenses=(()=>{let total=0;(log.expense_details?.online||[]).forEach(x=>total+=Number(x.amount||0));(log.expense_details?.cash||[]).forEach(x=>{if(x.type!=='Counter'&&x.type!=='Credit'&&x.type!=='Teja'&&x.type!=='Anil')total+=Number(x.amount||0)});(log.expense_details?.staff||[]).forEach(x=>total+=Number(x.amount||0));return total})();return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(expenses)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>})}</div>}</div>
           </div>
         </div>
       )}
@@ -2640,6 +2599,9 @@ const khataUiStyles = `
 const fundUiStyles = `
 .va-funds-page{max-width:1500px;margin:0 auto}.va-funds-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#164e63);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-funds-hero h2{margin:5px 0;font-size:27px}.va-funds-hero p{margin:0;color:#cbd5e1}.va-fund-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-fund-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #0ea5e9;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-fund-kpis .due{border-top-color:#dc2626}.va-fund-kpis span{font-size:12px;color:#64748b;font-weight:800}.va-fund-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-fund-workspace{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-fund-entry-card,.va-fund-ledger-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-fund-entry-card:first-child{border-top:4px solid #0ea5e9}.va-fund-entry-card:nth-child(2){border-top:4px solid #dc2626}.va-fund-entry-row{display:grid;grid-template-columns:1.3fr .8fr .9fr .7fr .9fr 1fr 38px;gap:7px;margin-bottom:9px;align-items:center}.va-fund-entry-row .va-icon-delete{min-height:42px}.va-fund-ledger-card{margin-bottom:18px}.va-fund-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-fund-table{width:100%;border-collapse:collapse;min-width:850px}.va-fund-table th,.va-fund-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:left}.va-fund-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase}.va-fund-table tbody tr:last-child td{border-bottom:0}.va-fund-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.va-fund-status.open{background:#fff7ed;color:#c2410c}.va-fund-status.overdue{background:#fef2f2;color:#b91c1c}.va-fund-status.closed{background:#ecfdf5;color:#047857}@media(max-width:1050px){.va-fund-workspace{grid-template-columns:1fr}.va-fund-entry-row{grid-template-columns:1fr 1fr 1fr}.va-fund-entry-row .va-icon-delete{width:100%}}@media(max-width:650px){.va-fund-kpis{grid-template-columns:repeat(2,1fr)}.va-funds-hero{display:block}.va-funds-hero button{margin-top:15px;width:100%}.va-fund-entry-row{grid-template-columns:1fr}.va-fund-entry-card,.va-fund-ledger-card{padding:14px}.va-fund-kpis strong{font-size:19px}}
 `;
+
+const dashboardCommandStyles = `
+.va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}`;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
