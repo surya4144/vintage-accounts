@@ -120,26 +120,37 @@ export default function App() {
   const [purchaseItems, setPurchaseItems] = useState([{ id:Date.now(), itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryView, setInventoryView] = useState('overview');
+  const [supplierPayments, setSupplierPayments] = useState([]);
+  const [supplierPaymentDate, setSupplierPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [supplierPaymentSupplierId, setSupplierPaymentSupplierId] = useState('');
+  const [supplierPaymentAmount, setSupplierPaymentAmount] = useState('');
+  const [supplierPaymentMethod, setSupplierPaymentMethod] = useState('Cash');
+  const [supplierPaymentReference, setSupplierPaymentReference] = useState('');
+  const [supplierPaymentNotes, setSupplierPaymentNotes] = useState('');
+  const [selectedSupplierId, setSelectedSupplierId] = useState(null);
 
   
 
 
   const loadInventoryModule = async () => {
     setInventoryLoading(true);
-    const [itemsRes, suppliersRes, purchasesRes, txRes] = await Promise.all([
+    const [itemsRes, suppliersRes, purchasesRes, txRes, supplierPaymentsRes] = await Promise.all([
       supabase.from('inventory_items').select('*').order('name'),
       supabase.from('suppliers').select('*').order('name'),
       supabase.from('purchases').select('*').order('purchase_date', { ascending:false }),
-      supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending:false })
+      supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending:false }),
+      supabase.from('supplier_payments').select('*').order('payment_date', { ascending:false })
     ]);
     if (itemsRes.error) console.error('Inventory items:', itemsRes.error);
     if (suppliersRes.error) console.error('Suppliers:', suppliersRes.error);
     if (purchasesRes.error) console.error('Purchases:', purchasesRes.error);
     if (txRes.error) console.error('Inventory transactions:', txRes.error);
+    if (supplierPaymentsRes.error) console.error('Supplier payments:', supplierPaymentsRes.error);
     setInventoryItems(itemsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setPurchases(purchasesRes.data || []);
     setInventoryTransactions(txRes.data || []);
+    setSupplierPayments(supplierPaymentsRes.data || []);
     setInventoryLoading(false);
   };
 
@@ -1072,6 +1083,101 @@ export default function App() {
     };
   }, [purchases, analyticsStart, analyticsEnd]);
 
+  const supplierPaymentSummary = useMemo(() => {
+    const bySupplier = {};
+    const byDate = {};
+    supplierPayments.forEach(p => {
+      const sid = p.supplier_id ? String(p.supplier_id) : 'name:' + String(p.supplier_name || '').trim().toLowerCase();
+      if (!bySupplier[sid]) bySupplier[sid] = { total:0, cash:0, online:0, count:0, lastPayment:'' };
+      const amount = Number(p.amount || 0);
+      bySupplier[sid].total += amount;
+      bySupplier[sid].count += 1;
+      if (p.payment_method === 'Cash') bySupplier[sid].cash += amount;
+      if (p.payment_method === 'Online') bySupplier[sid].online += amount;
+      if (p.payment_date && (!bySupplier[sid].lastPayment || p.payment_date > bySupplier[sid].lastPayment)) bySupplier[sid].lastPayment = p.payment_date;
+      if (p.payment_date) byDate[p.payment_date] = (byDate[p.payment_date] || 0) + amount;
+    });
+    const paymentsInPeriod = supplierPayments.filter(p => p.payment_date >= analyticsStart && p.payment_date <= analyticsEnd);
+    return {
+      bySupplier,
+      byDate,
+      totalPaid: supplierPayments.reduce((s,p)=>s+Number(p.amount||0),0),
+      periodPaid: paymentsInPeriod.reduce((s,p)=>s+Number(p.amount||0),0),
+      todayPaid: byDate[new Date().toISOString().split('T')[0]] || 0
+    };
+  }, [supplierPayments, analyticsStart, analyticsEnd]);
+
+  const supplierPayables = useMemo(() => {
+    const rows = suppliers.map(s => {
+      const purchasesForSupplier = purchases.filter(p => Number(p.supplier_id) === Number(s.id));
+      const purchaseDue = purchasesForSupplier.reduce((sum,p)=>sum + Number(p.due_amount || 0),0);
+      const payments = supplierPaymentSummary.bySupplier[String(s.id)] || {total:0,cash:0,online:0,count:0,lastPayment:''};
+      const opening = Number(s.opening_balance || 0);
+      const outstanding = Math.max(0, opening + purchaseDue - payments.total);
+      const oldestPurchase = purchasesForSupplier.filter(p=>Number(p.due_amount||0)>0).sort((a,b)=>String(a.purchase_date).localeCompare(String(b.purchase_date)))[0];
+      const oldestDate = oldestPurchase?.purchase_date || (opening > 0 ? String(s.created_at || '').slice(0,10) : '');
+      const days = oldestDate ? Math.max(0, Math.floor((new Date(new Date().toISOString().split('T')[0]) - new Date(oldestDate)) / 86400000)) : 0;
+      return {
+        ...s, purchaseDue, openingBalance:opening, payments:payments.total, paymentCount:payments.count,
+        cashPaid:payments.cash, onlinePaid:payments.online, lastPayment:payments.lastPayment,
+        outstanding, oldestDate, oldestDays:days,
+        status: outstanding <= 0 ? 'Clear' : days >= 30 ? 'Overdue' : 'Due'
+      };
+    }).sort((a,b)=>b.outstanding-a.outstanding || b.oldestDays-a.oldestDays || a.name.localeCompare(b.name));
+    return rows;
+  }, [suppliers, purchases, supplierPaymentSummary]);
+
+  const supplierPayableSummary = useMemo(() => ({
+    totalOutstanding: supplierPayables.reduce((s,r)=>s+r.outstanding,0),
+    suppliersDue: supplierPayables.filter(r=>r.outstanding>0).length,
+    due30: supplierPayables.filter(r=>r.outstanding>0 && r.oldestDays>=30).length,
+    neverPaid: supplierPayables.filter(r=>r.outstanding>0 && !r.lastPayment).length,
+    periodPaid: supplierPaymentSummary.periodPaid
+  }), [supplierPayables, supplierPaymentSummary]);
+
+  const selectedSupplier = useMemo(() => supplierPayables.find(s => String(s.id) === String(selectedSupplierId)) || null, [supplierPayables, selectedSupplierId]);
+
+  const saveSupplierPayment = async () => {
+    const amount = Number(supplierPaymentAmount || 0);
+    const supplier = suppliers.find(s => String(s.id) === String(supplierPaymentSupplierId));
+    if (!supplier) return alert('Select a supplier.');
+    if (amount <= 0) return alert('Enter a payment amount greater than zero.');
+    const payable = supplierPayables.find(s => String(s.id) === String(supplier.id));
+    if (!payable || payable.outstanding <= 0) return alert('This supplier has no outstanding payable balance.');
+    if (amount > payable.outstanding + 0.01) return alert('Payment cannot exceed the supplier’s current outstanding balance.');
+    const { error } = await supabase.from('supplier_payments').insert({
+      supplier_id: supplier.id,
+      supplier_name: supplier.name,
+      payment_date: supplierPaymentDate,
+      amount,
+      payment_method: supplierPaymentMethod,
+      reference_no: supplierPaymentReference.trim(),
+      notes: supplierPaymentNotes.trim(),
+      created_by: session?.user?.id
+    });
+    if (error) return alert('Supplier payment failed: ' + error.message);
+    setSupplierPaymentAmount('');
+    setSupplierPaymentReference('');
+    setSupplierPaymentNotes('');
+    setSelectedSupplierId(supplier.id);
+    await loadInventoryModule();
+    alert('✅ Supplier payment recorded. Payable balance updated.');
+  };
+
+  const supplierStatement = useMemo(() => {
+    if (!selectedSupplier) return [];
+    const purchaseRows = purchases.filter(p => Number(p.supplier_id) === Number(selectedSupplier.id)).map(p => ({
+      date:p.purchase_date, type:'Purchase', reference:p.invoice_no || 'Purchase #' + p.id,
+      amount:Number(p.subtotal||0), due:Number(p.due_amount||0), method:p.payment_method || 'Credit'
+    }));
+    const paymentRows = supplierPayments.filter(p => Number(p.supplier_id) === Number(selectedSupplier.id)).map(p => ({
+      date:p.payment_date, type:'Payment', reference:p.reference_no || 'Supplier Payment #' + p.id,
+      amount:Number(p.amount||0), due:0, method:p.payment_method || 'Cash', notes:p.notes || ''
+    }));
+    return [...purchaseRows, ...paymentRows].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  }, [selectedSupplier, purchases, supplierPayments]);
+
+
   // --- AUTOMATIC ANALYTICS CALCULATOR ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
@@ -1195,7 +1301,8 @@ export default function App() {
     const totalSales = cash + online + credit;
     const totalExpenses = onlineExpense + cashExpense + staff;
     const purchase = purchaseSummary.byDate[log.date] || {total:0,paid:0,due:0,count:0};
-    return { ...log, cash, online, credit, received, totalSales, totalExpenses, purchaseTotal:purchase.total, purchasePaid:purchase.paid, purchaseDue:purchase.due, purchaseCount:purchase.count, staff, transfers, fundsIn, repayments,
+    const supplierPayment = Number(supplierPaymentSummary.byDate[log.date] || 0);
+    return { ...log, cash, online, credit, received, totalSales, totalExpenses, purchaseTotal:purchase.total, purchasePaid:purchase.paid, purchaseDue:purchase.due, purchaseCount:purchase.count, supplierPayment, staff, transfers, fundsIn, repayments,
       counts: {
         credit: (log.expense_details?.credit_sales || []).length,
         received: (log.expense_details?.credit_received || []).length,
@@ -1203,10 +1310,11 @@ export default function App() {
         staff: (log.expense_details?.staff || []).length,
         transfers: (log.expense_details?.account_transfers || []).length,
         funds: (log.expense_details?.external_funds || []).length,
-        repayments: (log.expense_details?.fund_repayments || []).length
+        repayments: (log.expense_details?.fund_repayments || []).length,
+        supplierPayments: supplierPayments.filter(p=>p.payment_date===log.date).length
       }
     };
-  }), [historyLogs, purchaseSummary]);
+  }), [historyLogs, purchaseSummary, supplierPaymentSummary, supplierPayments]);
 
   const filteredHistoryRows = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
@@ -1218,6 +1326,7 @@ export default function App() {
           sales: row.totalSales > 0,
           expenses: row.totalExpenses > 0 || row.purchaseTotal > 0,
           purchases: row.purchaseTotal > 0,
+          supplierPayments: row.supplierPayment > 0,
           credit: row.credit > 0 || row.received > 0,
           staff: row.staff > 0,
           transfers: row.transfers > 0,
@@ -1282,9 +1391,9 @@ export default function App() {
       creditOutstanding: Math.max(0, creditGiven - creditReceived),
       staffCost,
       salesByDay,
-      recentTransactions: historyLogs.slice(0, 6), supplierDue: purchaseSummary.totalDue
+      recentTransactions: historyLogs.slice(0, 6), supplierDue: supplierPayableSummary.totalOutstanding
     };
-  }, [historyLogs, analyticsStart, analyticsEnd, purchaseSummary]);
+  }, [historyLogs, analyticsStart, analyticsEnd, purchaseSummary, supplierPayableSummary]);
 
   const businessAlerts = useMemo(() => {
     const alerts = [];
@@ -1306,7 +1415,8 @@ export default function App() {
       });
     }
 
-    if (purchaseSummary.totalDue > 0) alerts.push({type:'warning', icon:'📦', title:'Supplier purchase dues pending', text:`${formatINR(purchaseSummary.totalDue)} is currently payable from recorded purchases.`, action:'inventory'});
+    if (supplierPayableSummary.totalOutstanding > 0) alerts.push({type:'warning', icon:'📦', title:'Supplier payments pending', text:`${formatINR(supplierPayableSummary.totalOutstanding)} is currently payable across ${supplierPayableSummary.suppliersDue} supplier${supplierPayableSummary.suppliersDue===1?'':'s'}.`, action:'inventory'});
+    if (supplierPayableSummary.due30 > 0) alerts.push({type:'danger', icon:'⏰', title:'Supplier dues are aging', text:`${supplierPayableSummary.due30} supplier${supplierPayableSummary.due30===1?' has':'s have'} balances that are 30+ days old.`, action:'inventory'});
 
     const payrollDue = payrollRows.reduce((sum, r) => sum + Number(r.totalBalanceToPay || 0), 0);
     if (payrollDue > 0) {
@@ -1343,7 +1453,7 @@ export default function App() {
     }
 
     return alerts.slice(0, 6);
-  }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs, purchaseSummary]);
+  }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs, purchaseSummary, supplierPayableSummary]);
 
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
@@ -1802,7 +1912,7 @@ export default function App() {
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
         <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>
-      <style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
+      <style>{payablesUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
@@ -2029,7 +2139,7 @@ export default function App() {
             <div><span>Inventory Items</span><strong>{inventoryItems.length}</strong><small>Active stock records</small></div>
             <div><span>Stock Value</span><strong>{formatINR(inventoryItems.reduce((s,i)=>s+Number(i.current_stock||0)*Number(i.unit_cost||0),0))}</strong><small>Estimated current value</small></div>
             <div className="warning"><span>Reorder Alerts</span><strong>{inventoryItems.filter(i=>Number(i.current_stock||0)<=Number(i.reorder_level||0)).length}</strong><small>At or below reorder level</small></div>
-            <div className="danger"><span>Purchase Dues</span><strong>{formatINR(purchases.reduce((s,p)=>s+Number(p.due_amount||0),0))}</strong><small>Supplier credit outstanding</small></div>
+            <div className="danger"><span>Supplier Payables</span><strong>{formatINR(supplierPayableSummary.totalOutstanding)}</strong><small>After recorded settlements</small></div>
           </div>
 
           <div className="va-inventory-tabs">
@@ -2073,13 +2183,56 @@ export default function App() {
             <button className="va-save-purchase" onClick={savePurchase}>💾 Save Purchase & Update Stock</button>
           </div>}
 
-          {inventoryView === 'suppliers' && <div className="va-inventory-card">
-            <div className="va-inventory-card-head"><div><h3>Supplier Directory</h3><p>Manage supplier relationships and outstanding purchase dues.</p></div></div>
-            <div className="va-supplier-grid">{suppliers.map(s=>{
-              const due=purchases.filter(p=>Number(p.supplier_id)===Number(s.id)).reduce((n,p)=>n+Number(p.due_amount||0),0);
-              return <div className="va-supplier-card" key={s.id}><div className="va-supplier-avatar">{s.name.slice(0,2).toUpperCase()}</div><div><strong>{s.name}</strong><small>{s.category||'General supplier'} {s.phone?'• '+s.phone:''}</small></div><b className={due?'due':''}>{due?formatINR(due):'Clear'}</b></div>
-            })}{!suppliers.length&&<div className="va-inventory-empty">No suppliers added yet.</div>}</div>
+          {inventoryView === 'suppliers' && <div className="va-payables-page">
+            <div className="va-payables-hero">
+              <div><span className="va-eyebrow">SUPPLIER FINANCE • PAYABLES CONTROL</span><h2>🤝 Supplier Payables</h2><p>Track what each supplier is owed, record settlements, and keep purchase history separate from actual settlement cash flow.</p></div>
+              <button className="va-payables-primary" onClick={()=>document.getElementById('supplier-payment-form')?.scrollIntoView({behavior:'smooth'})}>＋ Pay Supplier</button>
+            </div>
+
+            <div className="va-payables-kpis">
+              <div><span>Total Payable</span><strong>{formatINR(supplierPayableSummary.totalOutstanding)}</strong><small>Current supplier balance</small></div>
+              <div><span>Suppliers With Due</span><strong>{supplierPayableSummary.suppliersDue}</strong><small>Open payable accounts</small></div>
+              <div className="danger"><span>30+ Day Due</span><strong>{supplierPayableSummary.due30}</strong><small>Aging needs attention</small></div>
+              <div className="success"><span>Payments This Period</span><strong>{formatINR(supplierPayableSummary.periodPaid)}</strong><small>Settlement cash/online outflow</small></div>
+            </div>
+
+            <div className="va-payables-grid">
+              <section className="va-payables-card">
+                <div className="va-payables-head"><div><h3>Supplier Ledger</h3><p>Opening balance + credit purchases − supplier settlements.</p></div><span>{supplierPayables.length} suppliers</span></div>
+                <div className="va-payables-table-wrap"><table className="va-payables-table"><thead><tr><th>Supplier</th><th>Purchases Due</th><th>Payments</th><th>Outstanding</th><th>Last Payment</th><th>Age</th><th>Status</th></tr></thead><tbody>
+                  {supplierPayables.length===0 ? <tr><td colSpan="7" className="va-inventory-empty">No suppliers yet.</td></tr> : supplierPayables.map(s=><tr key={s.id} className={String(selectedSupplierId)===String(s.id)?'selected':''} onClick={()=>setSelectedSupplierId(s.id)}>
+                    <td><strong>{s.name}</strong><small>{s.phone || s.category || 'Supplier'}</small></td>
+                    <td>{formatINR(s.purchaseDue)}</td><td>{formatINR(s.payments)}</td><td className={s.outstanding>0?'danger-text':'success-text'}><strong>{formatINR(s.outstanding)}</strong></td><td>{s.lastPayment || 'Never'}</td><td>{s.outstanding>0 ? s.oldestDays+'d' : '—'}</td><td><span className={'va-payable-status '+(s.status==='Overdue'?'overdue':s.status==='Clear'?'clear':'due')}>{s.status}</span></td>
+                  </tr>)}
+                </tbody></table></div>
+              </section>
+
+              <section className="va-payables-card" id="supplier-payment-form">
+                <div className="va-payables-head"><div><h3>💸 Pay Supplier</h3><p>Record a partial or full settlement against the current payable.</p></div></div>
+                <div className="va-pay-form-grid">
+                  <label>Supplier<select value={supplierPaymentSupplierId} onChange={e=>setSupplierPaymentSupplierId(e.target.value)}><option value="">Select supplier</option>{supplierPayables.filter(s=>s.outstanding>0).map(s=><option key={s.id} value={s.id}>{s.name} — {formatINR(s.outstanding)} due</option>)}</select></label>
+                  <label>Date<input type="date" value={supplierPaymentDate} onChange={e=>setSupplierPaymentDate(e.target.value)}/></label>
+                  <label>Amount<input type="number" min="0.01" step="0.01" value={supplierPaymentAmount} onChange={e=>setSupplierPaymentAmount(e.target.value)} placeholder="Amount ₹"/></label>
+                  <label>Method<select value={supplierPaymentMethod} onChange={e=>setSupplierPaymentMethod(e.target.value)}><option>Cash</option><option>Online</option></select></label>
+                  <label>Reference<input value={supplierPaymentReference} onChange={e=>setSupplierPaymentReference(e.target.value)} placeholder="UTR / receipt no."/></label>
+                </div>
+                {supplierPaymentSupplierId && <div className="va-payable-preview"><span>Current outstanding</span><strong>{formatINR((supplierPayables.find(s=>String(s.id)===String(supplierPaymentSupplierId))||{}).outstanding||0)}</strong></div>}
+                <textarea value={supplierPaymentNotes} onChange={e=>setSupplierPaymentNotes(e.target.value)} placeholder="Payment notes..." />
+                <button className="va-payables-save" onClick={saveSupplierPayment}>💾 Record Supplier Payment</button>
+                <div className="va-payables-note">Payments are stored separately from the original purchase payment method. This preserves accurate purchase-channel reporting while updating the supplier’s payable balance.</div>
+              </section>
+            </div>
+
+            {selectedSupplier && <section className="va-payables-card">
+              <div className="va-payables-head"><div><span className="va-eyebrow">Supplier statement</span><h3>{selectedSupplier.name}</h3><p>Opening {formatINR(selectedSupplier.openingBalance)} • Outstanding {formatINR(selectedSupplier.outstanding)} • Last payment {selectedSupplier.lastPayment || 'Never'}</p></div><div className="va-payable-actions"><button onClick={()=>{setSupplierPaymentSupplierId(selectedSupplier.id);document.getElementById('supplier-payment-form')?.scrollIntoView({behavior:'smooth'})}} className="va-payables-secondary">Pay This Supplier</button><button onClick={()=>setSelectedSupplierId(null)} className="va-payables-secondary">Close</button></div></div>
+              <div className="va-payables-table-wrap"><table className="va-payables-table"><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Method</th><th>Amount</th><th>Balance Impact</th></tr></thead><tbody>
+                {supplierStatement.length===0 ? <tr><td colSpan="6" className="va-inventory-empty">No supplier activity yet.</td></tr> : supplierStatement.map((r,i)=><tr key={i}><td>{r.date}</td><td><span className={'va-payable-status '+(r.type==='Payment'?'clear':'due')}>{r.type}</span></td><td>{r.reference}</td><td>{r.method}</td><td>{formatINR(r.amount)}</td><td className={r.type==='Payment'?'success-text':'danger-text'}>{r.type==='Payment'?'− ':'+ '}{formatINR(r.type==='Payment'?r.amount:r.due)}</td></tr>)}
+              </tbody></table></div>
+            </section>}
+
+            <div className="va-payables-note">💡 <strong>Settlement rule:</strong> Credit purchases create supplier payables. Cash/Online purchases are already settled at purchase time. A supplier payment never gets reclassified as a new purchase or operating expense.</div>
           </div>}
+
         </div>
       )}
 
@@ -2361,7 +2514,7 @@ export default function App() {
               <label>From<input type="date" value={historyStart} onChange={e=>setHistoryStart(e.target.value)} /></label>
               <label>To<input type="date" value={historyEnd} onChange={e=>setHistoryEnd(e.target.value)} /></label>
               <label>Transaction Type<select value={historyType} onChange={e=>setHistoryType(e.target.value)}>
-                <option value="all">All records</option><option value="sales">Sales</option><option value="expenses">Expenses</option><option value="purchases">Purchases</option><option value="credit">Credit / Collections</option><option value="staff">Staff payments</option><option value="transfers">Transfers</option><option value="funds">Funds / Repayments</option>
+                <option value="all">All records</option><option value="sales">Sales</option><option value="expenses">Expenses</option><option value="purchases">Purchases</option><option value="supplierPayments">Supplier Payments</option><option value="credit">Credit / Collections</option><option value="staff">Staff payments</option><option value="transfers">Transfers</option><option value="funds">Funds / Repayments</option>
               </select></label>
               <button onClick={()=>{setHistorySearch('');setHistoryStart('');setHistoryEnd('');setHistoryType('all');setSelectedHistoryId(null)}} className="va-history-clear">Clear Filters</button>
             </div>
@@ -2376,13 +2529,14 @@ export default function App() {
                     <tr className={selectedHistoryId===row.id?'selected':''} onClick={()=>setSelectedHistoryId(selectedHistoryId===row.id?null:row.id)}>
                       <td><strong>{row.date}</strong><small>{row.id ? 'Saved record' : 'Record'}</small></td>
                       <td className="history-sales">{formatINR(row.totalSales)}</td><td className="history-expense">{formatINR(row.totalExpenses)}</td>
-                      <td>{formatINR(row.purchaseTotal)}</td><td>{formatINR(row.total_cash_in_hand)}</td><td>{formatINR(row.total_online_balance)}</td><td>{formatINR(row.credit)}</td><td>{formatINR(row.staff)}</td><td>⌄</td>
+                      <td>{formatINR(row.purchaseTotal)}</td><td>{formatINR(row.supplierPayment)}</td><td>{formatINR(row.total_cash_in_hand)}</td><td>{formatINR(row.total_online_balance)}</td><td>{formatINR(row.credit)}</td><td>{formatINR(row.staff)}</td><td>⌄</td>
                     </tr>
-                    {selectedHistoryId===row.id && <tr className="va-history-detail-row"><td colSpan="9">
+                    {selectedHistoryId===row.id && <tr className="va-history-detail-row"><td colSpan="10">
                       <div className="va-history-detail">
                         <div><span>Sales</span><strong>{formatINR(row.totalSales)}</strong><small>Cash {formatINR(row.cash)} • Online {formatINR(row.online)} • Credit {formatINR(row.credit)}</small></div>
                         <div><span>Expenses</span><strong>{formatINR(row.totalExpenses)}</strong><small>Operating + staff entries</small></div>
                         <div><span>Purchases</span><strong>{formatINR(row.purchaseTotal)}</strong><small>{row.purchaseCount} purchase record{row.purchaseCount===1?'':'s'} • Paid {formatINR(row.purchasePaid)} • Supplier due {formatINR(row.purchaseDue)}</small></div>
+                        <div><span>Supplier Payments</span><strong>{formatINR(row.supplierPayment)}</strong><small>{row.counts.supplierPayments} settlement payment{row.counts.supplierPayments===1?'':'s'}</small></div>
                         <div><span>Credit Activity</span><strong>{formatINR(row.received)} received</strong><small>{row.counts.credit} credit sales • {row.counts.received} collections</small></div>
                         <div><span>Staff</span><strong>{formatINR(row.staff)}</strong><small>{row.counts.staff} payment entries</small></div>
                         <div><span>Money Movement</span><strong>{formatINR(row.transfers)}</strong><small>{row.counts.transfers} transfers • Funds in {formatINR(row.fundsIn)} • Repayments {formatINR(row.repayments)}</small></div>
@@ -2905,6 +3059,9 @@ const dashboardCommandStyles = `
 .va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}`;
 
 
+const payablesUiStyles = `
+.va-payables-page{max-width:1500px;margin:0 auto}.va-payables-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#14532d 70%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-payables-hero h2{margin:6px 0;font-size:28px}.va-payables-hero p{margin:0;color:#cbd5e1;max-width:760px;font-size:13px}.va-payables-primary,.va-payables-save,.va-payables-secondary{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer}.va-payables-primary{background:#10b981;color:#fff}.va-payables-save{width:100%;margin-top:10px;background:#059669;color:#fff}.va-payables-secondary{background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe}.va-payables-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-payables-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-payables-kpis>div:nth-child(2){border-top-color:#6366f1}.va-payables-kpis>div.danger{border-top-color:#ef4444}.va-payables-kpis>div.success{border-top-color:#10b981}.va-payables-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-payables-kpis strong{display:block;color:#0f172a;font-size:22px;margin-top:6px}.va-payables-kpis small{display:block;color:#94a3b8;margin-top:3px;font-size:10px}.va-payables-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px;margin-bottom:18px}.va-payables-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-payables-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-payables-head h3{margin:3px 0;font-size:19px}.va-payables-head p{margin:0;color:#64748b;font-size:12px}.va-payables-head>span{padding:7px 10px;background:#f1f5f9;border-radius:999px;font-size:11px;font-weight:900;color:#475569}.va-payables-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payables-table{width:100%;border-collapse:collapse;min-width:850px}.va-payables-table th,.va-payables-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:left;font-size:11px}.va-payables-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-payables-table tbody tr{cursor:pointer}.va-payables-table tbody tr:hover,.va-payables-table tbody tr.selected{background:#f0fdf4}.va-payables-table td small{display:block;color:#94a3b8;margin-top:3px;font-size:9px}.va-payable-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.va-payable-status.due{background:#fff7ed;color:#c2410c}.va-payable-status.overdue{background:#fef2f2;color:#b91c1c}.va-payable-status.clear{background:#ecfdf5;color:#047857}.va-pay-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-pay-form-grid label{font-size:11px;font-weight:900;color:#475569}.va-pay-form-grid input,.va-pay-form-grid select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.va-payables-card textarea{width:100%;box-sizing:border-box;margin-top:12px;min-height:70px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-payable-preview{display:flex;justify-content:space-between;align-items:center;padding:12px;margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px}.va-payable-preview strong{font-size:20px;color:#047857}.va-payable-actions{display:flex;gap:7px;flex-wrap:wrap}.va-payables-note{padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px;color:#64748b;font-size:11px;line-height:1.5;margin-top:12px}@media(max-width:1100px){.va-payables-grid{grid-template-columns:1fr}.va-payables-kpis{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.va-payables-hero{display:block;padding:18px}.va-payables-primary{margin-top:14px;width:100%}.va-payables-kpis{grid-template-columns:1fr 1fr}.va-payables-card{padding:14px}.va-pay-form-grid{grid-template-columns:1fr}.va-payables-actions{margin-top:12px}}@media(max-width:430px){.va-payables-kpis{grid-template-columns:1fr}}
+`;
 const inventoryUiStyles = `
 .va-inventory-page{max-width:1500px;margin:0 auto}.va-inventory-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#0f172a,#14532d);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-inventory-hero h2{margin:6px 0;font-size:28px}.va-inventory-hero p{margin:0;color:#cbd5e1;font-size:13px}.va-inventory-hero-actions{display:flex;gap:8px}.va-inventory-hero-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;background:#10b981;color:#fff}.va-inventory-hero-actions button+button{background:#fff;color:#14532d}.va-inventory-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-inventory-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #10b981;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-inventory-kpis .warning{border-top-color:#f59e0b}.va-inventory-kpis .danger{border-top-color:#ef4444}.va-inventory-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-inventory-kpis strong{display:block;color:#0f172a;font-size:22px;margin-top:6px}.va-inventory-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-inventory-tabs{display:flex;gap:7px;margin-bottom:18px}.va-inventory-tabs button{border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:10px 13px;font-weight:900;color:#475569;cursor:pointer}.va-inventory-tabs button.active{background:#0f766e;color:#fff;border-color:#0f766e}.va-inventory-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px}.va-inventory-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-inventory-card-head{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:14px}.va-inventory-card-head h3{margin:0;font-size:19px}.va-inventory-card-head p{margin:4px 0 0;color:#64748b;font-size:12px}.va-inventory-card-head input{max-width:260px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-stock-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-stock-table{width:100%;border-collapse:collapse;min-width:780px}.va-stock-table th,.va-stock-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;font-size:11px}.va-stock-table th{background:#f8fafc;color:#475569;text-transform:uppercase;font-size:9px}.va-stock-table td small{display:block;color:#94a3b8;margin-top:3px}.va-stock-table .low-stock{color:#b91c1c;font-weight:900}.va-stock-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.va-stock-status.low{background:#fef2f2;color:#b91c1c}.va-stock-status.ok{background:#ecfdf5;color:#047857}.va-mini-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:7px;padding:6px 8px;font-size:9px;font-weight:900;cursor:pointer;margin-right:4px}.va-mini-btn.danger{background:#fff1f2;color:#be123c;border-color:#fecdd3}.va-purchase-list{display:flex;flex-direction:column;gap:7px}.va-purchase-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border:1px solid #e2e8f0;border-radius:10px}.va-purchase-row strong{font-size:11px}.va-purchase-row small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-purchase-row small.due{color:#be123c;font-weight:900}.va-purchase-form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.va-purchase-form-grid label{font-size:11px;font-weight:900;color:#475569}.va-purchase-form-grid input,.va-purchase-form-grid select,.va-purchase-lines input,.va-purchase-lines select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.va-purchase-lines{margin-top:16px}.va-purchase-line{display:grid;grid-template-columns:2fr .8fr 1fr .6fr 1fr 36px;gap:8px;align-items:center;margin-bottom:8px}.va-purchase-line span{font-size:11px;color:#64748b}.va-purchase-line strong{text-align:right}.va-add-line{border:1px dashed #94a3b8;background:#f8fafc;border-radius:9px;padding:9px 12px;font-weight:900;color:#475569;cursor:pointer}.va-purchase-total{display:flex;justify-content:space-between;align-items:center;padding:15px;margin-top:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px}.va-purchase-total strong{font-size:22px;color:#047857}.va-inventory-card textarea{width:100%;box-sizing:border-box;margin-top:12px;min-height:70px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-save-purchase{width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;background:#059669;color:#fff;font-weight:900;cursor:pointer}.va-supplier-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.va-supplier-card{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:12px;border:1px solid #e2e8f0;border-radius:11px}.va-supplier-avatar{width:36px;height:36px;border-radius:10px;background:#dcfce7;color:#166534;display:grid;place-items:center;font-weight:900;font-size:10px}.va-supplier-card strong{display:block;font-size:12px}.va-supplier-card small{display:block;color:#64748b;font-size:9px;margin-top:3px}.va-supplier-card b{font-size:11px;color:#059669}.va-supplier-card b.due{color:#be123c}.va-inventory-empty{padding:30px;text-align:center;color:#64748b}@media(max-width:1100px){.va-inventory-grid{grid-template-columns:1fr}.va-inventory-kpis{grid-template-columns:repeat(2,1fr)}.va-purchase-form-grid{grid-template-columns:1fr 1fr}}@media(max-width:700px){.va-inventory-hero{display:block}.va-inventory-hero-actions{margin-top:15px}.va-inventory-hero-actions button{flex:1}.va-inventory-tabs{overflow:auto}.va-inventory-card{padding:14px}.va-inventory-card-head{display:block}.va-inventory-card-head input{max-width:none;width:100%;margin-top:10px;box-sizing:border-box}.va-purchase-form-grid{grid-template-columns:1fr}.va-purchase-line{grid-template-columns:1fr 1fr}.va-purchase-line span,.va-purchase-line strong{display:none}.va-supplier-grid{grid-template-columns:1fr}}@media(max-width:450px){.va-inventory-kpis{grid-template-columns:1fr}.va-inventory-hero{padding:18px}}
 `;
