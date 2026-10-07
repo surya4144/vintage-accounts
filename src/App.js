@@ -1317,31 +1317,49 @@ export default function App() {
             {dynamicCategories.map((cat, i) => <option key={i} value={cat} />)}
           </datalist>
 
-          <div style={flexRow}>
-            {/* UPDATED FETCH BUTTON FEATURE */}
-            <div style={{...cardStyle, flex: 1, border: '2px solid #3b82f6'}}>
-              <h3 style={{ color: '#1d4ed8', marginTop: 0 }}>📅 Select Date</h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input type="date" value={dateSelection} onChange={e => setDateSelection(e.target.value)} style={{...inputStyle, borderColor: '#3b82f6', fontWeight: 'bold', flex: 1}}/>
-                {/* true flag sent to explicitly bypass draft protection */}
-                <button onClick={() => handleFetchData(dateSelection, true)} disabled={isFetching} style={{...btnStyle, backgroundColor: isFetching ? '#9ca3af' : '#2563eb'}}>
+          <div className="va-daily-toolbar">
+            <div className="va-date-card">
+              <div>
+                <span className="va-eyebrow">Accounting date</span>
+                <h3>📅 {dateSelection}</h3>
+                <p>{date === dateSelection ? 'Ready to edit today’s accounts.' : 'Select Fetch to load this date.'}</p>
+              </div>
+              <div className="va-date-actions">
+                <input type="date" value={dateSelection} onChange={e => setDateSelection(e.target.value)} style={inputStyle}/>
+                <button onClick={() => handleFetchData(dateSelection, true)} disabled={isFetching} style={{...btnStyle, backgroundColor: isFetching ? '#94a3b8' : '#2563eb'}}>
                   {isFetching ? '⏳ Fetching...' : '📥 Fetch'}
                 </button>
               </div>
-              {date !== dateSelection && !isFetching && <p style={{color: '#ef4444', fontSize: '12px', marginTop: '5px', marginBottom: 0}}>Click Fetch to load selected date!</p>}
             </div>
-            
-            <div style={{...cardStyle, flex: 1}}><h3>Yesterday</h3><div style={flexRow}><label>Cash: <input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label><label>Online: <input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label></div></div>
-            <div style={{...cardStyle, flex: 1}}>
-              <h3>Today Sales</h3>
-              <div style={flexRow}>
-                <label style={{position: 'relative'}}>Cash (Net Box): <input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/>
-                  {totalCounterExpenses > 0 && <span style={{fontSize: '12px', color: '#059669', position: 'absolute', bottom: '-20px', left: 0}}>True Gross: ₹{grossCashSale}</span>}
-                </label>
-                <label>Online: <input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
-                <label>Parcel Counter Cash: <input type="number" value={parcelCounterCash} onChange={e => setParcelCounterCash(Number(e.target.value))} style={inputStyle}/></label>
-                <label>Parcel Counter Online: <input type="number" value={parcelCounterOnline} onChange={e => setParcelCounterOnline(Number(e.target.value))} style={inputStyle}/></label>
+            <div className="va-yesterday-card">
+              <span className="va-eyebrow">Opening balances</span>
+              <div className="va-opening-grid">
+                <label>Cash<input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Online<input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Available Cash<input type="number" value={yesterdayAvailableCash} onChange={e => setYesterdayAvailableCash(Number(e.target.value))} style={inputStyle}/></label>
               </div>
+            </div>
+          </div>
+
+          <div className="va-kpi-grid">
+            <div className="va-kpi va-kpi-sales"><span>Today Sales</span><strong>{formatINR(trueGrossSale)}</strong><small>Cash + online + credit</small></div>
+            <div className="va-kpi va-kpi-cash"><span>Cash In Hand</span><strong>{formatINR(totalCashInHand)}</strong><small>Expected physical cash</small></div>
+            <div className="va-kpi va-kpi-online"><span>Online Balance</span><strong>{formatINR(totalOnlineBalance)}</strong><small>Online funds after payments</small></div>
+            <div className="va-kpi va-kpi-expense"><span>Total Expenses</span><strong>{formatINR(totalOperatingExpenses)}</strong><small>Operating + staff costs</small></div>
+            <div className="va-kpi va-kpi-available"><span>Available Cash</span><strong>{formatINR(availableCashBalance)}</strong><small>After available-cash expenses</small></div>
+            <div className="va-kpi va-kpi-profit"><span>Est. Profit</span><strong>{formatINR(estimatedProfit)}</strong><small>Daily estimate</small></div>
+          </div>
+
+          <div className="va-sales-panel">
+            <div className="va-section-heading">
+              <div><span className="va-eyebrow">Step 1</span><h3>💰 Record Today’s Sales</h3><p>Enter the final amounts received by payment channel.</p></div>
+              <div className="va-mini-total">Gross {formatINR(trueGrossSale)}</div>
+            </div>
+            <div className="va-sales-grid">
+              <label>Cash — Net Box<input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/>{totalCounterExpenses > 0 && <small>True gross: {formatINR(grossCashSale)}</small>}</label>
+              <label>Online<input type="number" value={onlineSale} onChange={e => setOnlineSale(Number(e.target.value))} style={inputStyle}/></label>
+              <label>Parcel Counter — Cash<input type="number" value={parcelCounterCash} onChange={e => setParcelCounterCash(Number(e.target.value))} style={inputStyle}/></label>
+              <label>Parcel Counter — Online<input type="number" value={parcelCounterOnline} onChange={e => setParcelCounterOnline(Number(e.target.value))} style={inputStyle}/></label>
             </div>
           </div>
 
@@ -1838,6 +1856,26 @@ export default function App() {
     </>
   );
 }
+
+const dailyUiStyles = `
+.va-daily-toolbar{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;margin-bottom:18px}
+.va-date-card,.va-yesterday-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.06)}
+.va-date-card{display:flex;justify-content:space-between;gap:18px;align-items:center;border-left:4px solid #2563eb}
+.va-date-card h3{margin:5px 0;font-size:20px}.va-date-card p{margin:0;color:#64748b;font-size:13px}
+.va-date-actions{display:flex;gap:8px;align-items:center;min-width:280px}.va-date-actions input{flex:1}
+.va-eyebrow{display:block;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800;color:#64748b}
+.va-opening-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.va-opening-grid label,.va-sales-grid label{font-size:12px;font-weight:800;color:#475569}.va-opening-grid input,.va-sales-grid input{margin-top:6px}
+.va-kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.va-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;min-height:92px;box-shadow:0 6px 20px rgba(15,23,42,.05);position:relative;overflow:hidden}
+.va-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-kpi strong{display:block;font-size:21px;margin-top:8px;color:#0f172a}.va-kpi small{display:block;color:#94a3b8;margin-top:4px;font-size:11px}
+.va-kpi-sales{border-top:4px solid #2563eb}.va-kpi-cash{border-top:4px solid #16a34a}.va-kpi-online{border-top:4px solid #0ea5e9}.va-kpi-expense{border-top:4px solid #ef4444}.va-kpi-available{border-top:4px solid #8b5cf6}.va-kpi-profit{border-top:4px solid #f59e0b}
+.va-sales-panel{background:#fff;border:1px solid #dbeafe;border-radius:18px;padding:20px;margin-bottom:20px;box-shadow:0 8px 25px rgba(15,23,42,.06)}
+.va-section-heading{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:16px}.va-section-heading h3{margin:4px 0;font-size:19px}.va-section-heading p{margin:0;color:#64748b;font-size:13px}.va-mini-total{padding:9px 12px;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-weight:800}
+.va-sales-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.va-sales-grid small{display:block;color:#059669;margin-top:4px}
+@media(max-width:1100px){.va-kpi-grid{grid-template-columns:repeat(3,1fr)}.va-daily-toolbar{grid-template-columns:1fr}.va-sales-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.va-kpi-grid{grid-template-columns:repeat(2,1fr)}.va-date-card{display:block}.va-date-actions{min-width:0;margin-top:14px}.va-opening-grid,.va-sales-grid{grid-template-columns:1fr}.va-kpi strong{font-size:18px}.va-section-heading{display:block}.va-mini-total{display:inline-block;margin-top:10px}}
+`;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
