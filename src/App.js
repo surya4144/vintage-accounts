@@ -432,7 +432,7 @@ export default function App() {
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalAvailableCashExpenses = cashExpenses.filter(exp => exp.type === 'Available Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalAvailableCashExpenses = cashExpenses.filter(exp => exp.type === 'Available Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCashExpenses = totalTillCashExpenses + totalAvailableCashExpenses;
   const availableCashBalance = Number(yesterdayAvailableCash || 0) + Number(cashTakenToAvailable || 0) - totalAvailableCashExpenses;
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
