@@ -1229,25 +1229,87 @@ export default function App() {
 
   // --- MAIN APP UI ---
   return (
-    <div style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: '24px 16px', maxWidth: '1180px', margin: '0 auto', background: 'linear-gradient(180deg,#f8fafc 0%,#eef2ff 100%)', minHeight: '100vh' }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', backgroundColor: 'white', padding: '15px 20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Logo" style={{ width: '45px' }}/>
-          <h1 style={{ color: '#1f2937', margin: 0 }}>Vintage Accounts</h1>
-        </div>
-        <button onClick={handleLogout} style={{ padding: '8px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 Log Out</button>
-      </div>
+    <>
+      <style>{`
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f5f7fb; }
+        .va-shell { min-height: 100vh; display: flex; background: #f5f7fb; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .va-sidebar { width: 245px; min-width: 245px; background: #111827; color: white; padding: 22px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
+        .va-brand { display:flex; align-items:center; gap:11px; padding: 8px 10px 24px; border-bottom:1px solid rgba(255,255,255,.1); margin-bottom:18px; }
+        .va-brand img { width:40px; height:40px; border-radius:10px; background:white; padding:5px; }
+        .va-brand-title { font-size:18px; font-weight:900; line-height:1.1; }
+        .va-brand-sub { font-size:10px; color:#9ca3af; margin-top:4px; letter-spacing:.08em; text-transform:uppercase; }
+        .va-nav { display:flex; flex-direction:column; gap:6px; }
+        .va-nav button { width:100%; text-align:left; border:0; background:transparent; color:#cbd5e1; padding:12px 13px; border-radius:10px; cursor:pointer; font-weight:700; font-size:14px; transition:.18s; }
+        .va-nav button:hover { background:#1f2937; color:white; }
+        .va-nav button.active { background:#2563eb; color:white; box-shadow:0 7px 18px rgba(37,99,235,.28); }
+        .va-logout { margin-top:auto; width:100%; border:0; border-radius:10px; padding:11px; background:#1f2937; color:#fca5a5; cursor:pointer; font-weight:800; }
+        .va-main { flex:1; min-width:0; padding:24px; }
+        .va-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:20px; }
+        .va-page-title { margin:0; font-size:25px; font-weight:900; color:#111827; }
+        .va-page-subtitle { margin:5px 0 0; color:#64748b; font-size:13px; }
+        .va-status { display:flex; align-items:center; gap:8px; background:white; border:1px solid #e5e7eb; padding:9px 12px; border-radius:10px; font-size:12px; color:#475569; box-shadow:0 4px 14px rgba(15,23,42,.04); }
+        .va-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; }
+        .va-mobile-nav { display:none; }
+        @media (max-width: 850px) {
+          .va-shell { display:block; }
+          .va-sidebar { width:100%; min-width:0; height:auto; position:relative; padding:12px; }
+          .va-brand { padding:5px 8px 12px; margin-bottom:10px; }
+          .va-nav { display:grid; grid-template-columns:repeat(4,1fr); }
+          .va-nav button { text-align:center; padding:9px 5px; font-size:12px; }
+          .va-logout { margin-top:10px; }
+          .va-main { padding:14px; }
+          .va-topbar { align-items:flex-start; }
+          .va-page-title { font-size:21px; }
+        }
+        @media (max-width: 520px) {
+          .va-nav { grid-template-columns:repeat(2,1fr); }
+          .va-status { display:none; }
+          .va-main { padding:10px; }
+        }
+      `}</style>
+      <div className="va-shell">
+        <aside className="va-sidebar">
+          <div className="va-brand">
+            <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Accounts"/>
+            <div>
+              <div className="va-brand-title">Vintage Accounts</div>
+              <div className="va-brand-sub">Restaurant Finance</div>
+            </div>
+          </div>
+          <div className="va-nav">
+            {[
+              ['daily','📝','Daily Entry'],
+              ['ledger','📒','Customer Khata'],
+              ['history','📋','History'],
+              ['analytics','📈','Analytics'],
+              ['attendance','👥','Attendance'],
+              ['payroll','💰','Employee Payroll'],
+              ['tasks','🔔','Reminders']
+            ].map(([tab,icon,label]) => (
+              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
+                {icon} &nbsp;{label}
+              </button>
+            ))}
+          </div>
+          <button className="va-logout" onClick={handleLogout}>🚪 Log Out</button>
+        </aside>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <button onClick={() => setActiveTab('daily')} style={{ ...tabStyle, backgroundColor: activeTab === 'daily' ? '#10b981' : '#e5e7eb', color: activeTab === 'daily' ? 'white' : 'black' }}>📝 Daily Entry</button>
-        <button onClick={() => setActiveTab('ledger')} style={{ ...tabStyle, backgroundColor: activeTab === 'ledger' ? '#ec4899' : '#e5e7eb', color: activeTab === 'ledger' ? 'white' : 'black' }}>📒 Customer Khata</button>
-        <button onClick={() => setActiveTab('history')} style={{ ...tabStyle, backgroundColor: activeTab === 'history' ? '#3b82f6' : '#e5e7eb', color: activeTab === 'history' ? 'white' : 'black' }}>📋 History</button>
-        <button onClick={() => setActiveTab('analytics')} style={{ ...tabStyle, backgroundColor: activeTab === 'analytics' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'analytics' ? 'white' : 'black' }}>📈 Analytics</button>
-<button onClick={() => setActiveTab('attendance')} style={{ ...tabStyle, backgroundColor: activeTab === 'attendance' ? '#0ea5e9' : '#e5e7eb', color: activeTab === 'attendance' ? 'white' : 'black' }}>👥 Attendance</button>
-        <button onClick={() => setActiveTab('payroll')} style={{ ...tabStyle, backgroundColor: activeTab === 'payroll' ? '#8b5cf6' : '#e5e7eb', color: activeTab === 'payroll' ? 'white' : 'black' }}>💰 Employee Payroll</button>
-        <button onClick={() => setActiveTab('tasks')} style={{ ...tabStyle, backgroundColor: activeTab === 'tasks' ? '#f59e0b' : '#e5e7eb', color: activeTab === 'tasks' ? 'white' : 'black' }}>🔔 Reminders</button>
-      </div>
+        <main className="va-main">
+          <div className="va-topbar">
+            <div>
+              <h1 className="va-page-title">
+                {activeTab === 'daily' ? 'Daily Accounting' :
+                 activeTab === 'ledger' ? 'Customer Khata' :
+                 activeTab === 'history' ? 'Transaction History' :
+                 activeTab === 'analytics' ? 'Business Analytics' :
+                 activeTab === 'attendance' ? 'Employee Attendance' :
+                 activeTab === 'payroll' ? 'Employee Payroll' : 'Reminders'}
+              </h1>
+              <p className="va-page-subtitle">Vintage Restaurant • Manage sales, cash, expenses and staff in one place</p>
+            </div>
+            <div className="va-status"><span className="va-dot"></span> System Online</div>
+          </div>
 
       {activeTab === 'daily' && (
         <>
@@ -1771,7 +1833,9 @@ export default function App() {
           </ul>
         </div>
       )}
-    </div>
+        </main>
+      </div>
+    </>
   );
 }
 
