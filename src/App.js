@@ -1395,6 +1395,66 @@ export default function App() {
     };
   }, [historyLogs, analyticsStart, analyticsEnd, purchaseSummary, supplierPayableSummary]);
 
+  const cashFlowData = useMemo(() => {
+    const rows = {};
+    const ensure = date => rows[date] || (rows[date] = {
+      date, salesCash:0, salesOnline:0, creditReceived:0, externalFunds:0,
+      operatingCash:0, operatingOnline:0, staffCash:0, staffOnline:0,
+      purchaseCash:0, purchaseOnline:0, supplierCash:0, supplierOnline:0,
+      fundRepayments:0, transfersIn:0, transfersOut:0, net:0
+    });
+    const addDaily = (date, field, amount) => { if (!date) return; ensure(date)[field] += Number(amount || 0); };
+
+    historyLogs.filter(l => l.date >= analyticsStart && l.date <= analyticsEnd).forEach(log => {
+      const d=log.date, sales=log.expense_details?.sales||{};
+      addDaily(d,'salesCash',Number(sales.cash||0)+Number(sales.parcel_counter_cash||0));
+      addDaily(d,'salesOnline',Number(sales.online||0)+Number(sales.parcel_counter_online||0));
+      (log.expense_details?.credit_received||[]).forEach(x=>addDaily(d,'creditReceived',x.amount));
+      (log.expense_details?.external_funds||[]).forEach(x=>addDaily(d,'externalFunds',x.amount));
+      (log.expense_details?.online||[]).forEach(x=>addDaily(d,'operatingOnline',x.amount));
+      (log.expense_details?.cash||[]).forEach(x=>{
+        if (!['Counter','Credit','Teja','Anil'].includes(x.type)) addDaily(d,'operatingCash',x.amount);
+      });
+      (log.expense_details?.staff||[]).forEach(x=>{
+        if ((x.method||'Cash')==='Online') addDaily(d,'staffOnline',x.amount);
+        else addDaily(d,'staffCash',x.amount);
+      });
+      (log.expense_details?.fund_repayments||[]).forEach(x=>addDaily(d,'fundRepayments',x.amount));
+      (log.expense_details?.account_transfers||[]).forEach(x=>{
+        const amount=Number(x.amount||0);
+        const from=String(x.from||x.fromAccount||x.source||'').toLowerCase();
+        const to=String(x.to||x.toAccount||x.destination||'').toLowerCase();
+        if (from.includes('cash') && to.includes('online')) addDaily(d,'transfersOut',amount);
+        else if (from.includes('online') && to.includes('cash')) addDaily(d,'transfersIn',amount);
+      });
+    });
+
+    purchases.filter(p=>p.purchase_date>=analyticsStart && p.purchase_date<=analyticsEnd).forEach(p=>{
+      const paid=Number(p.paid_amount||0);
+      if(p.payment_method==='Cash') addDaily(p.purchase_date,'purchaseCash',paid);
+      if(p.payment_method==='Online') addDaily(p.purchase_date,'purchaseOnline',paid);
+    });
+    supplierPayments.filter(p=>p.payment_date>=analyticsStart && p.payment_date<=analyticsEnd).forEach(p=>{
+      if(p.payment_method==='Cash') addDaily(p.payment_date,'supplierCash',p.amount);
+      if(p.payment_method==='Online') addDaily(p.payment_date,'supplierOnline',p.amount);
+    });
+
+    const list=Object.values(rows).sort((a,b)=>b.date.localeCompare(a.date)).map(r=>{
+      const inflow=r.salesCash+r.salesOnline+r.creditReceived+r.externalFunds;
+      const outflow=r.operatingCash+r.operatingOnline+r.staffCash+r.staffOnline+r.purchaseCash+r.purchaseOnline+r.supplierCash+r.supplierOnline+r.fundRepayments;
+      return {...r,inflow,outflow,net:inflow-outflow};
+    });
+    const sum=(key)=>list.reduce((s,r)=>s+r[key],0);
+    return {
+      rows:list, inflow:sum('inflow'), outflow:sum('outflow'), net:sum('net'),
+      salesCash:sum('salesCash'), salesOnline:sum('salesOnline'), creditReceived:sum('creditReceived'),
+      externalFunds:sum('externalFunds'), operatingCash:sum('operatingCash'), operatingOnline:sum('operatingOnline'),
+      staffCash:sum('staffCash'), staffOnline:sum('staffOnline'), purchaseCash:sum('purchaseCash'), purchaseOnline:sum('purchaseOnline'),
+      supplierCash:sum('supplierCash'), supplierOnline:sum('supplierOnline'), fundRepayments:sum('fundRepayments'),
+      transfers:sum('transfersIn')-sum('transfersOut')
+    };
+  }, [historyLogs, purchases, supplierPayments, analyticsStart, analyticsEnd]);
+  
   const businessAlerts = useMemo(() => {
     const alerts = [];
     const today = new Date().toISOString().split('T')[0];
@@ -1912,7 +1972,7 @@ export default function App() {
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
         <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>
-      <style>{payablesUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
+      <style>{payablesUiStyles}</style><style>{cashflowUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
@@ -1995,6 +2055,7 @@ export default function App() {
               ['ledger','📒','Customer Khata'],
               ['history','📋','History'],
               ['analytics','📈','Analytics'],
+              ['cashflow','💵','Cash Flow'],
               ['ai','✨','AI Assistant'],
               ['attendance','👥','Attendance'],
               ['payroll','💰','Employee Payroll'],
@@ -2020,6 +2081,7 @@ export default function App() {
                  activeTab === 'ledger' ? 'Customer Khata' :
                  activeTab === 'history' ? 'Transaction History' :
                  activeTab === 'analytics' ? 'Business Analytics' :
+                 activeTab === 'cashflow' ? 'Cash Flow Management' :
                  activeTab === 'ai' ? 'AI Business Assistant' :
                  activeTab === 'attendance' ? 'Employee Attendance' :
                  activeTab === 'payroll' ? 'Employee Payroll' : 'Reminders'}
@@ -2678,6 +2740,59 @@ export default function App() {
         </div>
       )}
 
+      {activeTab === 'cashflow' && (
+        <div className="va-cashflow-page">
+          <div className="va-cashflow-hero">
+            <div><span className="va-eyebrow">CASH • ONLINE • SETTLEMENTS</span><h2>💵 Cash Flow Management</h2><p>See where money came from, where it went, and the net movement for any period. Internal transfers are shown separately so they never inflate income or expenses.</p></div>
+            <div className="va-cashflow-period"><label>From<input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)}/></label><label>To<input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)}/></label></div>
+          </div>
+          <div className="va-cashflow-kpis">
+            <div className="in"><span>Total Inflow</span><strong>{formatINR(cashFlowData.inflow)}</strong><small>Sales + collections + funds</small></div>
+            <div className="out"><span>Total Outflow</span><strong>{formatINR(cashFlowData.outflow)}</strong><small>Expenses + purchases + settlements</small></div>
+            <div className={cashFlowData.net>=0?'positive':'negative'}><span>Net Cash Movement</span><strong>{formatINR(cashFlowData.net)}</strong><small>Inflow minus outflow</small></div>
+            <div><span>Supplier Settlements</span><strong>{formatINR(cashFlowData.supplierCash+cashFlowData.supplierOnline)}</strong><small>Payments made to suppliers</small></div>
+          </div>
+
+          <div className="va-cashflow-grid">
+            <section className="va-cashflow-card"><div className="va-cashflow-head"><div><h3>Money In</h3><p>Actual cash/online inflows during the selected period.</p></div><strong>{formatINR(cashFlowData.inflow)}</strong></div>
+              <div className="va-cashflow-lines">
+                <div><span>Cash Sales</span><b>{formatINR(cashFlowData.salesCash)}</b></div>
+                <div><span>Online Sales</span><b>{formatINR(cashFlowData.salesOnline)}</b></div>
+                <div><span>Customer Credit Received</span><b>{formatINR(cashFlowData.creditReceived)}</b></div>
+                <div><span>External Funds Received</span><b>{formatINR(cashFlowData.externalFunds)}</b></div>
+              </div>
+            </section>
+            <section className="va-cashflow-card"><div className="va-cashflow-head"><div><h3>Money Out</h3><p>Actual cash/online outflows, including settlements.</p></div><strong>{formatINR(cashFlowData.outflow)}</strong></div>
+              <div className="va-cashflow-lines">
+                <div><span>Operating Expenses</span><b>{formatINR(cashFlowData.operatingCash+cashFlowData.operatingOnline)}</b></div>
+                <div><span>Staff Payments</span><b>{formatINR(cashFlowData.staffCash+cashFlowData.staffOnline)}</b></div>
+                <div><span>Purchase Payments</span><b>{formatINR(cashFlowData.purchaseCash+cashFlowData.purchaseOnline)}</b></div>
+                <div><span>Supplier Settlements</span><b>{formatINR(cashFlowData.supplierCash+cashFlowData.supplierOnline)}</b></div>
+                <div><span>Fund Repayments</span><b>{formatINR(cashFlowData.fundRepayments)}</b></div>
+              </div>
+            </section>
+          </div>
+
+          <section className="va-cashflow-card">
+            <div className="va-cashflow-head"><div><h3>Cash vs Online Movement</h3><p>Channel-level visibility for management.</p></div><span className="va-cashflow-badge">Transfers: {formatINR(cashFlowData.transfers)} net</span></div>
+            <div className="va-cashflow-channel-grid">
+              <div><span>Cash Inflow</span><strong>{formatINR(cashFlowData.salesCash+cashFlowData.creditReceived+cashFlowData.externalFunds)}</strong></div>
+              <div><span>Cash Outflow</span><strong>{formatINR(cashFlowData.operatingCash+cashFlowData.staffCash+cashFlowData.purchaseCash+cashFlowData.supplierCash+cashFlowData.fundRepayments)}</strong></div>
+              <div><span>Online Inflow</span><strong>{formatINR(cashFlowData.salesOnline)}</strong></div>
+              <div><span>Online Outflow</span><strong>{formatINR(cashFlowData.operatingOnline+cashFlowData.staffOnline+cashFlowData.purchaseOnline+cashFlowData.supplierOnline)}</strong></div>
+            </div>
+            <div className="va-cashflow-note">ℹ️ Credit sales are not treated as cash inflow until collected. Credit purchases are not treated as cash outflow until actually paid. Internal cash ↔ online transfers are shown separately and do not change total business cash flow.</div>
+          </section>
+
+          <section className="va-cashflow-card">
+            <div className="va-cashflow-head"><div><h3>Daily Cash Flow Ledger</h3><p>Click-free management view of every day in the selected period.</p></div><span className="va-cashflow-badge">{cashFlowData.rows.length} day(s)</span></div>
+            <div className="va-cashflow-table-wrap"><table className="va-cashflow-table"><thead><tr><th>Date</th><th>Inflow</th><th>Outflow</th><th>Net</th><th>Cash Sales</th><th>Online Sales</th><th>Supplier Paid</th><th>Purchase Paid</th></tr></thead><tbody>
+              {cashFlowData.rows.length===0?<tr><td colSpan="8" className="va-cashflow-empty">No cash-flow activity in this period.</td></tr>:cashFlowData.rows.map(r=><tr key={r.date}><td><strong>{r.date}</strong></td><td className="in-text">{formatINR(r.inflow)}</td><td className="out-text">{formatINR(r.outflow)}</td><td className={r.net>=0?'in-text':'out-text'}><strong>{formatINR(r.net)}</strong></td><td>{formatINR(r.salesCash)}</td><td>{formatINR(r.salesOnline)}</td><td>{formatINR(r.supplierCash+r.supplierOnline)}</td><td>{formatINR(r.purchaseCash+r.purchaseOnline)}</td></tr>)}
+            </tbody></table></div>
+          </section>
+        </div>
+      )}
+
       {activeTab === 'ai' && (
         <div className="va-ai-page">
           <div className="va-ai-hero">
@@ -3039,6 +3154,9 @@ const payrollUiStyles = `
 
 
 
+const cashflowUiStyles = `
+.va-cashflow-page{max-width:1500px;margin:0 auto}.va-cashflow-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;background:linear-gradient(135deg,#052e16,#0f766e 70%,#164e63);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-cashflow-hero h2{margin:6px 0;font-size:28px}.va-cashflow-hero p{margin:0;color:#ccfbf1;max-width:760px;font-size:13px;line-height:1.5}.va-cashflow-period{display:flex;gap:9px;flex-wrap:wrap}.va-cashflow-period label{font-size:10px;font-weight:900;color:#ccfbf1}.va-cashflow-period input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px}.va-cashflow-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-cashflow-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #64748b;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-cashflow-kpis .in{border-top-color:#10b981}.va-cashflow-kpis .out{border-top-color:#ef4444}.va-cashflow-kpis .positive{border-top-color:#2563eb}.va-cashflow-kpis .negative{border-top-color:#dc2626}.va-cashflow-kpis span{display:block;color:#64748b;font-size:11px;font-weight:900}.va-cashflow-kpis strong{display:block;color:#0f172a;font-size:23px;margin-top:7px}.va-cashflow-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-cashflow-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-cashflow-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-cashflow-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-cashflow-head h3{margin:4px 0;font-size:19px}.va-cashflow-head p{margin:0;color:#64748b;font-size:12px}.va-cashflow-head>strong{font-size:18px;color:#0f172a}.va-cashflow-lines{display:flex;flex-direction:column;gap:7px}.va-cashflow-lines div{display:flex;justify-content:space-between;padding:11px 12px;background:#f8fafc;border-radius:10px;border:1px solid #eef2f7}.va-cashflow-lines span{color:#64748b;font-size:12px}.va-cashflow-lines b{font-size:12px;color:#0f172a}.va-cashflow-channel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.va-cashflow-channel-grid>div{padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px}.va-cashflow-channel-grid span{display:block;color:#64748b;font-size:10px;font-weight:900}.va-cashflow-channel-grid strong{display:block;margin-top:6px;font-size:18px}.va-cashflow-badge{padding:7px 10px;border-radius:999px;background:#f0fdfa;color:#0f766e;font-size:10px;font-weight:900}.va-cashflow-note{margin-top:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:11px;color:#1e40af;font-size:11px;line-height:1.5}.va-cashflow-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-cashflow-table{width:100%;border-collapse:collapse;min-width:850px}.va-cashflow-table th,.va-cashflow-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:11px;white-space:nowrap}.va-cashflow-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-cashflow-table th:first-child,.va-cashflow-table td:first-child{text-align:left}.in-text{color:#047857;font-weight:800}.out-text{color:#b91c1c;font-weight:800}.va-cashflow-empty{text-align:center!important;padding:30px!important;color:#64748b}@media(max-width:1050px){.va-cashflow-hero{display:block}.va-cashflow-period{margin-top:15px}.va-cashflow-kpis{grid-template-columns:repeat(2,1fr)}.va-cashflow-grid{grid-template-columns:1fr}.va-cashflow-channel-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.va-cashflow-hero,.va-cashflow-card{padding:15px}.va-cashflow-kpis{grid-template-columns:1fr 1fr}.va-cashflow-channel-grid{grid-template-columns:1fr 1fr}.va-cashflow-period label{flex:1}.va-cashflow-period input{width:100%;box-sizing:border-box}}@media(max-width:430px){.va-cashflow-kpis{grid-template-columns:1fr}.va-cashflow-channel-grid{grid-template-columns:1fr}}
+`;
 const analyticsUiStyles = `\n.va-analytics-page{max-width:1500px;margin:0 auto}.va-analytics-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-analytics-hero h2{margin:6px 0;font-size:28px}.va-analytics-hero p{margin:0;color:#cbd5e1;max-width:760px;line-height:1.5;font-size:13px}.va-analytics-actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.va-analytics-actions label{font-size:11px;font-weight:900;color:#cbd5e1}.va-analytics-actions input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-analytics-btn{border:0;border-radius:10px;padding:11px 14px;background:#10b981;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}.va-analytics-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-analytics-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-analytics-kpis .expense{border-top-color:#ef4444}.va-analytics-kpis .profit{border-top-color:#10b981}.va-analytics-kpis .loss{border-top-color:#dc2626}.va-analytics-kpis .credit{border-top-color:#f59e0b}.va-analytics-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-analytics-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-analytics-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-analytics-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-analytics-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-analytics-card-head h3{margin:4px 0;font-size:19px}.va-analytics-card-head p{margin:0;color:#64748b;font-size:12px}.va-analytics-mix-row,.va-analytics-expense-row{margin-bottom:15px}.va-analytics-mix-row>div:first-child,.va-analytics-expense-row>div:first-child{display:flex;justify-content:space-between;gap:15px;margin-bottom:6px;font-size:12px}.va-analytics-mix-row span,.va-analytics-expense-row span{color:#64748b}.va-analytics-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden}.va-analytics-progress i{display:block;height:100%;background:#2563eb;border-radius:999px}.va-analytics-progress i.cash{background:#10b981}.va-analytics-progress i.online{background:#3b82f6}.va-analytics-progress i.credit{background:#f59e0b}.va-analytics-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.va-analytics-mini-grid>div{padding:12px;background:#f8fafc;border-radius:11px}.va-analytics-mini-grid span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-analytics-mini-grid strong{display:block;margin-top:5px}.va-analytics-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-analytics-table{width:100%;border-collapse:collapse;min-width:780px}.va-analytics-table th,.va-analytics-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-analytics-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase}.va-analytics-table th:first-child,.va-analytics-table td:first-child{text-align:left}.va-analytics-insight{display:flex;gap:13px;align-items:flex-start;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;margin-bottom:18px}.va-analytics-insight-icon{width:34px;height:34px;display:grid;place-items:center;background:#dbeafe;border-radius:10px;flex:none}.va-analytics-insight strong{color:#1e40af}.va-analytics-insight p{margin:4px 0 0;color:#475569;font-size:12px;line-height:1.5}.va-analytics-note{padding:13px 15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5;margin-bottom:20px}.va-analytics-note strong{color:#334155}@media(max-width:1050px){.va-analytics-hero{display:block}.va-analytics-actions{margin-top:16px}.va-analytics-kpis{grid-template-columns:repeat(2,1fr)}.va-analytics-grid{grid-template-columns:1fr}}@media(max-width:650px){.va-analytics-hero,.va-analytics-card{padding:15px}.va-analytics-kpis{grid-template-columns:1fr 1fr}.va-analytics-actions{display:grid;grid-template-columns:1fr 1fr}.va-analytics-actions label{width:100%}.va-analytics-actions label input{width:100%;box-sizing:border-box}.va-analytics-btn{grid-column:1/-1}.va-analytics-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-analytics-kpis{grid-template-columns:1fr}.va-analytics-actions{grid-template-columns:1fr}.va-analytics-btn{grid-column:auto}}\n`;
 
 const aiUiStyles = `
