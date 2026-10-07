@@ -92,6 +92,10 @@ export default function App() {
   const [cashierEntries, setCashierEntries] = useState([]);
   const [isLoadingCashierEntries, setIsLoadingCashierEntries] = useState(false);
   const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
+  const [khataSearch, setKhataSearch] = useState('');
+  const [selectedKhataCustomer, setSelectedKhataCustomer] = useState(null);
+  const [khataStartDate, setKhataStartDate] = useState('');
+  const [khataEndDate, setKhataEndDate] = useState('');
   
 
   // --- 1. SUPABASE AUTHENTICATION ---
@@ -694,6 +698,69 @@ export default function App() {
     return Object.values(balances).map(b => ({ ...b, balance: b.given - b.received })).filter(b => b.balance !== 0).sort((a, b) => b.balance - a.balance);
   }, [historyLogs]);
 
+  const khataCustomers = useMemo(() => {
+    const map = {};
+    const ensure = (name) => {
+      const clean = String(name || 'Unknown').trim() || 'Unknown';
+      const key = clean.toUpperCase();
+      if (!map[key]) map[key] = { key, name: clean, given: 0, received: 0, transactions: [] };
+      return map[key];
+    };
+    historyLogs.forEach(log => {
+      (log.expense_details?.credit_sales || []).forEach(c => {
+        const customer = ensure(c.name);
+        const amount = Number(c.amount || 0);
+        customer.given += amount;
+        customer.transactions.push({ date: log.date, kind: 'Credit Given', amount, method: 'Credit', note: c.note || c.description || '' });
+      });
+      (log.expense_details?.credit_received || []).forEach(c => {
+        const customer = ensure(c.name);
+        const amount = Number(c.amount || 0);
+        customer.received += amount;
+        customer.transactions.push({ date: log.date, kind: 'Payment Received', amount, method: c.method || 'Cash', note: c.note || c.description || '' });
+      });
+    });
+    return Object.values(map).map(c => ({ ...c, balance: c.given - c.received, transactions: c.transactions.sort((a,b) => b.date.localeCompare(a.date)) }))
+      .sort((a,b) => b.balance - a.balance || a.name.localeCompare(b.name));
+  }, [historyLogs]);
+
+  const filteredKhataCustomers = useMemo(() => {
+    const q = khataSearch.trim().toUpperCase();
+    return khataCustomers.filter(c => !q || c.name.toUpperCase().includes(q));
+  }, [khataCustomers, khataSearch]);
+
+  const selectedKhata = useMemo(() => khataCustomers.find(c => c.key === selectedKhataCustomer) || null, [khataCustomers, selectedKhataCustomer]);
+
+  const khataSummary = useMemo(() => {
+    const totalGiven = khataCustomers.reduce((s,c) => s + Math.max(0,c.given), 0);
+    const totalReceived = khataCustomers.reduce((s,c) => s + Math.max(0,c.received), 0);
+    const outstanding = khataCustomers.reduce((s,c) => s + Math.max(0,c.balance), 0);
+    const customersWithDue = khataCustomers.filter(c => c.balance > 0).length;
+    return { totalGiven, totalReceived, outstanding, customersWithDue };
+  }, [khataCustomers]);
+
+  const selectedKhataTransactions = useMemo(() => {
+    if (!selectedKhata) return [];
+    return selectedKhata.transactions.filter(t => (!khataStartDate || t.date >= khataStartDate) && (!khataEndDate || t.date <= khataEndDate));
+  }, [selectedKhata, khataStartDate, khataEndDate]);
+
+  const exportKhataStatement = () => {
+    if (!selectedKhata) return;
+    const rows = selectedKhataTransactions.slice().reverse().map(t => ({
+      Date: t.date,
+      Transaction: t.kind,
+      Method: t.method,
+      'Credit Given (₹)': t.kind === 'Credit Given' ? Number(t.amount.toFixed(2)) : 0,
+      'Payment Received (₹)': t.kind === 'Payment Received' ? Number(t.amount.toFixed(2)) : 0,
+      Note: t.note || ''
+    }));
+    rows.push({ Date: '', Transaction: 'Closing Balance', Method: '', 'Credit Given (₹)': Number(selectedKhata.given.toFixed(2)), 'Payment Received (₹)': Number(selectedKhata.received.toFixed(2)), Note: 'Outstanding: ' + formatINR(selectedKhata.balance) });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Customer Statement');
+    XLSX.writeFile(wb, 'Khata-' + selectedKhata.name.replace(/[^a-z0-9]+/gi,'-') + '.xlsx');
+  };
+
   // --- AUTOMATIC ANALYTICS CALCULATOR ---
   const analyticsData = useMemo(() => {
     const filtered = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
@@ -1291,6 +1358,7 @@ export default function App() {
     <>
         <style>{dailyUiStyles}</style>
         <style>{expenseUiStyles}</style>
+        <style>{khataUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -1719,25 +1787,40 @@ export default function App() {
       )}
 
       {activeTab === 'ledger' && (
-        <div style={cardStyle}>
-          <h2 style={{ color: '#ec4899', margin: '0 0 5px 0' }}>📒 Outstanding Khata & Delivery Apps</h2>
-          <p style={{ color: '#6b7280', marginBottom: '20px' }}>This is automatically calculated from all past credit sales and payments. Anyone with a balance of ₹0 is hidden.</p>
-          <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '10px' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #ccc', backgroundColor: '#f3f4f6' }}>
-                <th style={{padding: '12px'}}>Customer / App Name</th><th style={{padding: '12px'}}>Credit Given</th><th style={{padding: '12px'}}>Paid Back</th><th style={{padding: '12px', color: '#e11d48'}}>Balance Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledgerData.length === 0 ? <tr><td colSpan="4" style={{padding: '20px', textAlign: 'center'}}>No outstanding balances!</td></tr> : null}
-              {ledgerData.map((row, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{row.name}</td><td style={{ padding: '12px', color: '#e11d48' }}>₹{row.given}</td><td style={{ padding: '12px', color: '#059669' }}>₹{row.received}</td>
-                  <td style={{ padding: '12px', fontWeight: 'bold', color: row.balance > 0 ? '#e11d48' : '#059669' }}>₹{row.balance}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="va-khata-page">
+          <div className="va-khata-hero"><div><span className="va-eyebrow">Customer receivables</span><h2>📒 Customer Khata</h2><p>Track credit given, payments received and every customer's outstanding balance.</p></div><button onClick={() => setActiveTab('daily')} style={{...btnStyle, background:'#2563eb'}}>＋ Record Today's Credit</button></div>
+          <div className="va-khata-kpis">
+            <div className="va-khata-kpi due"><span>Total Outstanding</span><strong>{formatINR(khataSummary.outstanding)}</strong><small>Customers currently owe</small></div>
+            <div className="va-khata-kpi given"><span>Credit Given</span><strong>{formatINR(khataSummary.totalGiven)}</strong><small>All recorded credit sales</small></div>
+            <div className="va-khata-kpi received"><span>Payments Received</span><strong>{formatINR(khataSummary.totalReceived)}</strong><small>All recorded collections</small></div>
+            <div className="va-khata-kpi customers"><span>Customers With Due</span><strong>{khataSummary.customersWithDue}</strong><small>Open balances</small></div>
+          </div>
+          <div className="va-khata-grid">
+            <section className="va-khata-list-card">
+              <div className="va-khata-card-head"><div><span className="va-eyebrow">Accounts receivable</span><h3>Customer balances</h3></div><span className="va-khata-count">{filteredKhataCustomers.length} customers</span></div>
+              <input value={khataSearch} onChange={e=>setKhataSearch(e.target.value)} placeholder="🔎 Search customer or delivery app..." style={{...inputStyle, marginBottom:'12px'}} />
+              <div className="va-khata-customer-list">
+                {filteredKhataCustomers.length === 0 ? <div className="va-khata-empty">No customer accounts found.</div> : filteredKhataCustomers.map(customer => (
+                  <button key={customer.key} className={selectedKhataCustomer === customer.key ? 'va-khata-customer active' : 'va-khata-customer'} onClick={()=>setSelectedKhataCustomer(customer.key)}>
+                    <span className="va-khata-avatar">{customer.name.charAt(0).toUpperCase()}</span>
+                    <span className="va-khata-customer-main"><strong>{customer.name}</strong><small>{customer.transactions.length} transactions • Given {formatINR(customer.given)}</small></span>
+                    <span className={customer.balance > 0 ? 'va-khata-balance danger' : customer.balance < 0 ? 'va-khata-balance credit' : 'va-khata-balance clear'}>{formatINR(Math.abs(customer.balance))}<small>{customer.balance > 0 ? 'Due' : customer.balance < 0 ? 'Advance' : 'Settled'}</small></span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="va-khata-detail-card">
+              {!selectedKhata ? <div className="va-khata-detail-empty"><div>📒</div><h3>Select a customer</h3><p>Choose a customer to view the complete statement.</p></div> : <>
+                <div className="va-khata-detail-head"><div><span className="va-eyebrow">Customer statement</span><h3>{selectedKhata.name}</h3><p>{selectedKhata.transactions.length} recorded transactions</p></div><div className="va-khata-detail-actions"><button onClick={exportKhataStatement} style={{...btnStyle, background:'#10b981'}}>📊 Export Statement</button><button onClick={()=>setSelectedKhataCustomer(null)} style={{...btnStyle, background:'#64748b'}}>Close</button></div></div>
+                <div className="va-khata-balance-banner"><div><span>Outstanding Balance</span><strong>{formatINR(selectedKhata.balance)}</strong></div><div><span>Total Credit</span><b>{formatINR(selectedKhata.given)}</b></div><div><span>Total Received</span><b>{formatINR(selectedKhata.received)}</b></div></div>
+                <div className="va-khata-filters"><label>From<input type="date" value={khataStartDate} onChange={e=>setKhataStartDate(e.target.value)} style={inputStyle}/></label><label>To<input type="date" value={khataEndDate} onChange={e=>setKhataEndDate(e.target.value)} style={inputStyle}/></label><button onClick={()=>{setKhataStartDate('');setKhataEndDate('')}} style={{...btnStyle,background:'#334155'}}>Clear Dates</button></div>
+                <div className="va-khata-table-wrap"><table className="va-khata-table"><thead><tr><th>Date</th><th>Transaction</th><th>Method</th><th>Credit</th><th>Received</th><th>Note</th></tr></thead><tbody>
+                  {selectedKhataTransactions.length === 0 ? <tr><td colSpan="6" className="va-khata-empty">No transactions in this date range.</td></tr> : selectedKhataTransactions.map((t,i)=><tr key={i}><td>{t.date}</td><td><span className={t.kind==='Credit Given'?'va-khata-pill debit':'va-khata-pill payment'}>{t.kind}</span></td><td>{t.method}</td><td className="debit-text">{t.kind==='Credit Given'?formatINR(t.amount):'—'}</td><td className="payment-text">{t.kind==='Payment Received'?formatINR(t.amount):'—'}</td><td>{t.note || '—'}</td></tr>)}
+                </tbody></table></div>
+              </>}
+            </section>
+          </div>
+          <div className="va-khata-tip"><strong>💡 Accounting note:</strong> Credit sales increase the customer's receivable. Payments reduce it. This view does not create separate accounting entries or change Cash In Hand / Online Balance calculations.</div>
         </div>
       )}
 
@@ -2105,6 +2188,10 @@ const expenseUiStyles = `
 @media(max-width:560px){.va-line-item,.va-receive-line,.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr}.va-entry-head{display:block}.va-entry-total{display:inline-block;margin-top:8px}.va-icon-delete{width:100%}}
 .va-staff-card{background:#fff;border:1px solid #ddd6fe;border-top:4px solid #8b5cf6;border-radius:18px;padding:20px;margin-bottom:18px}.va-staff-help{background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}.va-staff-row{display:grid;grid-template-columns:1.05fr .9fr .85fr .75fr 1.3fr 38px;gap:8px;margin-bottom:9px}.va-drawer-card{background:#fff;border:1px solid #fde68a;border-top:4px solid #f59e0b;border-radius:18px;padding:20px;margin-bottom:18px}.va-drawer-total{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 16px;text-align:right;min-width:145px}.va-drawer-total span{display:block;color:#92400e;font-size:11px;font-weight:800}.va-drawer-total strong{font-size:20px;color:#78350f}.va-drawer-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:16px 0}.va-note-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center}.va-note-box span{display:block;font-weight:900;color:#334155}.va-note-box input{width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border:1px solid #cbd5e1;border-radius:8px;text-align:center}.va-note-box small{color:#64748b;font-weight:700}.va-coin-box{background:#fffbeb}.va-drawer-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.va-drawer-summary>div{background:#f8fafc;border-radius:12px;padding:13px;text-align:center}.va-drawer-summary span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-drawer-summary strong{display:block;font-size:20px;margin-top:5px}.va-drawer-summary .positive{background:#ecfdf5}.va-drawer-summary .negative{background:#fef2f2}.va-drawer-note{margin-top:12px;padding:10px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12px}@media(max-width:1100px){.va-staff-row{grid-template-columns:1fr 1fr 1fr}.va-drawer-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.va-staff-row{grid-template-columns:1fr}.va-drawer-grid{grid-template-columns:repeat(2,1fr)}.va-drawer-summary{grid-template-columns:1fr}.va-drawer-total{text-align:left;margin-top:10px}.va-staff-row .va-icon-delete{width:100%}}
 `;
+const khataUiStyles = `
+.va-khata-page{max-width:1500px;margin:0 auto}.va-khata-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-khata-hero h2{margin:5px 0;font-size:27px}.va-khata-hero p{margin:0;color:#cbd5e1}.va-khata-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-khata-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-khata-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-khata-kpi strong{display:block;font-size:24px;margin-top:7px;color:#0f172a}.va-khata-kpi small{display:block;color:#94a3b8;margin-top:4px}.va-khata-kpi.due{border-top-color:#e11d48}.va-khata-kpi.given{border-top-color:#f59e0b}.va-khata-kpi.received{border-top-color:#10b981}.va-khata-kpi.customers{border-top-color:#6366f1}.va-khata-grid{display:grid;grid-template-columns:minmax(330px,.8fr) minmax(0,1.8fr);gap:18px}.va-khata-list-card,.va-khata-detail-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);min-width:0}.va-khata-card-head,.va-khata-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:15px}.va-khata-card-head h3,.va-khata-detail-head h3{margin:4px 0;font-size:20px}.va-khata-count{background:#f1f5f9;color:#475569;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:800}.va-khata-customer-list{display:flex;flex-direction:column;gap:7px;max-height:590px;overflow:auto}.va-khata-customer{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:11px;cursor:pointer}.va-khata-customer:hover,.va-khata-customer.active{border-color:#818cf8;background:#eef2ff}.va-khata-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#e0e7ff;color:#4338ca;font-weight:900;flex:none}.va-khata-customer-main{flex:1;min-width:0}.va-khata-customer-main strong{display:block;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.va-khata-customer-main small{display:block;color:#94a3b8;margin-top:3px;font-size:11px}.va-khata-balance{font-weight:900;text-align:right;white-space:nowrap}.va-khata-balance small{display:block;font-size:10px;font-weight:800}.va-khata-balance.danger{color:#e11d48}.va-khata-balance.credit{color:#2563eb}.va-khata-balance.clear{color:#059669}.va-khata-detail-empty{min-height:420px;display:grid;place-items:center;text-align:center;align-content:center;color:#64748b}.va-khata-detail-empty div{font-size:46px}.va-khata-detail-empty h3{margin:8px 0 4px;color:#334155}.va-khata-detail-empty p{margin:0}.va-khata-detail-head p{margin:0;color:#64748b;font-size:12px}.va-khata-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.va-khata-balance-banner{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px}.va-khata-balance-banner div{padding:8px 10px}.va-khata-balance-banner div:first-child{background:#fff1f2;border-radius:10px}.va-khata-balance-banner span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-khata-balance-banner strong{display:block;color:#be123c;font-size:25px;margin-top:5px}.va-khata-balance-banner b{display:block;color:#0f172a;font-size:17px;margin-top:6px}.va-khata-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}.va-khata-filters label{font-size:12px;font-weight:800;color:#475569}.va-khata-filters input{margin-top:5px}.va-khata-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-khata-table{width:100%;border-collapse:collapse;min-width:700px}.va-khata-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left}.va-khata-table th,.va-khata-table td{padding:11px;border-bottom:1px solid #eef2f7}.va-khata-table tbody tr:last-child td{border-bottom:0}.va-khata-pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.va-khata-pill.debit{background:#fff1f2;color:#be123c}.va-khata-pill.payment{background:#ecfdf5;color:#047857}.debit-text{color:#be123c;font-weight:800}.payment-text{color:#047857;font-weight:800}.va-khata-empty{padding:30px!important;text-align:center;color:#64748b}.va-khata-tip{margin-top:15px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px}.va-khata-tip strong{color:#1d4ed8}@media(max-width:1000px){.va-khata-grid{grid-template-columns:1fr}.va-khata-customer-list{max-height:420px}}@media(max-width:700px){.va-khata-kpis{grid-template-columns:repeat(2,1fr)}.va-khata-hero{display:block}.va-khata-hero button{margin-top:15px;width:100%}.va-khata-balance-banner{grid-template-columns:1fr}.va-khata-filters{grid-template-columns:1fr}.va-khata-detail-head{display:block}.va-khata-detail-actions{margin-top:12px}.va-khata-detail-actions button{flex:1}.va-khata-kpi strong{font-size:19px}}@media(max-width:430px){.va-khata-kpis{grid-template-columns:1fr}.va-khata-list-card,.va-khata-detail-card{padding:14px}.va-khata-customer{padding:9px}}
+`;
+
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
 const inputStyle = { padding: '11px 13px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '15px', width: '100%', boxSizing: 'border-box', background: '#fff', outline: 'none' };
