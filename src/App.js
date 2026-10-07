@@ -798,6 +798,48 @@ export default function App() {
     };
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
+
+  // --- EXECUTIVE DASHBOARD ---
+  const dashboardData = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const recent = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd);
+    const getSales = (log) => {
+      const s = log.expense_details?.sales || {};
+      return Number(s.cash || 0) + Number(s.online || 0) + Number(s.parcel_counter_cash || 0) + Number(s.parcel_counter_online || 0) +
+        (log.expense_details?.credit_sales || []).reduce((sum, x) => sum + Number(x.amount || 0), 0);
+    };
+    const getExpenses = (log) => {
+      let total = 0;
+      (log.expense_details?.online || []).forEach(x => total += Number(x.amount || 0));
+      (log.expense_details?.cash || []).forEach(x => {
+        if (x.type !== 'Counter' && x.type !== 'Credit' && x.type !== 'Teja' && x.type !== 'Anil') total += Number(x.amount || 0);
+      });
+      (log.expense_details?.staff || []).forEach(x => total += Number(x.amount || 0));
+      return total;
+    };
+    const todayLog = historyLogs.find(log => log.date === today);
+    const periodSales = recent.reduce((sum, log) => sum + getSales(log), 0);
+    const periodExpenses = recent.reduce((sum, log) => sum + getExpenses(log), 0);
+    const salesByDay = recent.slice().sort((a,b) => a.date.localeCompare(b.date)).slice(-7).map(log => ({
+      date: log.date, sales: getSales(log), expenses: getExpenses(log)
+    }));
+    const creditGiven = recent.reduce((sum, log) => sum + (log.expense_details?.credit_sales || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
+    const creditReceived = recent.reduce((sum, log) => sum + (log.expense_details?.credit_received || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
+    const staffCost = recent.reduce((sum, log) => sum + (log.expense_details?.staff || []).reduce((s,x)=>s+Number(x.amount||0),0), 0);
+    return {
+      todaySales: todayLog ? getSales(todayLog) : 0,
+      todayExpenses: todayLog ? getExpenses(todayLog) : 0,
+      todayCash: todayLog ? Number(todayLog.total_cash_in_hand || 0) : 0,
+      todayOnline: todayLog ? Number(todayLog.total_online_balance || 0) : 0,
+      periodSales, periodExpenses,
+      periodProfit: periodSales - periodExpenses,
+      creditOutstanding: Math.max(0, creditGiven - creditReceived),
+      staffCost,
+      salesByDay,
+      recentTransactions: historyLogs.slice(0, 6)
+    };
+  }, [historyLogs, analyticsStart, analyticsEnd]);
+
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
     return (
@@ -1263,6 +1305,13 @@ export default function App() {
         .va-nav button:hover { background:#1f2937; color:white; }
         .va-nav button.active { background:#2563eb; color:white; box-shadow:0 7px 18px rgba(37,99,235,.28); }
         .va-logout { margin-top:auto; width:100%; border:0; border-radius:10px; padding:11px; background:#1f2937; color:#fca5a5; cursor:pointer; font-weight:800; }
+        .va-dashboard{display:flex;flex-direction:column;gap:18px}
+        .va-dashboard-hero{background:linear-gradient(135deg,#0f172a,#1e3a5f 65%,#0f766e);color:#fff;border-radius:22px;padding:28px;display:flex;justify-content:space-between;align-items:center;gap:20px;box-shadow:0 18px 45px rgba(15,23,42,.16)}
+        .va-dashboard-hero h2{font-size:30px;margin:6px 0}.va-dashboard-hero p{margin:0;color:#cbd5e1;font-size:14px}
+        .va-dashboard-filter{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:14px 18px;display:flex;justify-content:space-between;gap:16px;align-items:center}.va-dashboard-filter strong{display:block}.va-dashboard-filter span{display:block;color:#64748b;font-size:12px;margin-top:3px}.va-dashboard-dates{display:flex;align-items:center;gap:8px;min-width:430px}.va-dashboard-dates input{max-width:145px}
+        .va-dashboard-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.va-dash-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-dash-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-dash-kpi strong{display:block;font-size:22px;margin-top:8px;color:#0f172a}.va-dash-kpi small{display:block;color:#94a3b8;margin-top:5px}.va-dash-kpi.sales{border-top-color:#2563eb}.va-dash-kpi.cash{border-top-color:#16a34a}.va-dash-kpi.online{border-top-color:#0ea5e9}.va-dash-kpi.expense{border-top-color:#ef4444}.va-dash-kpi.profit{border-top-color:#f59e0b}
+        .va-dashboard-grid{display:grid;grid-template-columns:1.35fr .85fr;gap:18px}.va-dashboard-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-dashboard-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.va-dashboard-card-head h3{margin:4px 0;font-size:18px}.va-dashboard-badge{background:#eff6ff;color:#1d4ed8;padding:8px 10px;border-radius:10px;font-weight:800;font-size:12px}.va-bars{height:190px;display:flex;align-items:flex-end;justify-content:space-around;gap:12px;border-bottom:1px solid #e2e8f0;padding:10px 8px 0}.va-bar-day{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;font-size:10px;color:#64748b}.va-bar-stack{height:160px;display:flex;align-items:flex-end;gap:3px}.va-bar{width:13px;border-radius:5px 5px 2px 2px;min-height:5px}.sales-bar{background:#2563eb}.expense-bar{background:#f97316}.va-chart-legend{display:flex;gap:18px;margin-top:12px;font-size:11px;color:#64748b}.va-chart-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}.legend-sales{background:#2563eb}.legend-expense{background:#f97316}
+        .va-dashboard-list{display:flex;flex-direction:column;gap:10px}.va-dashboard-list>div{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f8fafc;border-radius:11px}.va-dashboard-list span{color:#475569;font-size:13px}.va-dashboard-list strong{font-size:14px}.success-text{color:#059669!important}.danger-text{color:#dc2626!important}.va-dashboard-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.va-dashboard-actions button,.va-link-btn{border:1px solid #e2e8f0;background:#fff;padding:9px 10px;border-radius:9px;color:#334155;font-weight:800;cursor:pointer}.va-dashboard-actions button:hover,.va-link-btn:hover{background:#f8fafc}.va-link-btn{color:#2563eb;border:0}.va-empty-state{padding:35px;text-align:center;color:#94a3b8;background:#f8fafc;border-radius:12px}.va-recent-table{overflow:auto}.va-recent-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 80px;gap:10px;align-items:center;padding:12px 8px;border-bottom:1px solid #eef2f7;font-size:12px}.va-recent-row.head{font-weight:800;color:#64748b;background:#f8fafc;border-radius:8px}.va-recent-row strong{color:#0f172a}
         .va-feature-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:22px; box-shadow:0 8px 24px rgba(15,23,42,.06); margin-bottom:20px; }
         .va-feature-grid { display:flex; flex-direction:column; gap:10px; margin:16px 0; }
         .va-feature-row { display:grid; grid-template-columns:1fr 30px 1fr 1fr 1.4fr 38px; gap:10px; align-items:center; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; }
@@ -1277,6 +1326,8 @@ export default function App() {
         .va-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; }
         .va-mobile-nav { display:none; }
         .va-menu-toggle{position:fixed;top:18px;left:18px;z-index:1100;width:44px;height:44px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;box-shadow:0 8px 22px rgba(15,23,42,.12);cursor:pointer;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}.va-sidebar-close{display:none;margin-left:auto;border:0;background:transparent;color:#cbd5e1;font-size:28px;line-height:1;cursor:pointer}.sidebar-collapsed .va-sidebar{transform:translateX(-100%);width:0;min-width:0;padding:0;overflow:hidden}.va-sidebar{transition:width .25s ease, min-width .25s ease, transform .25s ease, padding .25s ease}.va-main{transition:padding-left .25s ease}.sidebar-open .va-main{padding-left:78px}.sidebar-collapsed .va-main{padding-left:78px}.va-sidebar-overlay{display:none}.va-menu-toggle:hover{background:#f8fafc;transform:translateY(-1px)}
+        @media (max-width: 1100px){.va-dashboard-kpis{grid-template-columns:repeat(3,1fr)}.va-dashboard-grid{grid-template-columns:1fr}}
+        @media (max-width: 650px){.va-dashboard-hero{display:block}.va-dashboard-hero button{margin-top:16px;width:100%}.va-dashboard-filter{display:block}.va-dashboard-dates{min-width:0;margin-top:12px;flex-wrap:wrap}.va-dashboard-dates input{max-width:none;flex:1}.va-dashboard-kpis{grid-template-columns:repeat(2,1fr)}.va-dashboard-actions{grid-template-columns:1fr}.va-recent-row{min-width:700px}}
         @media (max-width: 850px){.va-menu-toggle{top:10px;left:10px}.va-sidebar{position:fixed!important;z-index:1050;left:0;top:0;width:280px!important;min-width:280px!important;height:100vh!important;padding:18px 14px!important;transform:translateX(-100%);box-shadow:16px 0 40px rgba(15,23,42,.2)}.sidebar-open .va-sidebar{transform:translateX(0)}.sidebar-collapsed .va-sidebar{width:280px!important;min-width:280px!important;padding:18px 14px!important;transform:translateX(-100%)}.sidebar-open .va-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1040}.va-sidebar-close{display:block}.va-brand{padding:5px 8px 18px!important;margin-bottom:16px!important}.va-nav{display:flex!important;flex-direction:column!important}.va-nav button{text-align:left!important;padding:12px 13px!important;font-size:14px!important}.va-logout{margin-top:auto!important}.va-main,.sidebar-open .va-main,.sidebar-collapsed .va-main{padding:64px 14px 14px!important}.va-topbar{align-items:flex-start}.va-page-title{font-size:21px}}
 
         @media (max-width: 850px) {
@@ -1312,7 +1363,8 @@ export default function App() {
           </div>
           <div className="va-nav">
             {[
-              ['daily','📝','Daily Entry'],
+              ['dashboard','🏠','Dashboard'],
+              ['daily','📝','Daily Accounting'],
               ['funds','🔄','Money Transfers'],
               ['sources','🏦','Fund Sources'],
               ['ledger','📒','Customer Khata'],
@@ -1334,7 +1386,8 @@ export default function App() {
           <div className="va-topbar">
             <div>
               <h1 className="va-page-title">
-                {activeTab === 'daily' ? 'Daily Accounting' :
+                {activeTab === 'dashboard' ? 'Dashboard' :
+                 activeTab === 'daily' ? 'Daily Accounting' :
                  activeTab === 'funds' ? 'Money Transfers' :
                  activeTab === 'sources' ? 'Fund Sources' :
                  activeTab === 'ledger' ? 'Customer Khata' :
@@ -1347,6 +1400,88 @@ export default function App() {
             </div>
             <div className="va-status"><span className="va-dot"></span> System Online</div>
           </div>
+
+      {activeTab === 'dashboard' && (
+        <div className="va-dashboard">
+          <div className="va-dashboard-hero">
+            <div>
+              <span className="va-eyebrow">Restaurant financial control center</span>
+              <h2>Good day 👋</h2>
+              <p>Track today's performance and keep your restaurant's money under control.</p>
+            </div>
+            <button onClick={() => setActiveTab('daily')} style={{...btnStyle, background:'#10b981'}}>＋ Enter Today's Accounts</button>
+          </div>
+
+          <div className="va-dashboard-filter">
+            <div>
+              <strong>Performance period</strong>
+              <span>Use the same period as Analytics for a consistent management view.</span>
+            </div>
+            <div className="va-dashboard-dates">
+              <input type="date" value={analyticsStart} onChange={e=>setAnalyticsStart(e.target.value)} style={inputStyle}/>
+              <span>to</span>
+              <input type="date" value={analyticsEnd} onChange={e=>setAnalyticsEnd(e.target.value)} style={inputStyle}/>
+              <button onClick={() => setActiveTab('analytics')} style={{...btnStyle, background:'#334155'}}>View Reports</button>
+            </div>
+          </div>
+
+          <div className="va-dashboard-kpis">
+            <div className="va-dash-kpi sales"><span>Today's Sales</span><strong>{formatINR(dashboardData.todaySales)}</strong><small>Recorded sales</small></div>
+            <div className="va-dash-kpi cash"><span>Cash In Hand</span><strong>{formatINR(dashboardData.todayCash)}</strong><small>Expected physical cash</small></div>
+            <div className="va-dash-kpi online"><span>Online Balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong><small>Online funds</small></div>
+            <div className="va-dash-kpi expense"><span>Today's Expenses</span><strong>{formatINR(dashboardData.todayExpenses)}</strong><small>Operating + staff</small></div>
+            <div className="va-dash-kpi profit"><span>Today's Est. Profit</span><strong>{formatINR(dashboardData.todaySales - dashboardData.todayExpenses)}</strong><small>Sales less expenses</small></div>
+          </div>
+
+          <div className="va-dashboard-grid">
+            <div className="va-dashboard-card va-trend-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Last 7 recorded days</span><h3>📈 Sales vs Expenses</h3></div><span className="va-dashboard-badge">{formatINR(dashboardData.periodSales)} sales</span></div>
+              <div className="va-bars">
+                {dashboardData.salesByDay.length === 0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : dashboardData.salesByDay.map(row => {
+                  const max = Math.max(...dashboardData.salesByDay.map(x => Math.max(x.sales,x.expenses)), 1);
+                  return <div className="va-bar-day" key={row.date}>
+                    <div className="va-bar-stack">
+                      <div className="va-bar sales-bar" style={{height:Math.max(8,(row.sales/max)*150)}} title={'Sales '+formatINR(row.sales)}></div>
+                      <div className="va-bar expense-bar" style={{height:Math.max(6,(row.expenses/max)*150)}} title={'Expenses '+formatINR(row.expenses)}></div>
+                    </div>
+                    <span>{row.date.slice(5)}</span>
+                  </div>;
+                })}
+              </div>
+              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Expenses</span></div>
+            </div>
+
+            <div className="va-dashboard-card">
+              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Management snapshot</span><h3>💼 Money & Obligations</h3></div></div>
+              <div className="va-dashboard-list">
+                <div><span>💰 Total Money Today</span><strong>{formatINR(dashboardData.todayCash + dashboardData.todayOnline)}</strong></div>
+                <div><span>📒 Credit Outstanding</span><strong className={dashboardData.creditOutstanding > 0 ? 'danger-text' : 'success-text'}>{formatINR(dashboardData.creditOutstanding)}</strong></div>
+                <div><span>👥 Staff Cost in Period</span><strong>{formatINR(dashboardData.staffCost)}</strong></div>
+                <div><span>📊 Period Profit</span><strong className={dashboardData.periodProfit >= 0 ? 'success-text' : 'danger-text'}>{formatINR(dashboardData.periodProfit)}</strong></div>
+              </div>
+              <div className="va-dashboard-actions">
+                <button onClick={()=>setActiveTab('ledger')}>📒 Open Khata</button>
+                <button onClick={()=>setActiveTab('payroll')}>💰 Open Payroll</button>
+                <button onClick={()=>setActiveTab('funds')}>🏦 Manage Funds</button>
+                <button onClick={()=>setActiveTab('history')}>📋 View History</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="va-dashboard-card">
+            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">Recent activity</span><h3>🧾 Recent Saved Accounts</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('history')}>View all →</button></div>
+            {dashboardData.recentTransactions.length === 0 ? <div className="va-empty-state">No saved accounts yet.</div> : (
+              <div className="va-recent-table">
+                <div className="va-recent-row head"><span>Date</span><span>Sales</span><span>Expenses</span><span>Cash</span><span>Online</span><span>Status</span></div>
+                {dashboardData.recentTransactions.map(log => {
+                  const sales = (()=>{const s=log.expense_details?.sales||{}; return Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((a,x)=>a+Number(x.amount||0),0)})();
+                  return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(dashboardData.recentTransactions.find(x=>x.date===log.date)?dashboardData.recentTransactions.find(x=>x.date===log.date).total_cash_in_hand:0)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>;
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'funds' && (
         <div className="va-feature-card">
