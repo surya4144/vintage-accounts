@@ -48,6 +48,11 @@ const expenseUiStyles = `
 .va-line-item{display:grid;grid-template-columns:1.4fr 1fr 38px;gap:8px;margin-bottom:9px}.va-receive-line{grid-template-columns:1.2fr 1fr .8fr 38px}
 .va-expense-row{display:grid;grid-template-columns:1fr 1.1fr .7fr 38px;gap:8px;margin-bottom:9px}.va-cash-expense-row{grid-template-columns:.9fr 1fr .65fr 1.25fr 38px}
 .va-icon-delete{border:0;border-radius:9px;background:#fee2e2;color:#dc2626;font-weight:900;cursor:pointer;min-height:42px}
+.va-drawer-card{background:#fff;border:1px solid #fde68a;border-top:4px solid #f59e0b;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
+.va-drawer-total{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 16px;text-align:right;min-width:145px}.va-drawer-total span{display:block;color:#92400e;font-size:11px;font-weight:800;text-transform:uppercase}.va-drawer-total strong{font-size:20px;color:#78350f}
+.va-drawer-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:16px 0}.va-note-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center}.va-note-box span{display:block;font-weight:900;color:#334155;font-size:14px}.va-note-box input{width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border:1px solid #cbd5e1;border-radius:8px;text-align:center;font-size:16px}.va-note-box small{color:#64748b;font-weight:700}.va-coin-box{background:#fffbeb;border-color:#fde68a}
+.va-drawer-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.va-drawer-summary>div{background:#f8fafc;border-radius:12px;padding:13px;text-align:center}.va-drawer-summary span{display:block;color:#64748b;font-size:11px;font-weight:800;text-transform:uppercase}.va-drawer-summary strong{display:block;color:#0f172a;font-size:20px;margin-top:5px}.va-drawer-summary .positive{background:#ecfdf5;border:1px solid #bbf7d0}.va-drawer-summary .negative{background:#fef2f2;border:1px solid #fecaca}.va-drawer-note{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12px}
+@media(max-width:1000px){.va-drawer-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.va-drawer-grid{grid-template-columns:repeat(2,1fr)}.va-drawer-summary{grid-template-columns:1fr}.va-drawer-total{text-align:left;margin-top:10px}.va-entry-head{display:block}}
 .va-staff-card{background:#fff;border:1px solid #ddd6fe;border-top:4px solid #8b5cf6;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
 .va-staff-help{background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}
 .va-staff-row{display:grid;grid-template-columns:1.05fr .9fr .85fr .75fr 1.3fr 38px;gap:8px;margin-bottom:9px}
@@ -1507,23 +1512,23 @@ export default function App() {
           </div>
 
 
-          <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
-            <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Cash Drawer — Daily Count Only</h3>
-            <p style={{ marginTop: 0, color: '#6b7280' }}>Count the physical cash in the drawer. This is a separate counting tool and does not change any accounting balance. The drawer starts fresh for each date.</p>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <label style={{ flex: 1 }}>₹500 x <input type="number" value={notes[500]} onChange={e => setNotes({...notes, 500: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹200 x <input type="number" value={notes[200]} onChange={e => setNotes({...notes, 200: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹100 x <input type="number" value={notes[100]} onChange={e => setNotes({...notes, 100: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹50 x <input type="number" value={notes[50]} onChange={e => setNotes({...notes, 50: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹20 x <input type="number" value={notes[20]} onChange={e => setNotes({...notes, 20: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1 }}>₹10 x <input type="number" value={notes[10]} onChange={e => setNotes({...notes, 10: e.target.value})} style={inputStyle}/></label>
-              <label style={{ flex: 1.5 }}>Coins (Total ₹): <input type="number" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} style={inputStyle}/></label>
+          <div className="va-drawer-card">
+            <div className="va-entry-head">
+              <div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count the actual notes and coins in the drawer. This does not change accounting balances.</p></div>
+              <div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div>
             </div>
-            
-            <div style={{ marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{ margin: 0, color: '#6b7280' }}>Total Physical Cash Counted</p>
-              <h2 style={{ margin: 0, color: '#ca8a04' }}>₹{actualDrawerTotal.toLocaleString('en-IN')}</h2>
+            <div className="va-drawer-grid">
+              {[500,200,100,50,20,10].map(note => (
+                <label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" inputMode="numeric" value={notes[note]} onChange={e => setNotes({...notes, [note]: e.target.value})} placeholder="0"/><small>{formatINR(note * Number(notes[note] || 0))}</small></label>
+              ))}
+              <label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" inputMode="decimal" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins || 0))}</small></label>
             </div>
+            <div className="va-drawer-summary">
+              <div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div>
+              <div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div>
+              <div className={actualDrawerTotal - totalCashInHand >= 0 ? "va-drawer-diff positive" : "va-drawer-diff negative"}><span>Difference</span><strong>{formatINR(actualDrawerTotal - totalCashInHand)}</strong></div>
+            </div>
+            <div className="va-drawer-note">📌 <strong>Counting only:</strong> the difference is for reconciliation and does not automatically change Cash In Hand, Available Cash, or Net Sale.</div>
           </div>
 
           <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
