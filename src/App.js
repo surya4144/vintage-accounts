@@ -83,6 +83,9 @@ export default function App() {
     let d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
   });
   const [analyticsEnd, setAnalyticsEnd] = useState(new Date().toISOString().split('T')[0]);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiMessages, setAiMessages] = useState([{ role: 'assistant', text: 'Hi! I’m your read-only Vintage Accounts assistant. Ask me about sales, expenses, profit, customer credit, staff costs, or trends.' }]);
+  const [aiLoading, setAiLoading] = useState(false);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [attendanceLocationRequired, setAttendanceLocationRequired] = useState(false);
@@ -113,6 +116,90 @@ export default function App() {
   };
 
   const handleLogout = async () => await supabase.auth.signOut();
+  const askAiAssistant = async (questionOverride) => {
+    const question = String(questionOverride ?? aiQuestion).trim();
+    if (!question || aiLoading) return;
+    setAiQuestion('');
+    setAiMessages(prev => [...prev, { role: 'user', text: question }]);
+    setAiLoading(true);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession?.access_token) throw new Error('Your session has expired. Please log in again.');
+
+      const context = {
+        generatedAt: new Date().toISOString(),
+        period: { start: analyticsStart, end: analyticsEnd },
+        today: dashboardData ? {
+          sales: dashboardData.todaySales,
+          expenses: dashboardData.todayExpenses,
+          cashInHand: dashboardData.todayCash,
+          onlineBalance: dashboardData.todayOnline,
+          estimatedProfit: dashboardData.todaySales - dashboardData.todayExpenses
+        } : null,
+        analytics: {
+          totalSales: analyticsData.totalSales,
+          totalExpenses: analyticsData.totalExpenses,
+          estimatedProfit: analyticsData.estimatedProfit,
+          cashSales: analyticsData.cashSales,
+          onlineSales: analyticsData.onlineSales,
+          creditSales: analyticsData.creditSales,
+          creditReceived: analyticsData.creditReceived,
+          creditOutstanding: analyticsData.creditOutstanding,
+          staffCost: analyticsData.staffCost,
+          cashExpenses: analyticsData.cashExpenses,
+          onlineExpenses: analyticsData.onlineExpensesTotal,
+          averageDailySales: analyticsData.averageDailySales,
+          averageDailyExpenses: analyticsData.averageDailyExpenses,
+          operatingDays: analyticsData.operatingDays,
+          topExpenseCategories: analyticsData.sortedCategories.slice(0, 10),
+          monthlyPerformance: analyticsData.monthlyRows
+        },
+        khata: {
+          totalGiven: khataSummary.totalGiven,
+          totalReceived: khataSummary.totalReceived,
+          outstanding: khataSummary.outstanding,
+          customersWithDue: khataSummary.customersWithDue,
+          topOutstandingCustomers: khataCustomers.filter(c => c.balance > 0).slice(0, 15).map(c => ({ name: c.name, given: c.given, received: c.received, balance: c.balance }))
+        },
+        funds: fundLedgerSummary,
+        payroll: payrollRows.slice(0, 20).map(r => ({
+          name: r.name,
+          monthlySalary: r.monthlySalary,
+          payableDays: r.payableDays,
+          earnedPay: r.earnedPay,
+          totalTaken: r.totalTaken,
+          previousDue: r.previousDueAfterPayment,
+          totalBalanceToPay: r.totalBalanceToPay
+        })),
+        recentDailyLogs: historyLogs.slice(0, 14).map(log => ({
+          date: log.date,
+          sales: log.expense_details?.sales || {},
+          cashExpenses: (log.expense_details?.cash || []).map(e => ({ type: e.type, category: e.category, amount: Number(e.amount || 0), description: e.description })),
+          onlineExpenses: (log.expense_details?.online || []).map(e => ({ category: e.category, amount: Number(e.amount || 0), description: e.description })),
+          staffPayments: (log.expense_details?.staff || []).map(e => ({ name: e.name, type: e.type, amount: Number(e.amount || 0), dueFor: e.dueFor, method: e.method })),
+          creditSales: (log.expense_details?.credit_sales || []).map(e => ({ name: e.name, amount: Number(e.amount || 0) })),
+          creditReceived: (log.expense_details?.credit_received || []).map(e => ({ name: e.name, amount: Number(e.amount || 0), method: e.method })),
+          closingCash: Number(log.total_cash_in_hand || 0),
+          closingOnline: Number(log.total_online_balance || 0)
+        }))
+      };
+
+      const response = await fetch('/api/ai-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentSession.access_token },
+        body: JSON.stringify({ question, context })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'AI request failed.');
+      setAiMessages(prev => [...prev, { role: 'assistant', text: result.text }]);
+    } catch (error) {
+      setAiMessages(prev => [...prev, { role: 'assistant', text: '⚠️ ' + error.message }]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+
 
   // --- 2. GLOBAL HISTORY FETCH ---
   const loadHistory = async () => {
@@ -1387,6 +1474,7 @@ export default function App() {
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
         <style>{payrollUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
+        <style>{aiUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -1467,6 +1555,7 @@ export default function App() {
               ['ledger','📒','Customer Khata'],
               ['history','📋','History'],
               ['analytics','📈','Analytics'],
+              ['ai','✨','AI Assistant'],
               ['attendance','👥','Attendance'],
               ['payroll','💰','Employee Payroll'],
               ['tasks','🔔','Reminders']
@@ -1490,6 +1579,7 @@ export default function App() {
                  activeTab === 'ledger' ? 'Customer Khata' :
                  activeTab === 'history' ? 'Transaction History' :
                  activeTab === 'analytics' ? 'Business Analytics' :
+                 activeTab === 'ai' ? 'AI Business Assistant' :
                  activeTab === 'attendance' ? 'Employee Attendance' :
                  activeTab === 'payroll' ? 'Employee Payroll' : 'Reminders'}
               </h1>
@@ -1994,6 +2084,67 @@ export default function App() {
         </div>
       )}
 
+      {activeTab === 'ai' && (
+        <div className="va-ai-page">
+          <div className="va-ai-hero">
+            <div>
+              <span className="va-eyebrow">READ-ONLY BUSINESS INTELLIGENCE</span>
+              <h2>✨ Vintage Accounts AI</h2>
+              <p>Ask questions about your restaurant's sales, expenses, profit, customer credit, staff costs and financial trends. The assistant can analyze your records but cannot change them.</p>
+            </div>
+            <span className="va-ai-status">🔒 Read-only • Current data</span>
+          </div>
+
+          <div className="va-ai-layout">
+            <div className="va-ai-chat">
+              <div className="va-ai-messages">
+                {aiMessages.map((message, index) => (
+                  <div key={index} className={'va-ai-message ' + message.role}>
+                    <small>{message.role === 'user' ? 'YOU' : 'VINTAGE AI'}</small>
+                    {message.text}
+                  </div>
+                ))}
+                {aiLoading && <div className="va-ai-message assistant"><small>VINTAGE AI</small>Thinking through your accounting data…</div>}
+              </div>
+              <div className="va-ai-composer">
+                <form onSubmit={e => { e.preventDefault(); askAiAssistant(); }}>
+                  <textarea value={aiQuestion} onChange={e => setAiQuestion(e.target.value)} placeholder="Ask something like: What was my profit this week?" disabled={aiLoading} />
+                  <button className="va-ai-send" type="submit" disabled={aiLoading || !aiQuestion.trim()}>{aiLoading ? 'Thinking…' : 'Ask AI →'}</button>
+                </form>
+                <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 10 }}>AI answers are based on the accounting data available in this session. Verify important financial decisions before acting.</div>
+              </div>
+            </div>
+
+            <div className="va-ai-sidebar">
+              <div className="va-ai-side-card">
+                <h3>⚡ Quick questions</h3>
+                {[
+                  'What were my sales and expenses this period?',
+                  'Which expense category is highest?',
+                  'Who has the highest customer balance?',
+                  'How is my profit trending?',
+                  'How much did I spend on staff?',
+                  'Give me 3 practical ways to improve this period.'
+                ].map(question => (
+                  <button key={question} className="va-ai-chip" onClick={() => askAiAssistant(question)} disabled={aiLoading}>{question}</button>
+                ))}
+              </div>
+
+              <div className="va-ai-side-card">
+                <h3>📊 Current snapshot</h3>
+                <div className="va-ai-metric"><span>Sales</span><strong>{formatINR(analyticsData.totalSales)}</strong></div>
+                <div className="va-ai-metric"><span>Expenses</span><strong>{formatINR(analyticsData.totalExpenses)}</strong></div>
+                <div className="va-ai-metric"><span>Est. Profit/Loss</span><strong>{formatINR(analyticsData.estimatedProfit)}</strong></div>
+                <div className="va-ai-metric"><span>Credit Outstanding</span><strong>{formatINR(khataSummary.outstanding)}</strong></div>
+                <div className="va-ai-metric"><span>Staff Cost</span><strong>{formatINR(analyticsData.staffCost)}</strong></div>
+              </div>
+
+              <div className="va-ai-note"><strong>Safety:</strong> AI is intentionally read-only. It will not edit balances, approve payments, delete records, or change payroll.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'attendance' && (
         <div>
           <div style={{ ...cardStyle, borderTop: '4px solid #0ea5e9' }}>
@@ -2249,6 +2400,10 @@ const payrollUiStyles = `
 
 
 const analyticsUiStyles = `\n.va-analytics-page{max-width:1500px;margin:0 auto}.va-analytics-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-analytics-hero h2{margin:6px 0;font-size:28px}.va-analytics-hero p{margin:0;color:#cbd5e1;max-width:760px;line-height:1.5;font-size:13px}.va-analytics-actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.va-analytics-actions label{font-size:11px;font-weight:900;color:#cbd5e1}.va-analytics-actions input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-analytics-btn{border:0;border-radius:10px;padding:11px 14px;background:#10b981;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}.va-analytics-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-analytics-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-analytics-kpis .expense{border-top-color:#ef4444}.va-analytics-kpis .profit{border-top-color:#10b981}.va-analytics-kpis .loss{border-top-color:#dc2626}.va-analytics-kpis .credit{border-top-color:#f59e0b}.va-analytics-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-analytics-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-analytics-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-analytics-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-analytics-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-analytics-card-head h3{margin:4px 0;font-size:19px}.va-analytics-card-head p{margin:0;color:#64748b;font-size:12px}.va-analytics-mix-row,.va-analytics-expense-row{margin-bottom:15px}.va-analytics-mix-row>div:first-child,.va-analytics-expense-row>div:first-child{display:flex;justify-content:space-between;gap:15px;margin-bottom:6px;font-size:12px}.va-analytics-mix-row span,.va-analytics-expense-row span{color:#64748b}.va-analytics-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden}.va-analytics-progress i{display:block;height:100%;background:#2563eb;border-radius:999px}.va-analytics-progress i.cash{background:#10b981}.va-analytics-progress i.online{background:#3b82f6}.va-analytics-progress i.credit{background:#f59e0b}.va-analytics-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.va-analytics-mini-grid>div{padding:12px;background:#f8fafc;border-radius:11px}.va-analytics-mini-grid span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-analytics-mini-grid strong{display:block;margin-top:5px}.va-analytics-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-analytics-table{width:100%;border-collapse:collapse;min-width:780px}.va-analytics-table th,.va-analytics-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-analytics-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase}.va-analytics-table th:first-child,.va-analytics-table td:first-child{text-align:left}.va-analytics-insight{display:flex;gap:13px;align-items:flex-start;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;margin-bottom:18px}.va-analytics-insight-icon{width:34px;height:34px;display:grid;place-items:center;background:#dbeafe;border-radius:10px;flex:none}.va-analytics-insight strong{color:#1e40af}.va-analytics-insight p{margin:4px 0 0;color:#475569;font-size:12px;line-height:1.5}.va-analytics-note{padding:13px 15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5;margin-bottom:20px}.va-analytics-note strong{color:#334155}@media(max-width:1050px){.va-analytics-hero{display:block}.va-analytics-actions{margin-top:16px}.va-analytics-kpis{grid-template-columns:repeat(2,1fr)}.va-analytics-grid{grid-template-columns:1fr}}@media(max-width:650px){.va-analytics-hero,.va-analytics-card{padding:15px}.va-analytics-kpis{grid-template-columns:1fr 1fr}.va-analytics-actions{display:grid;grid-template-columns:1fr 1fr}.va-analytics-actions label{width:100%}.va-analytics-actions label input{width:100%;box-sizing:border-box}.va-analytics-btn{grid-column:1/-1}.va-analytics-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-analytics-kpis{grid-template-columns:1fr}.va-analytics-actions{grid-template-columns:1fr}.va-analytics-btn{grid-column:auto}}\n`;
+
+const aiUiStyles = `
+.va-ai-page{max-width:1180px;margin:0 auto}.va-ai-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#0f172a,#312e81 65%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.14)}.va-ai-hero h2{margin:6px 0;font-size:28px}.va-ai-hero p{margin:0;color:#cbd5e1;max-width:700px;line-height:1.5;font-size:13px}.va-ai-status{padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);font-size:11px;font-weight:900;white-space:nowrap}.va-ai-layout{display:grid;grid-template-columns:1fr 300px;gap:18px}.va-ai-chat{background:#fff;border:1px solid #e2e8f0;border-radius:18px;box-shadow:0 8px 25px rgba(15,23,42,.055);overflow:hidden;display:flex;flex-direction:column;min-height:620px}.va-ai-messages{padding:20px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:430px;max-height:560px;overflow:auto;background:linear-gradient(180deg,#f8fafc,#fff)}.va-ai-message{max-width:84%;padding:12px 14px;border-radius:15px;font-size:13px;line-height:1.55;white-space:pre-wrap}.va-ai-message.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:5px}.va-ai-message.assistant{align-self:flex-start;background:#fff;color:#1e293b;border:1px solid #e2e8f0;border-bottom-left-radius:5px}.va-ai-message small{display:block;font-size:10px;font-weight:900;opacity:.7;margin-bottom:4px}.va-ai-composer{padding:14px;border-top:1px solid #e2e8f0;background:#fff}.va-ai-composer form{display:flex;gap:9px}.va-ai-composer textarea{flex:1;min-height:54px;resize:vertical;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font:inherit;outline:none}.va-ai-composer textarea:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.1)}.va-ai-send{border:0;border-radius:12px;padding:0 18px;background:#2563eb;color:#fff;font-weight:900;cursor:pointer}.va-ai-send:disabled{opacity:.55;cursor:not-allowed}.va-ai-sidebar{display:flex;flex-direction:column;gap:12px}.va-ai-side-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-ai-side-card h3{margin:0 0 10px;font-size:15px}.va-ai-chip{width:100%;text-align:left;border:1px solid #e2e8f0;background:#f8fafc;color:#334155;border-radius:10px;padding:10px 11px;margin-bottom:7px;font-weight:700;font-size:12px;cursor:pointer}.va-ai-chip:hover{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.va-ai-metric{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #eef2f7;font-size:12px}.va-ai-metric:last-child{border-bottom:0}.va-ai-metric span{color:#64748b}.va-ai-metric strong{color:#0f172a}.va-ai-note{padding:12px;border-radius:11px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px;line-height:1.5}@media(max-width:900px){.va-ai-layout{grid-template-columns:1fr}.va-ai-sidebar{display:grid;grid-template-columns:1fr 1fr}.va-ai-note{grid-column:1/-1}}@media(max-width:600px){.va-ai-hero{display:block}.va-ai-status{display:inline-block;margin-top:14px}.va-ai-sidebar{display:block}.va-ai-chat{min-height:560px}.va-ai-messages{min-height:380px}.va-ai-message{max-width:94%}.va-ai-composer form{display:grid}.va-ai-send{padding:12px}}
+`;
 
 const khataUiStyles = `
 .va-khata-page{max-width:1500px;margin:0 auto}.va-khata-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-khata-hero h2{margin:5px 0;font-size:27px}.va-khata-hero p{margin:0;color:#cbd5e1}.va-khata-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-khata-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-khata-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-khata-kpi strong{display:block;font-size:24px;margin-top:7px;color:#0f172a}.va-khata-kpi small{display:block;color:#94a3b8;margin-top:4px}.va-khata-kpi.due{border-top-color:#e11d48}.va-khata-kpi.given{border-top-color:#f59e0b}.va-khata-kpi.received{border-top-color:#10b981}.va-khata-kpi.customers{border-top-color:#6366f1}.va-khata-grid{display:grid;grid-template-columns:minmax(330px,.8fr) minmax(0,1.8fr);gap:18px}.va-khata-list-card,.va-khata-detail-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);min-width:0}.va-khata-card-head,.va-khata-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:15px}.va-khata-card-head h3,.va-khata-detail-head h3{margin:4px 0;font-size:20px}.va-khata-count{background:#f1f5f9;color:#475569;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:800}.va-khata-customer-list{display:flex;flex-direction:column;gap:7px;max-height:590px;overflow:auto}.va-khata-customer{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:11px;cursor:pointer}.va-khata-customer:hover,.va-khata-customer.active{border-color:#818cf8;background:#eef2ff}.va-khata-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#e0e7ff;color:#4338ca;font-weight:900;flex:none}.va-khata-customer-main{flex:1;min-width:0}.va-khata-customer-main strong{display:block;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.va-khata-customer-main small{display:block;color:#94a3b8;margin-top:3px;font-size:11px}.va-khata-balance{font-weight:900;text-align:right;white-space:nowrap}.va-khata-balance small{display:block;font-size:10px;font-weight:800}.va-khata-balance.danger{color:#e11d48}.va-khata-balance.credit{color:#2563eb}.va-khata-balance.clear{color:#059669}.va-khata-detail-empty{min-height:420px;display:grid;place-items:center;text-align:center;align-content:center;color:#64748b}.va-khata-detail-empty div{font-size:46px}.va-khata-detail-empty h3{margin:8px 0 4px;color:#334155}.va-khata-detail-empty p{margin:0}.va-khata-detail-head p{margin:0;color:#64748b;font-size:12px}.va-khata-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.va-khata-balance-banner{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px}.va-khata-balance-banner div{padding:8px 10px}.va-khata-balance-banner div:first-child{background:#fff1f2;border-radius:10px}.va-khata-balance-banner span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-khata-balance-banner strong{display:block;color:#be123c;font-size:25px;margin-top:5px}.va-khata-balance-banner b{display:block;color:#0f172a;font-size:17px;margin-top:6px}.va-khata-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}.va-khata-filters label{font-size:12px;font-weight:800;color:#475569}.va-khata-filters input{margin-top:5px}.va-khata-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-khata-table{width:100%;border-collapse:collapse;min-width:700px}.va-khata-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left}.va-khata-table th,.va-khata-table td{padding:11px;border-bottom:1px solid #eef2f7}.va-khata-table tbody tr:last-child td{border-bottom:0}.va-khata-pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.va-khata-pill.debit{background:#fff1f2;color:#be123c}.va-khata-pill.payment{background:#ecfdf5;color:#047857}.debit-text{color:#be123c;font-weight:800}.payment-text{color:#047857;font-weight:800}.va-khata-empty{padding:30px!important;text-align:center;color:#64748b}.va-khata-tip{margin-top:15px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px}.va-khata-tip strong{color:#1d4ed8}@media(max-width:1000px){.va-khata-grid{grid-template-columns:1fr}.va-khata-customer-list{max-height:420px}}@media(max-width:700px){.va-khata-kpis{grid-template-columns:repeat(2,1fr)}.va-khata-hero{display:block}.va-khata-hero button{margin-top:15px;width:100%}.va-khata-balance-banner{grid-template-columns:1fr}.va-khata-filters{grid-template-columns:1fr}.va-khata-detail-head{display:block}.va-khata-detail-actions{margin-top:12px}.va-khata-detail-actions button{flex:1}.va-khata-kpi strong{font-size:19px}}@media(max-width:430px){.va-khata-kpis{grid-template-columns:1fr}.va-khata-list-card,.va-khata-detail-card{padding:14px}.va-khata-customer{padding:9px}}
