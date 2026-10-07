@@ -68,6 +68,7 @@ export default function App() {
   const [creditReceived, setCreditReceived] = useState([]);
   const [accountTransfers, setAccountTransfers] = useState([]);
   const [externalFunds, setExternalFunds] = useState([]);
+  const [fundRepayments, setFundRepayments] = useState([]);
   const [notes, setNotes] = useState({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
 
   const [tasks, setTasks] = useState(() => {
@@ -381,18 +382,18 @@ export default function App() {
         setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
         setCreditReceived(currentData.expense_details?.credit_received || []);
-        setAccountTransfers(currentData.expense_details?.account_transfers || []); setExternalFunds(currentData.expense_details?.external_funds || []);
+        setAccountTransfers(currentData.expense_details?.account_transfers || []); setExternalFunds(currentData.expense_details?.external_funds || []); setFundRepayments(currentData.expense_details?.fund_repayments || []);
         setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
         alert(`✅ System loaded database records for ${targetDate}`);
       } 
       else if (isManualClick && !currentData) {
         // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setAccountTransfers([]); setExternalFunds([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setAccountTransfers([]); setExternalFunds([]); setFundRepayments([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
       }
       else if (!isManualClick && draft) {
         // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setAccountTransfers(draft.accountTransfers || []); setExternalFunds(draft.externalFunds || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setAccountTransfers(draft.accountTransfers || []); setExternalFunds(draft.externalFunds || []); setFundRepayments(draft.fundRepayments || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       } 
       else if (!isManualClick && currentData) {
         // Initial page load, load DB data
@@ -484,9 +485,11 @@ export default function App() {
 
   // Cash In Hand is the single physical cash pool. Every expense or staff payment paid in cash reduces it.
   const totalPhysicalStaffCash = staffPayments.filter(s => s.method === 'Cash' || s.method === 'Available Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalCashInHand = Math.max(0, Number(yesterdayCash || 0) + Number(cashSale || 0) + totalParcelCounterCash + creditReceivedCash + transferCashIn - transferCashOut + externalCashIn - totalTillCashExpenses - totalPhysicalStaffCash);
+  const totalFundRepaymentsCash = fundRepayments.filter(r => r.account === 'Cash').reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const totalFundRepaymentsOnline = fundRepayments.filter(r => r.account === 'Online').reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const totalCashInHand = Math.max(0, Number(yesterdayCash || 0) + Number(cashSale || 0) + totalParcelCounterCash + creditReceivedCash + transferCashIn - transferCashOut + externalCashIn - totalTillCashExpenses - totalPhysicalStaffCash - totalFundRepaymentsCash);
   // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline + transferOnlineIn - transferOnlineOut + externalOnlineIn - totalOnlineExpenses - totalStaffOnline;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline + transferOnlineIn - transferOnlineOut + externalOnlineIn - totalOnlineExpenses - totalStaffOnline - totalFundRepaymentsOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   // Cash Drawer is a standalone physical cash-counting tool. It never affects accounting calculations.
@@ -503,6 +506,7 @@ export default function App() {
   const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
   const addAccountTransfer = () => addArrItem(setAccountTransfers, accountTransfers, { from: 'Cash', to: 'Online', amount: 0, note: '' });
   const addExternalFund = () => addArrItem(setExternalFunds, externalFunds, { source: '', mode: 'Borrowed', account: 'Cash', amount: 0, dueDate: '', note: '' });
+  const addFundRepayment = () => addArrItem(setFundRepayments, fundRepayments, { source: '', mode: 'Loan', account: 'Cash', amount: 0, note: '' });
 
   const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, {
     name: '',
@@ -629,7 +633,7 @@ export default function App() {
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance, available_cash_balance: totalCashInHand,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived, account_transfers: accountTransfers, external_funds: externalFunds }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived, account_transfers: accountTransfers, external_funds: externalFunds, fund_repayments: fundRepayments }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -760,6 +764,25 @@ export default function App() {
     XLSX.utils.book_append_sheet(wb, ws, 'Customer Statement');
     XLSX.writeFile(wb, 'Khata-' + selectedKhata.name.replace(/[^a-z0-9]+/gi,'-') + '.xlsx');
   };
+
+  const fundLedger = useMemo(() => {
+    const map = {};
+    const keyFor = (source, mode) => String(source || 'Unknown').trim().toUpperCase() + '|' + String(mode || 'Other');
+    historyLogs.forEach(log => {
+      (log.expense_details?.external_funds || []).forEach(f => {
+        const key = keyFor(f.source, f.mode);
+        if (!map[key]) map[key] = { key, source: String(f.source || 'Unknown').trim() || 'Unknown', mode: f.mode || 'Other', original: 0, repaid: 0, account: f.account || 'Cash', dueDate: f.dueDate || '' };
+        map[key].original += Number(f.amount || 0); if (f.dueDate && (!map[key].dueDate || f.dueDate < map[key].dueDate)) map[key].dueDate = f.dueDate;
+      });
+      (log.expense_details?.fund_repayments || []).forEach(r => {
+        const key = keyFor(r.source, r.mode);
+        if (!map[key]) map[key] = { key, source: String(r.source || 'Unknown').trim() || 'Unknown', mode: r.mode || 'Other', original: 0, repaid: 0, account: r.account || 'Cash', dueDate: '' };
+        map[key].repaid += Number(r.amount || 0);
+      });
+    });
+    return Object.values(map).map(f => ({...f, outstanding: Math.max(0, f.original - f.repaid), status: f.original - f.repaid <= 0 && f.original > 0 ? 'Closed' : f.dueDate && f.dueDate < new Date().toISOString().split('T')[0] && f.original > f.repaid ? 'Overdue' : 'Open'})).sort((a,b)=>b.outstanding-a.outstanding || a.source.localeCompare(b.source));
+  }, [historyLogs]);
+  const fundLedgerSummary = useMemo(() => ({ original: fundLedger.reduce((s,f)=>s+f.original,0), repaid: fundLedger.reduce((s,f)=>s+f.repaid,0), outstanding: fundLedger.reduce((s,f)=>s+f.outstanding,0), open: fundLedger.filter(f=>f.outstanding>0).length }), [fundLedger]);
 
   // --- AUTOMATIC ANALYTICS CALCULATOR ---
   const analyticsData = useMemo(() => {
@@ -1359,6 +1382,7 @@ export default function App() {
         <style>{dailyUiStyles}</style>
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
+        <style>{fundUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -1572,21 +1596,21 @@ export default function App() {
       )}
 
       {activeTab === 'sources' && (
-        <div className="va-feature-card">
-          <div className="va-entry-head"><div><span className="va-eyebrow">External funding</span><h3>🏦 Add Funds From Other Sources</h3><p>Record money received from an owner, friend, credit source, borrower, loan, or another outside source.</p></div></div>
-          <div className="va-feature-grid">
-            {externalFunds.map(f => <div key={f.id} className="va-feature-row va-fund-row">
-              <input placeholder="Source / Person / Bank" value={f.source} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'source',e.target.value)} style={inputStyle}/>
-              <select value={f.mode} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'mode',e.target.value)} style={inputStyle}><option>Borrowed</option><option>Loan</option><option>Credit</option><option>Owner Funds</option><option>Partner Funds</option><option>Other</option></select>
-              <select value={f.account} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'account',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select>
-              <input type="number" min="0" placeholder="Amount ₹" value={f.amount} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'amount',e.target.value)} style={inputStyle}/>
-              <input type="date" value={f.dueDate || ''} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'dueDate',e.target.value)} style={inputStyle}/>
-              <input placeholder="Notes" value={f.note} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'note',e.target.value)} style={inputStyle}/>
-              <button onClick={()=>removeArrItem(setExternalFunds,externalFunds,f.id)} className="va-icon-delete">✕</button>
-            </div>)}
+        <div className="va-funds-page">
+          <div className="va-funds-hero"><div><span className="va-eyebrow">Funding & liabilities</span><h2>🏦 Fund & Loan Ledger</h2><p>Track outside funding separately from sales and record repayments against each source.</p></div><button onClick={()=>setActiveTab('daily')} style={{...btnStyle,background:'#2563eb'}}>＋ Open Daily Accounts</button></div>
+          <div className="va-fund-kpis"><div><span>Original Funding</span><strong>{formatINR(fundLedgerSummary.original)}</strong></div><div><span>Repaid</span><strong>{formatINR(fundLedgerSummary.repaid)}</strong></div><div className="due"><span>Outstanding</span><strong>{formatINR(fundLedgerSummary.outstanding)}</strong></div><div><span>Open Accounts</span><strong>{fundLedgerSummary.open}</strong></div></div>
+          <div className="va-fund-workspace">
+            <section className="va-fund-entry-card"><div className="va-entry-head"><div><span className="va-eyebrow">1 • Money received</span><h3>🏦 Add Fund Source</h3><p>Borrowed money, loans, credit, owner or partner funds.</p></div></div>
+              {externalFunds.map(f=><div key={f.id} className="va-fund-entry-row"><input placeholder="Source / Person / Bank" value={f.source} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'source',e.target.value)} style={inputStyle}/><select value={f.mode} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'mode',e.target.value)} style={inputStyle}><option>Borrowed</option><option>Loan</option><option>Credit</option><option>Owner Funds</option><option>Partner Funds</option><option>Other</option></select><select value={f.account} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'account',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select><input type="number" min="0" placeholder="Amount ₹" value={f.amount} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'amount',e.target.value)} style={inputStyle}/><input type="date" value={f.dueDate || ''} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'dueDate',e.target.value)} style={inputStyle}/><input placeholder="Notes" value={f.note} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'note',e.target.value)} style={inputStyle}/><button onClick={()=>removeArrItem(setExternalFunds,externalFunds,f.id)} className="va-icon-delete">✕</button></div>)}
+              <button onClick={addExternalFund} style={btnStyle}>+ Add Fund Source</button>
+            </section>
+            <section className="va-fund-entry-card"><div className="va-entry-head"><div><span className="va-eyebrow">2 • Repayment</span><h3>💸 Record Repayment</h3><p>Repayments reduce the funding balance and the selected money account. They are <strong>not operating expenses</strong>.</p></div></div>
+              {fundRepayments.map(r=><div key={r.id} className="va-fund-entry-row"><input placeholder="Source / Person / Bank" value={r.source} onChange={e=>updateArrItem(setFundRepayments,fundRepayments,r.id,'source',e.target.value)} style={inputStyle}/><select value={r.mode} onChange={e=>updateArrItem(setFundRepayments,fundRepayments,r.id,'mode',e.target.value)} style={inputStyle}><option>Loan</option><option>Borrowed</option><option>Credit</option><option>Owner Funds</option><option>Partner Funds</option><option>Other</option></select><select value={r.account} onChange={e=>updateArrItem(setFundRepayments,fundRepayments,r.id,'account',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select><input type="number" min="0" placeholder="Repayment ₹" value={r.amount} onChange={e=>updateArrItem(setFundRepayments,fundRepayments,r.id,'amount',e.target.value)} style={inputStyle}/><input placeholder="Note" value={r.note || ''} onChange={e=>updateArrItem(setFundRepayments,fundRepayments,r.id,'note',e.target.value)} style={inputStyle}/><button onClick={()=>removeArrItem(setFundRepayments,fundRepayments,r.id)} className="va-icon-delete">✕</button></div>)}
+              <button onClick={addFundRepayment} style={{...btnStyle,background:'#dc2626'}}>+ Add Repayment</button>
+            </section>
           </div>
-          <button onClick={addExternalFund} style={btnStyle}>+ Add Fund Source</button>
-          <div className="va-feature-note">These funds increase the selected balance but are kept separate from Sales. The mode tells you whether the money is borrowed, a loan, credit, owner funding, or another source.</div>
+          <section className="va-fund-ledger-card"><div className="va-entry-head"><div><span className="va-eyebrow">3 • Outstanding balances</span><h3>📋 Fund & Loan Ledger</h3><p>Outstanding = original funding minus repayments.</p></div></div><div className="va-fund-table-wrap"><table className="va-fund-table"><thead><tr><th>Source</th><th>Type</th><th>Account</th><th>Original</th><th>Repaid</th><th>Outstanding</th><th>Due Date</th><th>Status</th></tr></thead><tbody>{fundLedger.length===0?<tr><td colSpan="8" className="va-khata-empty">No fund or loan records yet.</td></tr>:fundLedger.map(f=><tr key={f.key}><td><strong>{f.source}</strong></td><td>{f.mode}</td><td>{f.account==='Cash'?'💵 Cash':'💳 Online'}</td><td>{formatINR(f.original)}</td><td className="payment-text">{formatINR(f.repaid)}</td><td className={f.outstanding>0?'debit-text':'payment-text'}><strong>{formatINR(f.outstanding)}</strong></td><td>{f.dueDate || '—'}</td><td><span className={'va-fund-status '+(f.status==='Overdue'?'overdue':f.status==='Closed'?'closed':'open')}>{f.status}</span></td></tr>)}</tbody></table></div></section>
+          <div className="va-khata-tip"><strong>💡 Accounting rule:</strong> Fund receipts are not sales. Repayments are not operating expenses; they reduce the outstanding funding balance and the account used for repayment.</div>
         </div>
       )}
 
@@ -2190,6 +2214,10 @@ const expenseUiStyles = `
 `;
 const khataUiStyles = `
 .va-khata-page{max-width:1500px;margin:0 auto}.va-khata-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-khata-hero h2{margin:5px 0;font-size:27px}.va-khata-hero p{margin:0;color:#cbd5e1}.va-khata-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-khata-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-khata-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-khata-kpi strong{display:block;font-size:24px;margin-top:7px;color:#0f172a}.va-khata-kpi small{display:block;color:#94a3b8;margin-top:4px}.va-khata-kpi.due{border-top-color:#e11d48}.va-khata-kpi.given{border-top-color:#f59e0b}.va-khata-kpi.received{border-top-color:#10b981}.va-khata-kpi.customers{border-top-color:#6366f1}.va-khata-grid{display:grid;grid-template-columns:minmax(330px,.8fr) minmax(0,1.8fr);gap:18px}.va-khata-list-card,.va-khata-detail-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);min-width:0}.va-khata-card-head,.va-khata-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:15px}.va-khata-card-head h3,.va-khata-detail-head h3{margin:4px 0;font-size:20px}.va-khata-count{background:#f1f5f9;color:#475569;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:800}.va-khata-customer-list{display:flex;flex-direction:column;gap:7px;max-height:590px;overflow:auto}.va-khata-customer{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:11px;cursor:pointer}.va-khata-customer:hover,.va-khata-customer.active{border-color:#818cf8;background:#eef2ff}.va-khata-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#e0e7ff;color:#4338ca;font-weight:900;flex:none}.va-khata-customer-main{flex:1;min-width:0}.va-khata-customer-main strong{display:block;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.va-khata-customer-main small{display:block;color:#94a3b8;margin-top:3px;font-size:11px}.va-khata-balance{font-weight:900;text-align:right;white-space:nowrap}.va-khata-balance small{display:block;font-size:10px;font-weight:800}.va-khata-balance.danger{color:#e11d48}.va-khata-balance.credit{color:#2563eb}.va-khata-balance.clear{color:#059669}.va-khata-detail-empty{min-height:420px;display:grid;place-items:center;text-align:center;align-content:center;color:#64748b}.va-khata-detail-empty div{font-size:46px}.va-khata-detail-empty h3{margin:8px 0 4px;color:#334155}.va-khata-detail-empty p{margin:0}.va-khata-detail-head p{margin:0;color:#64748b;font-size:12px}.va-khata-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.va-khata-balance-banner{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px}.va-khata-balance-banner div{padding:8px 10px}.va-khata-balance-banner div:first-child{background:#fff1f2;border-radius:10px}.va-khata-balance-banner span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-khata-balance-banner strong{display:block;color:#be123c;font-size:25px;margin-top:5px}.va-khata-balance-banner b{display:block;color:#0f172a;font-size:17px;margin-top:6px}.va-khata-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}.va-khata-filters label{font-size:12px;font-weight:800;color:#475569}.va-khata-filters input{margin-top:5px}.va-khata-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-khata-table{width:100%;border-collapse:collapse;min-width:700px}.va-khata-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left}.va-khata-table th,.va-khata-table td{padding:11px;border-bottom:1px solid #eef2f7}.va-khata-table tbody tr:last-child td{border-bottom:0}.va-khata-pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.va-khata-pill.debit{background:#fff1f2;color:#be123c}.va-khata-pill.payment{background:#ecfdf5;color:#047857}.debit-text{color:#be123c;font-weight:800}.payment-text{color:#047857;font-weight:800}.va-khata-empty{padding:30px!important;text-align:center;color:#64748b}.va-khata-tip{margin-top:15px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px}.va-khata-tip strong{color:#1d4ed8}@media(max-width:1000px){.va-khata-grid{grid-template-columns:1fr}.va-khata-customer-list{max-height:420px}}@media(max-width:700px){.va-khata-kpis{grid-template-columns:repeat(2,1fr)}.va-khata-hero{display:block}.va-khata-hero button{margin-top:15px;width:100%}.va-khata-balance-banner{grid-template-columns:1fr}.va-khata-filters{grid-template-columns:1fr}.va-khata-detail-head{display:block}.va-khata-detail-actions{margin-top:12px}.va-khata-detail-actions button{flex:1}.va-khata-kpi strong{font-size:19px}}@media(max-width:430px){.va-khata-kpis{grid-template-columns:1fr}.va-khata-list-card,.va-khata-detail-card{padding:14px}.va-khata-customer{padding:9px}}
+`;
+
+const fundUiStyles = `
+.va-funds-page{max-width:1500px;margin:0 auto}.va-funds-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#164e63);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-funds-hero h2{margin:5px 0;font-size:27px}.va-funds-hero p{margin:0;color:#cbd5e1}.va-fund-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-fund-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #0ea5e9;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-fund-kpis .due{border-top-color:#dc2626}.va-fund-kpis span{font-size:12px;color:#64748b;font-weight:800}.va-fund-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-fund-workspace{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-fund-entry-card,.va-fund-ledger-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-fund-entry-card:first-child{border-top:4px solid #0ea5e9}.va-fund-entry-card:nth-child(2){border-top:4px solid #dc2626}.va-fund-entry-row{display:grid;grid-template-columns:1.3fr .8fr .9fr .7fr .9fr 1fr 38px;gap:7px;margin-bottom:9px;align-items:center}.va-fund-entry-row .va-icon-delete{min-height:42px}.va-fund-ledger-card{margin-bottom:18px}.va-fund-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-fund-table{width:100%;border-collapse:collapse;min-width:850px}.va-fund-table th,.va-fund-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:left}.va-fund-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase}.va-fund-table tbody tr:last-child td{border-bottom:0}.va-fund-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.va-fund-status.open{background:#fff7ed;color:#c2410c}.va-fund-status.overdue{background:#fef2f2;color:#b91c1c}.va-fund-status.closed{background:#ecfdf5;color:#047857}@media(max-width:1050px){.va-fund-workspace{grid-template-columns:1fr}.va-fund-entry-row{grid-template-columns:1fr 1fr 1fr}.va-fund-entry-row .va-icon-delete{width:100%}}@media(max-width:650px){.va-fund-kpis{grid-template-columns:repeat(2,1fr)}.va-funds-hero{display:block}.va-funds-hero button{margin-top:15px;width:100%}.va-fund-entry-row{grid-template-columns:1fr}.va-fund-entry-card,.va-fund-ledger-card{padding:14px}.va-fund-kpis strong{font-size:19px}}
 `;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
