@@ -1475,7 +1475,8 @@ export default function App() {
                 <div className="va-recent-row head"><span>Date</span><span>Sales</span><span>Expenses</span><span>Cash</span><span>Online</span><span>Status</span></div>
                 {dashboardData.recentTransactions.map(log => {
                   const sales = (()=>{const s=log.expense_details?.sales||{}; return Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((a,x)=>a+Number(x.amount||0),0)})();
-                  return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(dashboardData.recentTransactions.find(x=>x.date===log.date)?dashboardData.recentTransactions.find(x=>x.date===log.date).total_cash_in_hand:0)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>;
+                  const expenses = (()=>{let total=0;(log.expense_details?.online||[]).forEach(x=>total+=Number(x.amount||0));(log.expense_details?.cash||[]).forEach(x=>{if(x.type!=='Counter'&&x.type!=='Credit'&&x.type!=='Teja'&&x.type!=='Anil')total+=Number(x.amount||0)});(log.expense_details?.staff||[]).forEach(x=>total+=Number(x.amount||0));return total})();
+                  return <div className="va-recent-row" key={log.date}><span>{log.date}</span><strong>{formatINR(sales)}</strong><span>{formatINR(expenses)}</span><span>{formatINR(Number(log.total_cash_in_hand||0))}</span><span>{formatINR(Number(log.total_online_balance||0))}</span><span className="success-text">Saved</span></div>;
                 })}
               </div>
             )}
