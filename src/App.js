@@ -1442,21 +1442,57 @@ export default function App() {
 
           <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">Payroll payments</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffAvailableCash + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Available Cash</strong> deducts from Available Cash. <strong>Cash — Till</strong> deducts from the Till.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Till</option><option value="Available Cash">💵 Cash — Available Cash</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
           <div className="va-drawer-card"><div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div>
-          <div style={{ ...cardStyle, backgroundColor: '#1f2937', color: 'white' }}>
-            <h3>Final System Balances (For {date})</h3>
-            <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px', backgroundColor: '#374151', borderRadius: '8px' }}>
-              <p style={{ margin: 0, color: '#9ca3af' }}>True Gross Sales Today (Includes App/Credit Sales)</p>
-              <h2 style={{ margin: 0, color: '#fcd34d' }}>₹{trueGrossSale}</h2>
+          <div className="va-final-card">
+            <div className="va-final-head">
+              <div>
+                <span className="va-eyebrow va-final-eyebrow">End-of-day close</span>
+                <h3>Final System Balances</h3>
+                <p>Review the system totals for <strong>{date}</strong> before saving the daily account.</p>
+              </div>
+              <div className="va-save-status">{isSaving ? '⏳ Saving…' : '● Ready to save'}</div>
             </div>
-            <div style={flexRow}>
-              <h4 style={{flex: 1}}>Expected Cash In Hand: <br/><span style={{ color: '#34d399', fontSize: '24px' }}>{totalCashInHand}</span></h4>
-              <h4 style={{flex: 1}}>Online Balance: <br/><span style={{ color: '#60a5fa', fontSize: '24px' }}>{totalOnlineBalance}</span></h4>
-              <h3 style={{ flex: 1 }}>Total Money Left: <br/>{totalAmountLeft}</h3>
+
+            <div className="va-final-highlight">
+              <div>
+                <span>True Gross Sales</span>
+                <small>Includes app & credit sales</small>
+              </div>
+              <strong>{formatINR(trueGrossSale)}</strong>
             </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button onClick={clearUnsavedForm} style={{ ...btnStyle, backgroundColor: '#6b7280', flex: 1 }}>↺ Clear Unsaved Form</button>
-              <button onClick={saveDailyAccounts} disabled={isSaving} style={{ ...btnStyle, backgroundColor: isSaving ? '#9ca3af' : '#10b981', flex: 2, fontSize: '18px', padding: '15px' }}>{isSaving ? '⏳ Saving...' : `💾 Save Data For ${date}`}</button>
+
+            <div className="va-final-grid">
+              <div className="va-final-metric cash">
+                <span>Expected Cash In Hand</span>
+                <strong>{formatINR(totalCashInHand)}</strong>
+                <small>System expected till cash</small>
+              </div>
+              <div className="va-final-metric online">
+                <span>Online Balance</span>
+                <strong>{formatINR(totalOnlineBalance)}</strong>
+                <small>Bank / online collections</small>
+              </div>
+              <div className="va-final-metric total">
+                <span>Total Money Left</span>
+                <strong>{formatINR(totalAmountLeft)}</strong>
+                <small>Cash + online balance</small>
+              </div>
             </div>
+
+            <div className="va-final-check">
+              <div className="va-final-check-icon">✓</div>
+              <div>
+                <strong>System balance is ready for closing</strong>
+                <p>Compare Expected Cash In Hand with the physical drawer count above. The drawer difference does not change these system balances.</p>
+              </div>
+            </div>
+
+            <div className="va-final-actions">
+              <button onClick={clearUnsavedForm} className="va-clear-btn">↺ Clear Unsaved Form</button>
+              <button onClick={saveDailyAccounts} disabled={isSaving} className="va-save-btn">
+                {isSaving ? '⏳ Saving Daily Account…' : `💾 Save Daily Account — ${date}`}
+              </button>
+            </div>
+            <p className="va-save-note">Saved data can be reviewed later from History. Clearing the form only removes unsaved entries for this date.</p>
           </div>
         </>
       )}
@@ -1834,6 +1870,8 @@ const dailyUiStyles = `
 `;
 
 const expenseUiStyles = `
+.va-final-card{background:linear-gradient(145deg,#0f172a,#172554);color:#fff;border-radius:22px;padding:24px;margin-bottom:20px;box-shadow:0 18px 45px rgba(15,23,42,.18);overflow:hidden;position:relative}.va-final-card:before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 90% 0%,rgba(59,130,246,.2),transparent 35%);pointer-events:none}.va-final-head,.va-final-highlight,.va-final-grid,.va-final-check,.va-final-actions,.va-save-note{position:relative;z-index:1}.va-final-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:18px}.va-final-head h3{font-size:24px;margin:5px 0}.va-final-head p{margin:0;color:#cbd5e1;font-size:13px}.va-final-eyebrow{color:#93c5fd}.va-save-status{background:rgba(16,185,129,.14);border:1px solid rgba(52,211,153,.25);color:#6ee7b7;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}.va-final-highlight{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 20px;border:1px solid rgba(251,191,36,.28);background:rgba(251,191,36,.1);border-radius:16px;margin-bottom:14px}.va-final-highlight span{display:block;font-weight:900;font-size:14px}.va-final-highlight small{display:block;color:#cbd5e1;margin-top:4px}.va-final-highlight strong{font-size:30px;color:#fcd34d}.va-final-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.va-final-metric{padding:18px;border-radius:15px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09)}.va-final-metric span{display:block;color:#cbd5e1;font-size:12px;font-weight:800}.va-final-metric strong{display:block;font-size:24px;margin-top:8px}.va-final-metric small{display:block;color:#94a3b8;margin-top:5px}.va-final-metric.cash{border-top:3px solid #34d399}.va-final-metric.cash strong{color:#6ee7b7}.va-final-metric.online{border-top:3px solid #60a5fa}.va-final-metric.online strong{color:#93c5fd}.va-final-metric.total{border-top:3px solid #a78bfa}.va-final-metric.total strong{color:#c4b5fd}.va-final-check{display:flex;gap:12px;align-items:flex-start;margin:14px 0;padding:13px 15px;border-radius:13px;background:rgba(15,23,42,.45);border:1px solid rgba(148,163,184,.15)}.va-final-check-icon{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#10b981;color:#fff;font-weight:900;flex:none}.va-final-check strong{font-size:13px}.va-final-check p{margin:3px 0 0;color:#94a3b8;font-size:12px;line-height:1.45}.va-final-actions{display:grid;grid-template-columns:.8fr 2fr;gap:10px}.va-clear-btn,.va-save-btn{border:0;border-radius:12px;padding:14px 16px;font-weight:900;cursor:pointer;font-size:14px}.va-clear-btn{background:rgba(255,255,255,.1);color:#e2e8f0;border:1px solid rgba(255,255,255,.14)}.va-save-btn{background:#10b981;color:#fff;font-size:16px;box-shadow:0 8px 20px rgba(16,185,129,.22)}.va-save-btn:disabled{background:#64748b;cursor:not-allowed;box-shadow:none}.va-save-note{margin:10px 0 0;color:#94a3b8;text-align:center;font-size:11px}@media(max-width:750px){.va-final-head{display:block}.va-save-status{display:inline-block;margin-top:12px}.va-final-grid{grid-template-columns:1fr}.va-final-highlight{align-items:flex-start;flex-direction:column}.va-final-highlight strong{font-size:26px}.va-final-actions{grid-template-columns:1fr}.va-save-btn{order:-1}}
+
 .va-credit-grid,.va-expense-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}
 .va-entry-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
 .va-credit-card{border-top:4px solid #f43f5e}.va-receive-card{border-top:4px solid #10b981}.va-online-card{border-top:4px solid #3b82f6}.va-cash-card{border-top:4px solid #10b981}
