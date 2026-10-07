@@ -2524,7 +2524,7 @@ export default function App() {
                 <div className="va-staff-detail-note">
                   <strong>Quick salary setup:</strong>
                   <input type="number" min="0" value={r.monthlySalary || ''} placeholder="Monthly salary" onChange={e => saveSalary(r.name, e.target.value)} />
-                  {attendanceRow ? <span>{attendanceRow ? `Today: ${attendanceRow.status || "Not marked"} ${attendanceRow.check_in ? "• Checked in" : ""}` : 'Today: No attendance record'}</span> : <span>No attendance record loaded for today.</span>}
+                  {attendanceRow ? <span>{`Today: ${attendanceRow.status || "Not marked"}${attendanceRow.check_in ? " • Checked in" : ""}`}</span> : <span>Today: No attendance record</span>}
                 </div>
               </div>
             );
