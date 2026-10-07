@@ -1467,7 +1467,7 @@ export default function App() {
     const receivables = Number(khataSummary.outstanding || 0);
     const payables = Number(supplierPayableSummary.totalOutstanding || 0);
     const cashConversion = sales ? ((Number(cashFlowData.salesCash || 0) + Number(cashFlowData.salesOnline || 0) + Number(cashFlowData.creditReceived || 0)) / sales) * 100 : 0;
-    const trend = (financialDashboardData?.trend || []).filter(x => Number(x.sales || 0) > 0);
+    const trend = historyLogs.filter(log => log.date >= analyticsStart && log.date <= analyticsEnd).slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-10).map(log => { const s=log.expense_details?.sales||{}; return { sales:Number(s.cash||0)+Number(s.online||0)+Number(s.parcel_counter_cash||0)+Number(s.parcel_counter_online||0)+(log.expense_details?.credit_sales||[]).reduce((sum,x)=>sum+Number(x.amount||0),0) }; }).filter(x => x.sales > 0);
     const firstSales = trend.length ? Number(trend[0].sales || 0) : 0;
     const lastSales = trend.length ? Number(trend[trend.length - 1].sales || 0) : 0;
     const salesTrend = firstSales ? ((lastSales - firstSales) / firstSales) * 100 : 0;
@@ -1487,7 +1487,7 @@ export default function App() {
 
     const priority = {danger:0, warning:1, info:2, success:3};
     return insights.sort((a,b) => priority[a.type] - priority[b.type]).slice(0, 6);
-  }, [analyticsData, khataSummary, supplierPayableSummary, cashFlowData, financialDashboardData]);
+  }, [analyticsData, khataSummary, supplierPayableSummary, cashFlowData, historyLogs, analyticsStart, analyticsEnd]);
 
   const financialDashboardData = useMemo(() => {
     const sales = Number(analyticsData.totalSales || 0);
