@@ -56,13 +56,12 @@ const expenseUiStyles = `
 .va-helper{background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:12px}
 @media(max-width:900px){.va-credit-grid,.va-expense-grid{grid-template-columns:1fr}.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr 1fr}.va-expense-row .va-icon-delete,.va-cash-expense-row .va-icon-delete{grid-column:auto}}
 @media(max-width:560px){.va-line-item,.va-receive-line,.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr}.va-entry-head{display:block}.va-entry-total{display:inline-block;margin-top:8px}.va-icon-delete{width:100%}}
-`;
-
 .va-drawer-card{background:#fff;border:1px solid #fde68a;border-top:4px solid #f59e0b;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
 .va-drawer-total{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 16px;text-align:right;min-width:145px}.va-drawer-total span{display:block;color:#92400e;font-size:11px;font-weight:800;text-transform:uppercase}.va-drawer-total strong{font-size:20px;color:#78350f}
 .va-drawer-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:16px 0}.va-note-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center}.va-note-box span{display:block;font-weight:900;color:#334155;font-size:14px}.va-note-box input{width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border:1px solid #cbd5e1;border-radius:8px;text-align:center;font-size:16px}.va-note-box small{color:#64748b;font-weight:700}.va-coin-box{background:#fffbeb;border-color:#fde68a}
 .va-drawer-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.va-drawer-summary>div{background:#f8fafc;border-radius:12px;padding:13px;text-align:center}.va-drawer-summary span{display:block;color:#64748b;font-size:11px;font-weight:800;text-transform:uppercase}.va-drawer-summary strong{display:block;color:#0f172a;font-size:20px;margin-top:5px}.va-drawer-summary .positive{background:#ecfdf5;border:1px solid #bbf7d0}.va-drawer-summary .negative{background:#fef2f2;border:1px solid #fecaca}.va-drawer-note{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12px}
 @media(max-width:1000px){.va-drawer-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.va-drawer-grid{grid-template-columns:repeat(2,1fr)}.va-drawer-summary{grid-template-columns:1fr}.va-drawer-total{text-align:left;margin-top:10px}.va-entry-head{display:block}}
+`;
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -1514,21 +1513,12 @@ export default function App() {
 
 
           <div className="va-drawer-card">
-            <div className="va-entry-head">
-              <div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count the actual notes and coins in the drawer. This does not change accounting balances.</p></div>
-              <div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div>
-            </div>
+            <div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count the actual notes and coins in the drawer. This does not change accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div>
             <div className="va-drawer-grid">
-              {[500,200,100,50,20,10].map(note => (
-                <label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" inputMode="numeric" value={notes[note]} onChange={e => setNotes({...notes, [note]: e.target.value})} placeholder="0"/><small>{formatINR(note * Number(notes[note] || 0))}</small></label>
-              ))}
-              <label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" inputMode="decimal" value={notes.coins} onChange={e => setNotes({...notes, coins: e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins || 0))}</small></label>
+              {[500,200,100,50,20,10].map(note => <label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" inputMode="numeric" value={notes[note]} onChange={e => setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note * Number(notes[note] || 0))}</small></label>)}
+              <label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" inputMode="decimal" value={notes.coins} onChange={e => setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins || 0))}</small></label>
             </div>
-            <div className="va-drawer-summary">
-              <div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div>
-              <div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div>
-              <div className={actualDrawerTotal - totalCashInHand >= 0 ? "va-drawer-diff positive" : "va-drawer-diff negative"}><span>Difference</span><strong>{formatINR(actualDrawerTotal - totalCashInHand)}</strong></div>
-            </div>
+            <div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?"positive":"negative"}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div>
             <div className="va-drawer-note">📌 <strong>Counting only:</strong> the difference is for reconciliation and does not automatically change Cash In Hand, Available Cash, or Net Sale.</div>
           </div>
 
