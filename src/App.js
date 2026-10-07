@@ -2052,6 +2052,7 @@ export default function App() {
   return (
     <>
         <style>{dashboardCommandStyles}</style>
+        <style>{collapsibleStyles}</style>
         <style>{smartInsightsStyles}</style>
         <style>{dailyUiStyles}</style>
         <style>{historyUiStyles}</style>
@@ -2248,12 +2249,12 @@ export default function App() {
             </section>
           </div>
 
-                    <div className="va-smart-insights">
+                    <div className={`va-smart-insights va-collapsible-section ${collapsedSections.smartInsights?'collapsed':''}`}>
             <div className="va-smart-insights-head">
-              <div><span className="va-eyebrow">SMART BUSINESS INTELLIGENCE</span><h3>What needs your attention?</h3><p>Automatic recommendations based on the selected financial period.</p></div>
+              <div><span className="va-eyebrow">SMART BUSINESS INTELLIGENCE</span><h3>What needs your attention?</h3><p>Automatic recommendations based on the selected financial period.</p></div><button className="va-collapse-btn" onClick={()=>toggleSection('smartInsights')} aria-label={collapsedSections.smartInsights?'Expand Smart Business Intelligence':'Collapse Smart Business Intelligence'}>{collapsedSections.smartInsights?'⌄':'⌃'}</button>
               <span className="va-smart-insights-badge">LIVE</span>
             </div>
-            {smartInsights.length === 0 ? <div className="va-smart-empty">No immediate issues detected. Your current indicators are within the dashboard thresholds.</div> : (
+            {!collapsedSections.smartInsights && <>{smartInsights.length === 0 ? <div className="va-smart-empty">No immediate issues detected. Your current indicators are within the dashboard thresholds.</div> : (
               <div className="va-smart-grid">
                 {smartInsights.map((item,i) => (
                   <div key={i} className={`va-smart-card ${item.type}`}>
@@ -2262,7 +2263,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            )}
+            )}          </>}
           </div>
 
 <div className="va-financial-grid">
@@ -3367,6 +3368,23 @@ const dashboardCommandStyles = `
 @media(max-width:430px){.va-financial-kpis{grid-template-columns:1fr}.va-financial-hero-actions{display:grid;grid-template-columns:1fr}.va-financial-actions{grid-template-columns:1fr}}
 `;
 
+
+const collapsibleStyles = `
+.va-collapsible-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.va-collapsible-head>div:first-child{min-width:0}
+.va-section-head-actions{display:flex;align-items:center;gap:8px}
+.va-collapse-btn{width:30px;height:30px;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:8px;font-size:16px;font-weight:900;line-height:1;cursor:pointer;display:inline-grid;place-items:center;transition:.15s}
+.va-collapse-btn:hover{background:#eef2ff;border-color:#a5b4fc;color:#3730a3}
+.va-collapsible-section.collapsed{min-height:0}
+.va-collapsible-section.collapsed .va-dashboard-card-head{margin-bottom:0}
+.va-collapsible-body{animation:vaCollapseIn .16s ease-out}
+@keyframes vaCollapseIn{from{opacity:.35;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+.va-smart-insights .va-smart-insights-head{margin-bottom:0}
+.va-smart-insights:not(.collapsed) .va-smart-insights-head{margin-bottom:14px}
+.va-smart-insights-head{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.va-smart-insights-head>div:first-child{min-width:0}
+@media(max-width:600px){.va-collapsible-head{align-items:flex-start}.va-collapse-btn{flex:0 0 30px}.va-smart-insights-head{align-items:flex-start}.va-smart-insights-head .va-collapse-btn{margin-left:auto}}
+`;
 
 const smartInsightsStyles = `
 .va-smart-insights{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;margin:18px 0;box-shadow:0 8px 25px rgba(15,23,42,.055)}
