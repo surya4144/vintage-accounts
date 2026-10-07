@@ -1877,101 +1877,119 @@ export default function App() {
       )}
 
       {activeTab === 'analytics' && (
-        <div>
-          <div style={cardStyle}>
-            <h2 style={{ marginTop: 0 }}>📊 Business Analytics</h2>
-            <p style={{ color: '#6b7280', marginTop: 0 }}>
-              Review sales, operating costs, staff costs and customer credit for the selected period. Profit is an internal estimate based on the entries recorded here.
-            </p>
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', background: '#f3f4f6', padding: '15px', borderRadius: '8px', flexWrap: 'wrap' }}>
-              <label style={{ flex: 1, minWidth: '220px' }}>Start Date:<input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} style={inputStyle}/></label>
-              <label style={{ flex: 1, minWidth: '220px' }}>End Date:<input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} style={inputStyle}/></label>
+        <div className="va-analytics-page">
+          <div className="va-analytics-hero">
+            <div>
+              <span className="va-eyebrow">MANAGEMENT • PERFORMANCE • REPORTING</span>
+              <h2>📊 Business Analytics</h2>
+              <p>Understand sales, expenses, staff cost, credit exposure and estimated profit from the same accounting records used throughout Vintage Accounts.</p>
             </div>
-
-            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '20px' }}>
-              {[
-                ['Sales', analyticsData.totalSales, '#ecfdf5', '#059669'],
-                ['Operating Expenses', analyticsData.totalExpenses, '#fef2f2', '#dc2626'],
-                ['Estimated Profit', analyticsData.estimatedProfit, '#eff6ff', '#2563eb'],
-                ['Credit Outstanding', analyticsData.creditOutstanding, '#fff7ed', '#ea580c']
-              ].map(([label, value, bg, color]) => (
-                <div key={label} style={{ flex: 1, minWidth: '190px', padding: '18px', background: bg, borderRadius: '8px', textAlign: 'center' }}>
-                  <p style={{ margin: 0, color, fontWeight: 'bold' }}>{label}</p>
-                  <h2 style={{ margin: '6px 0 0', color }}>{formatINR(value)}</h2>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '25px' }}>
-              {[
-                ['Cash Sales', analyticsData.cashSales],
-                ['Online Sales', analyticsData.onlineSales],
-                ['Credit Sales', analyticsData.creditSales],
-                ['Credit Received', analyticsData.creditReceived],
-                ['Staff Cost', analyticsData.staffCost],
-                ['Operating Days', analyticsData.operatingDays],
-                ['Avg Daily Sales', analyticsData.averageDailySales],
-                ['Avg Daily Expenses', analyticsData.averageDailyExpenses]
-              ].map(([label, value]) => (
-                <div key={label} style={{ flex: 1, minWidth: '150px', padding: '14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: 'white' }}>
-                  <div style={{ color: '#6b7280', fontSize: '13px' }}>{label}</div>
-                  <strong style={{ display: 'block', marginTop: '5px', fontSize: '18px' }}>
-                    {label === 'Operating Days' ? value : formatINR(value)}
-                  </strong>
-                </div>
-              ))}
+            <div className="va-analytics-actions">
+              <label>Start Date<input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} /></label>
+              <label>End Date<input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} /></label>
+              <button onClick={() => {
+                const rows = [
+                  {Metric:'Sales',Value:analyticsData.totalSales},
+                  {Metric:'Operating Expenses',Value:analyticsData.totalExpenses},
+                  {Metric:'Estimated Profit',Value:analyticsData.estimatedProfit},
+                  {Metric:'Credit Outstanding',Value:analyticsData.creditOutstanding},
+                  {Metric:'Cash Sales',Value:analyticsData.cashSales},
+                  {Metric:'Online Sales',Value:analyticsData.onlineSales},
+                  {Metric:'Credit Sales',Value:analyticsData.creditSales},
+                  {Metric:'Credit Received',Value:analyticsData.creditReceived},
+                  {Metric:'Staff Cost',Value:analyticsData.staffCost},
+                  {Metric:'Operating Days',Value:analyticsData.operatingDays},
+                  {Metric:'Average Daily Sales',Value:analyticsData.averageDailySales},
+                  {Metric:'Average Daily Expenses',Value:analyticsData.averageDailyExpenses}
+                ];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Summary');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsData.monthlyRows.map(([month,row]) => ({Month:month,Sales:row.sales,Expenses:row.expenses,EstimatedProfit:row.sales-row.expenses,Days:row.days}))), 'Monthly');
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(analyticsData.sortedCategories.map(([category,amount]) => ({Category:category,Amount:amount}))), 'Expenses');
+                XLSX.writeFile(wb, `Vintage-Analytics-${analyticsStart}-to-${analyticsEnd}.xlsx`);
+              }} className="va-analytics-btn">📥 Export Report</button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            <div style={{ ...cardStyle, flex: 1, minWidth: '420px' }}>
-              <h3 style={{ marginTop: 0 }}>📅 Monthly Performance</h3>
-              {analyticsData.monthlyRows.length === 0 ? <p>No records found in this date range.</p> : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                      <th style={{ textAlign: 'left', padding: '10px' }}>Month</th>
-                      <th style={{ textAlign: 'right', padding: '10px' }}>Sales</th>
-                      <th style={{ textAlign: 'right', padding: '10px' }}>Expenses</th>
-                      <th style={{ textAlign: 'right', padding: '10px' }}>Est. Profit</th>
-                      <th style={{ textAlign: 'right', padding: '10px' }}>Days</th>
-                    </tr></thead>
-                    <tbody>
-                      {analyticsData.monthlyRows.map(([month, row]) => (
-                        <tr key={month} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                          <td style={{ padding: '10px', fontWeight: 'bold' }}>{month}</td>
-                          <td style={{ padding: '10px', textAlign: 'right' }}>{formatINR(row.sales)}</td>
-                          <td style={{ padding: '10px', textAlign: 'right' }}>{formatINR(row.expenses)}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', color: row.sales - row.expenses >= 0 ? '#2563eb' : '#dc2626' }}>{formatINR(row.sales - row.expenses)}</td>
-                          <td style={{ padding: '10px', textAlign: 'right' }}>{row.days}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          <div className="va-analytics-kpis">
+            <div className="sales"><span>💰 Total Sales</span><strong>{formatINR(analyticsData.totalSales)}</strong><small>{analyticsData.operatingDays} recorded operating days</small></div>
+            <div className="expense"><span>💸 Total Expenses</span><strong>{formatINR(analyticsData.totalExpenses)}</strong><small>Operating + staff entries</small></div>
+            <div className={analyticsData.estimatedProfit >= 0 ? 'profit' : 'loss'}><span>{analyticsData.estimatedProfit >= 0 ? '📈 Estimated Profit' : '📉 Estimated Loss'}</span><strong>{formatINR(analyticsData.estimatedProfit)}</strong><small>Sales less recorded expenses</small></div>
+            <div className="credit"><span>📒 Credit Outstanding</span><strong>{formatINR(analyticsData.creditOutstanding)}</strong><small>Credit sales less collections</small></div>
+          </div>
+
+          <div className="va-analytics-grid va-analytics-grid-top">
+            <div className="va-analytics-card">
+              <div className="va-analytics-card-head"><div><span className="va-eyebrow">Revenue mix</span><h3>Sales Channels</h3></div></div>
+              {[
+                ['Cash Sales', analyticsData.cashSales, 'cash'],
+                ['Online Sales', analyticsData.onlineSales, 'online'],
+                ['Credit Sales', analyticsData.creditSales, 'credit']
+              ].map(([label,value,type]) => {
+                const pct = analyticsData.totalSales ? (value / analyticsData.totalSales) * 100 : 0;
+                return <div key={label} className="va-analytics-mix-row">
+                  <div><strong>{label}</strong><span>{formatINR(value)} • {pct.toFixed(1)}%</span></div>
+                  <div className="va-analytics-progress"><i className={type} style={{width:`${Math.min(100,pct)}%`}}></i></div>
+                </div>;
+              })}
+              <div className="va-analytics-mini-grid">
+                <div><span>Credit Received</span><strong>{formatINR(analyticsData.creditReceived)}</strong></div>
+                <div><span>Staff Cost</span><strong>{formatINR(analyticsData.staffCost)}</strong></div>
+                <div><span>Avg. Daily Sales</span><strong>{formatINR(analyticsData.averageDailySales)}</strong></div>
+                <div><span>Avg. Daily Expense</span><strong>{formatINR(analyticsData.averageDailyExpenses)}</strong></div>
+              </div>
             </div>
 
-            <div style={{ ...cardStyle, flex: 1, minWidth: '420px' }}>
-              <h3 style={{ marginTop: 0 }}>💰 Expense Breakdown</h3>
-              {analyticsData.sortedCategories.length === 0 ? <p>No expenses found in this date range.</p> :
-                analyticsData.sortedCategories.map(([category, amount]) => (
-                  <div key={category} style={{ marginBottom: '15px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <strong>{category}</strong><span>{formatINR(amount)}</span>
-                    </div>
-                    <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '4px', height: '12px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', backgroundColor: '#3b82f6', width: `${(amount / analyticsData.maxCatVal) * 100}%` }}></div>
-                    </div>
-                  </div>
-                ))
-              }
+            <div className="va-analytics-card">
+              <div className="va-analytics-card-head"><div><span className="va-eyebrow">Expense intelligence</span><h3>Top Expense Categories</h3></div></div>
+              {analyticsData.sortedCategories.length === 0 ? <div className="va-empty-state">No expenses found in this period.</div> : analyticsData.sortedCategories.slice(0,6).map(([category,amount]) => {
+                const pct = analyticsData.totalExpenses ? (amount / analyticsData.totalExpenses) * 100 : 0;
+                return <div key={category} className="va-analytics-expense-row">
+                  <div><strong>{category}</strong><span>{formatINR(amount)}</span></div>
+                  <div className="va-analytics-progress"><i style={{width:`${Math.min(100,pct)}%`}}></i></div>
+                </div>;
+              })}
             </div>
           </div>
 
-          <div style={{ ...cardStyle, backgroundColor: '#f9fafb' }}>
-            <strong>How to read this:</strong>
-            <span style={{ color: '#6b7280' }}> Sales include the final cash/online amounts entered by the cashier after expenses have already been deducted, plus credit sales and recorded Counter adjustments. Expense entries are tracked separately for reporting and are not subtracted again from closing cash/online balances.</span>
+          <div className="va-analytics-card">
+            <div className="va-analytics-card-head">
+              <div><span className="va-eyebrow">Trend</span><h3>📅 Monthly Performance</h3><p>Sales, expenses and estimated profit by month within the selected range.</p></div>
+            </div>
+            {analyticsData.monthlyRows.length === 0 ? <div className="va-empty-state">No records found in this date range.</div> : (
+              <div className="va-analytics-table-wrap">
+                <table className="va-analytics-table">
+                  <thead><tr><th>Month</th><th>Sales</th><th>Expenses</th><th>Est. Profit</th><th>Days</th><th>Daily Avg. Sales</th></tr></thead>
+                  <tbody>
+                    {analyticsData.monthlyRows.map(([month,row]) => {
+                      const profit = row.sales - row.expenses;
+                      return <tr key={month}>
+                        <td><strong>{month}</strong></td>
+                        <td>{formatINR(row.sales)}</td>
+                        <td>{formatINR(row.expenses)}</td>
+                        <td className={profit >= 0 ? 'success-text' : 'danger-text'}><strong>{formatINR(profit)}</strong></td>
+                        <td>{row.days}</td>
+                        <td>{formatINR(row.days ? row.sales / row.days : 0)}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="va-analytics-insight">
+            <div className="va-analytics-insight-icon">💡</div>
+            <div>
+              <strong>Management insight</strong>
+              <p>{analyticsData.sortedCategories.length
+                ? `Your largest recorded expense category is "${analyticsData.sortedCategories[0][0]}" at ${formatINR(analyticsData.sortedCategories[0][1])}. Use this report to identify recurring cost drivers and compare them against sales growth.`
+                : 'Once expenses are recorded, this section will highlight the largest cost category automatically.'}</p>
+            </div>
+          </div>
+
+          <div className="va-analytics-note">
+            <strong>Accounting note:</strong> Sales and expense figures are calculated from the saved daily accounting records. Estimated profit is an internal management estimate, not a statutory accounting or tax statement.
           </div>
         </div>
       )}
@@ -2228,6 +2246,9 @@ const payrollUiStyles = `
 @media(max-width:650px){.va-payroll-kpis{grid-template-columns:repeat(2,1fr)}.va-payroll-hero,.va-payroll-table-card{padding:15px}.va-payroll-hero h2{font-size:22px}.va-payroll-kpis strong{font-size:18px}.va-payroll-table-head{display:block}.va-payroll-legend{margin-top:10px}.va-payroll-actions{display:grid;grid-template-columns:1fr 1fr}.va-payroll-actions label{grid-column:1/-1}.va-payroll-actions>*{width:100%}}
 `;
 
+
+
+.va-analytics-page{max-width:1500px;margin:0 auto}.va-analytics-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-analytics-hero h2{margin:6px 0;font-size:28px}.va-analytics-hero p{margin:0;color:#cbd5e1;max-width:760px;line-height:1.5;font-size:13px}.va-analytics-actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.va-analytics-actions label{font-size:11px;font-weight:900;color:#cbd5e1}.va-analytics-actions input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-analytics-btn{border:0;border-radius:10px;padding:11px 14px;background:#10b981;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}.va-analytics-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-analytics-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-analytics-kpis .expense{border-top-color:#ef4444}.va-analytics-kpis .profit{border-top-color:#10b981}.va-analytics-kpis .loss{border-top-color:#dc2626}.va-analytics-kpis .credit{border-top-color:#f59e0b}.va-analytics-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-analytics-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-analytics-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-analytics-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-analytics-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-analytics-card-head h3{margin:4px 0;font-size:19px}.va-analytics-card-head p{margin:0;color:#64748b;font-size:12px}.va-analytics-mix-row,.va-analytics-expense-row{margin-bottom:15px}.va-analytics-mix-row>div:first-child,.va-analytics-expense-row>div:first-child{display:flex;justify-content:space-between;gap:15px;margin-bottom:6px;font-size:12px}.va-analytics-mix-row span,.va-analytics-expense-row span{color:#64748b}.va-analytics-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden}.va-analytics-progress i{display:block;height:100%;background:#2563eb;border-radius:999px}.va-analytics-progress i.cash{background:#10b981}.va-analytics-progress i.online{background:#3b82f6}.va-analytics-progress i.credit{background:#f59e0b}.va-analytics-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.va-analytics-mini-grid>div{padding:12px;background:#f8fafc;border-radius:11px}.va-analytics-mini-grid span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-analytics-mini-grid strong{display:block;margin-top:5px}.va-analytics-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-analytics-table{width:100%;border-collapse:collapse;min-width:780px}.va-analytics-table th,.va-analytics-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-analytics-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase}.va-analytics-table th:first-child,.va-analytics-table td:first-child{text-align:left}.va-analytics-insight{display:flex;gap:13px;align-items:flex-start;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;margin-bottom:18px}.va-analytics-insight-icon{width:34px;height:34px;display:grid;place-items:center;background:#dbeafe;border-radius:10px;flex:none}.va-analytics-insight strong{color:#1e40af}.va-analytics-insight p{margin:4px 0 0;color:#475569;font-size:12px;line-height:1.5}.va-analytics-note{padding:13px 15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5;margin-bottom:20px}.va-analytics-note strong{color:#334155}@media(max-width:1050px){.va-analytics-hero{display:block}.va-analytics-actions{margin-top:16px}.va-analytics-kpis{grid-template-columns:repeat(2,1fr)}.va-analytics-grid{grid-template-columns:1fr}}@media(max-width:650px){.va-analytics-hero,.va-analytics-card{padding:15px}.va-analytics-kpis{grid-template-columns:1fr 1fr}.va-analytics-actions{display:grid;grid-template-columns:1fr 1fr}.va-analytics-actions label{width:100%}.va-analytics-actions label input{width:100%;box-sizing:border-box}.va-analytics-btn{grid-column:1/-1}.va-analytics-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-analytics-kpis{grid-template-columns:1fr}.va-analytics-actions{grid-template-columns:1fr}.va-analytics-btn{grid-column:auto}}
 const khataUiStyles = `
 .va-khata-page{max-width:1500px;margin:0 auto}.va-khata-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-khata-hero h2{margin:5px 0;font-size:27px}.va-khata-hero p{margin:0;color:#cbd5e1}.va-khata-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-khata-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-khata-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-khata-kpi strong{display:block;font-size:24px;margin-top:7px;color:#0f172a}.va-khata-kpi small{display:block;color:#94a3b8;margin-top:4px}.va-khata-kpi.due{border-top-color:#e11d48}.va-khata-kpi.given{border-top-color:#f59e0b}.va-khata-kpi.received{border-top-color:#10b981}.va-khata-kpi.customers{border-top-color:#6366f1}.va-khata-grid{display:grid;grid-template-columns:minmax(330px,.8fr) minmax(0,1.8fr);gap:18px}.va-khata-list-card,.va-khata-detail-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);min-width:0}.va-khata-card-head,.va-khata-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:15px}.va-khata-card-head h3,.va-khata-detail-head h3{margin:4px 0;font-size:20px}.va-khata-count{background:#f1f5f9;color:#475569;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:800}.va-khata-customer-list{display:flex;flex-direction:column;gap:7px;max-height:590px;overflow:auto}.va-khata-customer{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:11px;cursor:pointer}.va-khata-customer:hover,.va-khata-customer.active{border-color:#818cf8;background:#eef2ff}.va-khata-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#e0e7ff;color:#4338ca;font-weight:900;flex:none}.va-khata-customer-main{flex:1;min-width:0}.va-khata-customer-main strong{display:block;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.va-khata-customer-main small{display:block;color:#94a3b8;margin-top:3px;font-size:11px}.va-khata-balance{font-weight:900;text-align:right;white-space:nowrap}.va-khata-balance small{display:block;font-size:10px;font-weight:800}.va-khata-balance.danger{color:#e11d48}.va-khata-balance.credit{color:#2563eb}.va-khata-balance.clear{color:#059669}.va-khata-detail-empty{min-height:420px;display:grid;place-items:center;text-align:center;align-content:center;color:#64748b}.va-khata-detail-empty div{font-size:46px}.va-khata-detail-empty h3{margin:8px 0 4px;color:#334155}.va-khata-detail-empty p{margin:0}.va-khata-detail-head p{margin:0;color:#64748b;font-size:12px}.va-khata-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.va-khata-balance-banner{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px}.va-khata-balance-banner div{padding:8px 10px}.va-khata-balance-banner div:first-child{background:#fff1f2;border-radius:10px}.va-khata-balance-banner span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-khata-balance-banner strong{display:block;color:#be123c;font-size:25px;margin-top:5px}.va-khata-balance-banner b{display:block;color:#0f172a;font-size:17px;margin-top:6px}.va-khata-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}.va-khata-filters label{font-size:12px;font-weight:800;color:#475569}.va-khata-filters input{margin-top:5px}.va-khata-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-khata-table{width:100%;border-collapse:collapse;min-width:700px}.va-khata-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left}.va-khata-table th,.va-khata-table td{padding:11px;border-bottom:1px solid #eef2f7}.va-khata-table tbody tr:last-child td{border-bottom:0}.va-khata-pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.va-khata-pill.debit{background:#fff1f2;color:#be123c}.va-khata-pill.payment{background:#ecfdf5;color:#047857}.debit-text{color:#be123c;font-weight:800}.payment-text{color:#047857;font-weight:800}.va-khata-empty{padding:30px!important;text-align:center;color:#64748b}.va-khata-tip{margin-top:15px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px}.va-khata-tip strong{color:#1d4ed8}@media(max-width:1000px){.va-khata-grid{grid-template-columns:1fr}.va-khata-customer-list{max-height:420px}}@media(max-width:700px){.va-khata-kpis{grid-template-columns:repeat(2,1fr)}.va-khata-hero{display:block}.va-khata-hero button{margin-top:15px;width:100%}.va-khata-balance-banner{grid-template-columns:1fr}.va-khata-filters{grid-template-columns:1fr}.va-khata-detail-head{display:block}.va-khata-detail-actions{margin-top:12px}.va-khata-detail-actions button{flex:1}.va-khata-kpi strong{font-size:19px}}@media(max-width:430px){.va-khata-kpis{grid-template-columns:1fr}.va-khata-list-card,.va-khata-detail-card{padding:14px}.va-khata-customer{padding:9px}}
 `;
