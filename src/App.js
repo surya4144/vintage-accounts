@@ -107,7 +107,118 @@ export default function App() {
   const [selectedKhataCustomer, setSelectedKhataCustomer] = useState(null);
   const [khataStartDate, setKhataStartDate] = useState('');
   const [khataEndDate, setKhataEndDate] = useState('');
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [inventoryTransactions, setInventoryTransactions] = useState([]);
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
+  const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('Cash');
+  const [purchaseInvoice, setPurchaseInvoice] = useState('');
+  const [purchaseNotes, setPurchaseNotes] = useState('');
+  const [purchaseItems, setPurchaseItems] = useState([{ itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryView, setInventoryView] = useState('overview');
+
   
+
+
+  const loadInventoryModule = async () => {
+    setInventoryLoading(true);
+    const [itemsRes, suppliersRes, purchasesRes, txRes] = await Promise.all([
+      supabase.from('inventory_items').select('*').order('name'),
+      supabase.from('suppliers').select('*').order('name'),
+      supabase.from('purchases').select('*').order('purchase_date', { ascending:false }),
+      supabase.from('inventory_transactions').select('*').order('transaction_date', { ascending:false })
+    ]);
+    if (itemsRes.error) console.error('Inventory items:', itemsRes.error);
+    if (suppliersRes.error) console.error('Suppliers:', suppliersRes.error);
+    if (purchasesRes.error) console.error('Purchases:', purchasesRes.error);
+    if (txRes.error) console.error('Inventory transactions:', txRes.error);
+    setInventoryItems(itemsRes.data || []);
+    setSuppliers(suppliersRes.data || []);
+    setPurchases(purchasesRes.data || []);
+    setInventoryTransactions(txRes.data || []);
+    setInventoryLoading(false);
+  };
+
+  useEffect(() => {
+    if (session && activeTab === 'inventory') loadInventoryModule();
+  }, [session, activeTab]);
+
+  const addInventoryItem = async () => {
+    const name = window.prompt('Item name (e.g. Rice, Chicken, Oil):');
+    if (!name?.trim()) return;
+    const category = window.prompt('Category (e.g. Raw Material, Beverage, Packaging):') || '';
+    const unit = window.prompt('Unit (kg, litre, packet, piece):', 'kg') || 'unit';
+    const reorder = Number(window.prompt('Reorder level:', '0') || 0);
+    const cost = Number(window.prompt('Current unit cost:', '0') || 0);
+    const { error } = await supabase.from('inventory_items').insert({ name:name.trim(), category, unit, reorder_level:reorder, unit_cost:cost, created_by:session?.user?.id });
+    if (error) return alert('Unable to add item: ' + error.message);
+    await loadInventoryModule();
+  };
+
+  const addSupplier = async () => {
+    const name = window.prompt('Supplier name:');
+    if (!name?.trim()) return;
+    const phone = window.prompt('Phone number:') || '';
+    const category = window.prompt('Supply category:') || '';
+    const { error } = await supabase.from('suppliers').insert({ name:name.trim(), phone, category, created_by:session?.user?.id });
+    if (error) return alert('Unable to add supplier: ' + error.message);
+    await loadInventoryModule();
+  };
+
+  const updatePurchaseItem = (id, changes) => setPurchaseItems(prev => prev.map(x => x.id === id ? {...x, ...changes} : x));
+  const removePurchaseItem = id => setPurchaseItems(prev => prev.filter(x => x.id !== id));
+  const purchaseTotal = purchaseItems.reduce((sum,x)=>sum + Number(x.quantity||0)*Number(x.unitCost||0),0);
+
+  const savePurchase = async () => {
+    const validItems = purchaseItems.filter(x => x.itemId && Number(x.quantity) > 0);
+    if (!validItems.length) return alert('Add at least one inventory item to the purchase.');
+    const supplier = suppliers.find(s => String(s.id) === String(purchaseSupplierId));
+    const paid = purchasePaymentMethod === 'Credit' ? 0 : purchaseTotal;
+    const due = purchaseTotal - paid;
+    const status = due > 0 ? 'Due' : 'Paid';
+    const payloadItems = validItems.map(x => ({
+      itemId:Number(x.itemId), name:x.name, quantity:Number(x.quantity), unitCost:Number(x.unitCost), unit:x.unit
+    }));
+    const { data: purchase, error } = await supabase.from('purchases').insert({
+      purchase_date:purchaseDate, supplier_id:supplier?.id || null, supplier_name:supplier?.name || '',
+      invoice_no:purchaseInvoice, payment_method:purchasePaymentMethod, payment_status:status,
+      subtotal:purchaseTotal, paid_amount:paid, due_amount:due, notes:purchaseNotes, items:payloadItems, created_by:session?.user?.id
+    }).select().single();
+    if (error) return alert('Purchase save failed: ' + error.message);
+
+    for (const item of validItems) {
+      const existing = inventoryItems.find(i => String(i.id) === String(item.itemId));
+      const newStock = Number(existing?.current_stock || 0) + Number(item.quantity);
+      await supabase.from('inventory_items').update({ current_stock:newStock, unit_cost:Number(item.unitCost||0), updated_at:new Date().toISOString() }).eq('id', item.itemId);
+      await supabase.from('inventory_transactions').insert({
+        item_id:Number(item.itemId), transaction_date:purchaseDate, transaction_type:'Purchase',
+        quantity:Number(item.quantity), unit_cost:Number(item.unitCost||0), reference_type:'purchase',
+        reference_id:purchase.id, notes:purchaseInvoice || 'Purchase', created_by:session?.user?.id
+      });
+    }
+    setPurchaseItems([{ itemId:'', name:'', quantity:1, unitCost:0, unit:'unit' }]);
+    setPurchaseInvoice(''); setPurchaseNotes(''); setPurchaseSupplierId(''); setPurchasePaymentMethod('Cash');
+    await loadInventoryModule();
+    alert('Purchase recorded and stock updated.');
+  };
+
+  const adjustInventory = async (item, type) => {
+    const qty = Number(window.prompt(type === 'Usage' ? 'Quantity used:' : type === 'Waste' ? 'Quantity wasted:' : 'Adjustment quantity (+/-):', '0') || 0);
+    if (!qty) return;
+    const signed = type === 'Adjustment' ? qty : -Math.abs(qty);
+    const newStock = Math.max(0, Number(item.current_stock||0) + signed);
+    const { error } = await supabase.from('inventory_items').update({ current_stock:newStock, updated_at:new Date().toISOString() }).eq('id', item.id);
+    if (error) return alert('Stock update failed: ' + error.message);
+    await supabase.from('inventory_transactions').insert({
+      item_id:item.id, transaction_date:new Date().toISOString().split('T')[0], transaction_type:type,
+      quantity:Math.abs(qty), unit_cost:Number(item.unit_cost||0), notes:type, created_by:session?.user?.id
+    });
+    await loadInventoryModule();
+  };
 
   // --- 1. SUPABASE AUTHENTICATION ---
   useEffect(() => {
@@ -1645,7 +1756,8 @@ export default function App() {
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
-        <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>\n        <style>{analyticsUiStyles}</style>
+        <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>
+      <style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
@@ -1724,6 +1836,7 @@ export default function App() {
               ['daily','📝','Daily Accounting'],
               ['funds','🔄','Money Transfers'],
               ['sources','🏦','Fund Sources'],
+              ['inventory','📦','Purchases & Inventory'],
               ['ledger','📒','Customer Khata'],
               ['history','📋','History'],
               ['analytics','📈','Analytics'],
@@ -1748,6 +1861,7 @@ export default function App() {
                  activeTab === 'daily' ? 'Daily Accounting' :
                  activeTab === 'funds' ? 'Money Transfers' :
                  activeTab === 'sources' ? 'Fund Sources' :
+                 activeTab === 'inventory' ? 'Purchases & Inventory' :
                  activeTab === 'ledger' ? 'Customer Khata' :
                  activeTab === 'history' ? 'Transaction History' :
                  activeTab === 'analytics' ? 'Business Analytics' :
@@ -1851,6 +1965,72 @@ export default function App() {
           </div>
           <section className="va-fund-ledger-card"><div className="va-entry-head"><div><span className="va-eyebrow">3 • Outstanding balances</span><h3>📋 Fund & Loan Ledger</h3><p>Outstanding = original funding minus repayments.</p></div></div><div className="va-fund-table-wrap"><table className="va-fund-table"><thead><tr><th>Source</th><th>Type</th><th>Account</th><th>Original</th><th>Repaid</th><th>Outstanding</th><th>Due Date</th><th>Status</th></tr></thead><tbody>{fundLedger.length===0?<tr><td colSpan="8" className="va-khata-empty">No fund or loan records yet.</td></tr>:fundLedger.map(f=><tr key={f.key}><td><strong>{f.source}</strong></td><td>{f.mode}</td><td>{f.account==='Cash'?'💵 Cash':'💳 Online'}</td><td>{formatINR(f.original)}</td><td className="payment-text">{formatINR(f.repaid)}</td><td className={f.outstanding>0?'debit-text':'payment-text'}><strong>{formatINR(f.outstanding)}</strong></td><td>{f.dueDate || '—'}</td><td><span className={'va-fund-status '+(f.status==='Overdue'?'overdue':f.status==='Closed'?'closed':'open')}>{f.status}</span></td></tr>)}</tbody></table></div></section>
           <div className="va-khata-tip"><strong>💡 Accounting rule:</strong> Fund receipts are not sales. Repayments are not operating expenses; they reduce the outstanding funding balance and the account used for repayment.</div>
+        </div>
+      )}
+
+
+      {activeTab === 'inventory' && (
+        <div className="va-inventory-page">
+          <div className="va-inventory-hero">
+            <div><span className="va-eyebrow">PROCUREMENT • STOCK • SUPPLIERS</span><h2>📦 Purchases & Inventory</h2><p>Track restaurant purchases, supplier balances and stock levels in one place.</p></div>
+            <div className="va-inventory-hero-actions"><button onClick={addInventoryItem}>＋ Add Item</button><button onClick={addSupplier}>＋ Add Supplier</button></div>
+          </div>
+
+          <div className="va-inventory-kpis">
+            <div><span>Inventory Items</span><strong>{inventoryItems.length}</strong><small>Active stock records</small></div>
+            <div><span>Stock Value</span><strong>{formatINR(inventoryItems.reduce((s,i)=>s+Number(i.current_stock||0)*Number(i.unit_cost||0),0))}</strong><small>Estimated current value</small></div>
+            <div className="warning"><span>Reorder Alerts</span><strong>{inventoryItems.filter(i=>Number(i.current_stock||0)<=Number(i.reorder_level||0)).length}</strong><small>At or below reorder level</small></div>
+            <div className="danger"><span>Purchase Dues</span><strong>{formatINR(purchases.reduce((s,p)=>s+Number(p.due_amount||0),0))}</strong><small>Supplier credit outstanding</small></div>
+          </div>
+
+          <div className="va-inventory-tabs">
+            {['overview','purchase','suppliers'].map(v=><button key={v} className={inventoryView===v?'active':''} onClick={()=>setInventoryView(v)}>{v==='overview'?'📊 Stock Overview':v==='purchase'?'🧾 Record Purchase':'🤝 Suppliers'}</button>)}
+          </div>
+
+          {inventoryView === 'overview' && <div className="va-inventory-grid">
+            <div className="va-inventory-card">
+              <div className="va-inventory-card-head"><div><h3>Stock Position</h3><p>Low-stock items are highlighted for reorder.</p></div><input value={inventorySearch} onChange={e=>setInventorySearch(e.target.value)} placeholder="🔎 Search item or category" /></div>
+              {inventoryLoading ? <div className="va-inventory-empty">Loading inventory...</div> :
+                <div className="va-stock-table-wrap"><table className="va-stock-table"><thead><tr><th>Item</th><th>Category</th><th>Stock</th><th>Unit Cost</th><th>Value</th><th>Status</th><th>Action</th></tr></thead><tbody>
+                {inventoryItems.filter(i=>(i.name+' '+(i.category||'')).toLowerCase().includes(inventorySearch.toLowerCase())).map(i=>{
+                  const low=Number(i.current_stock||0)<=Number(i.reorder_level||0);
+                  return <tr key={i.id}><td><strong>{i.name}</strong><small>{i.unit}</small></td><td>{i.category||'—'}</td><td className={low?'low-stock':''}>{Number(i.current_stock||0).toFixed(2)}</td><td>{formatINR(i.unit_cost)}</td><td>{formatINR(Number(i.current_stock||0)*Number(i.unit_cost||0))}</td><td><span className={'va-stock-status '+(low?'low':'ok')}>{low?'Reorder':'Healthy'}</span></td><td><button className="va-mini-btn" onClick={()=>adjustInventory(i,'Usage')}>Use</button><button className="va-mini-btn danger" onClick={()=>adjustInventory(i,'Waste')}>Waste</button></td></tr>
+                })}</tbody></table></div>}
+            </div>
+            <div className="va-inventory-card">
+              <div className="va-inventory-card-head"><div><h3>Recent Purchases</h3><p>Latest procurement activity.</p></div><button className="va-mini-btn" onClick={()=>setInventoryView('purchase')}>Record Purchase</button></div>
+              <div className="va-purchase-list">{purchases.slice(0,8).map(p=><div className="va-purchase-row" key={p.id}><div><strong>{p.supplier_name||'Direct Purchase'}</strong><small>{p.purchase_date} {p.invoice_no?'• '+p.invoice_no:''}</small></div><div><strong>{formatINR(p.subtotal)}</strong><small className={p.due_amount>0?'due':''}>{p.due_amount>0?'Due '+formatINR(p.due_amount):p.payment_method}</small></div></div>)}{!purchases.length&&<div className="va-inventory-empty">No purchases recorded yet.</div>}</div>
+            </div>
+          </div>}
+
+          {inventoryView === 'purchase' && <div className="va-inventory-card">
+            <div className="va-inventory-card-head"><div><h3>Record Purchase</h3><p>Purchase entries update stock automatically.</p></div></div>
+            <div className="va-purchase-form-grid">
+              <label>Date<input type="date" value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)}/></label>
+              <label>Supplier<select value={purchaseSupplierId} onChange={e=>setPurchaseSupplierId(e.target.value)}><option value="">Select supplier</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+              <label>Payment<select value={purchasePaymentMethod} onChange={e=>setPurchasePaymentMethod(e.target.value)}><option>Cash</option><option>Online</option><option>Credit</option></select></label>
+              <label>Invoice No.<input value={purchaseInvoice} onChange={e=>setPurchaseInvoice(e.target.value)} placeholder="Optional"/></label>
+            </div>
+            <div className="va-purchase-lines">{purchaseItems.map((x,idx)=><div className="va-purchase-line" key={x.id||idx}>
+              <select value={x.itemId} onChange={e=>{const i=inventoryItems.find(v=>String(v.id)===e.target.value);updatePurchaseItem(x.id,{itemId:e.target.value,name:i?.name||'',unit:i?.unit||'unit',unitCost:i?.unit_cost||0})}}><option value="">Select item</option>{inventoryItems.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select>
+              <input type="number" min="0" step="0.01" value={x.quantity} onChange={e=>updatePurchaseItem(x.id,{quantity:e.target.value})} placeholder="Qty"/>
+              <input type="number" min="0" step="0.01" value={x.unitCost} onChange={e=>updatePurchaseItem(x.id,{unitCost:e.target.value})} placeholder="Unit cost"/>
+              <span>{x.unit}</span><strong>{formatINR(Number(x.quantity||0)*Number(x.unitCost||0))}</strong>
+              <button className="va-mini-btn danger" onClick={()=>removePurchaseItem(x.id)}>×</button>
+            </div>)}</div>
+            <button className="va-add-line" onClick={()=>setPurchaseItems(prev=>[...prev,{id:Date.now()+Math.random(),itemId:'',name:'',quantity:1,unitCost:0,unit:'unit'}])}>＋ Add Item Line</button>
+            <div className="va-purchase-total"><span>Total Purchase</span><strong>{formatINR(purchaseTotal)}</strong></div>
+            <textarea value={purchaseNotes} onChange={e=>setPurchaseNotes(e.target.value)} placeholder="Purchase notes..." />
+            <button className="va-save-purchase" onClick={savePurchase}>💾 Save Purchase & Update Stock</button>
+          </div>}
+
+          {inventoryView === 'suppliers' && <div className="va-inventory-card">
+            <div className="va-inventory-card-head"><div><h3>Supplier Directory</h3><p>Manage supplier relationships and outstanding purchase dues.</p></div></div>
+            <div className="va-supplier-grid">{suppliers.map(s=>{
+              const due=purchases.filter(p=>Number(p.supplier_id)===Number(s.id)).reduce((n,p)=>n+Number(p.due_amount||0),0);
+              return <div className="va-supplier-card" key={s.id}><div className="va-supplier-avatar">{s.name.slice(0,2).toUpperCase()}</div><div><strong>{s.name}</strong><small>{s.category||'General supplier'} {s.phone?'• '+s.phone:''}</small></div><b className={due?'due':''}>{due?formatINR(due):'Clear'}</b></div>
+            })}{!suppliers.length&&<div className="va-inventory-empty">No suppliers added yet.</div>}</div>
+          </div>}
         </div>
       )}
 
@@ -2661,6 +2841,11 @@ const staffManagementStyles = `
 .va-staff-page{max-width:1500px;margin:0 auto}.va-staff-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#075985 62%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 18px 45px rgba(15,23,42,.14)}.va-staff-hero.payroll{background:linear-gradient(135deg,#111827,#312e81 65%,#0f766e)}.va-staff-eyebrow{font-size:10px;font-weight:900;letter-spacing:.1em;color:#93c5fd}.va-staff-hero h2{margin:6px 0;font-size:28px}.va-staff-hero p{margin:0;color:#cbd5e1;font-size:13px;line-height:1.5;max-width:720px}.va-staff-hero-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.va-staff-hero-actions label{font-size:10px;font-weight:900;color:#cbd5e1}.va-staff-hero-actions input{display:block;margin-top:5px;padding:10px;border:1px solid #475569;background:#fff;color:#0f172a;border-radius:9px}.va-staff-btn{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer}.va-staff-btn.primary{background:#2563eb;color:#fff}.va-staff-btn.secondary{background:#fff;color:#1e40af}.va-staff-btn.success{background:#10b981;color:#fff}.va-staff-btn.ghost{background:#f1f5f9;color:#334155}.va-staff-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:18px}.va-staff-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:15px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-staff-kpis>div:nth-child(2){border-top-color:#10b981}.va-staff-kpis>div:nth-child(3){border-top-color:#ef4444}.va-staff-kpis>div:nth-child(4){border-top-color:#8b5cf6}.va-staff-kpis>div:nth-child(5){border-top-color:#f59e0b}.va-staff-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-staff-kpis strong{display:block;color:#0f172a;font-size:23px;margin-top:6px}.va-staff-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-staff-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:18px;margin-bottom:18px}.va-staff-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-staff-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:15px}.va-staff-card-head h3{margin:2px 0;font-size:19px;color:#0f172a}.va-staff-card-head p{margin:3px 0 0;color:#64748b;font-size:12px}.va-staff-link{color:#2563eb;font-size:12px;font-weight:900;text-decoration:none}.va-staff-link-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:9px;padding:9px 11px;font-weight:900;cursor:pointer}.va-staff-list{display:flex;flex-direction:column;gap:7px}.va-staff-row{display:grid;grid-template-columns:minmax(180px,1.4fr) 135px 65px 65px 55px minmax(160px,.8fr);gap:8px;align-items:center;border:1px solid #e2e8f0;border-radius:12px;padding:9px;background:#fff}.va-staff-row:hover{background:#f8fafc}.va-staff-person{display:flex;gap:9px;align-items:center;border:0;background:none;text-align:left;padding:0;cursor:pointer}.va-staff-avatar{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:#e0e7ff;color:#4338ca;font-weight:900;font-size:11px;flex:none}.va-staff-person strong{display:block;font-size:12px;color:#0f172a}.va-staff-person small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-status-select{width:100%;padding:8px;border-radius:9px;border:1px solid #cbd5e1;font-size:11px;font-weight:800}.va-status-select.present{background:#ecfdf5;color:#047857}.va-status-select.absent{background:#fff1f2;color:#be123c}.va-status-select.leave{background:#f5f3ff;color:#6d28d9}.va-status-select.off{background:#f1f5f9;color:#475569}.va-status-select.half{background:#fffbeb;color:#92400e}.va-status-select.unmarked{background:#fff}.va-staff-time{padding:7px;background:#f8fafc;border-radius:8px;text-align:center}.va-staff-time span{display:block;font-size:11px;font-weight:900;color:#0f172a}.va-staff-time small{display:block;color:#94a3b8;font-size:8px;margin-top:2px}.va-staff-hours{text-align:center;font-size:11px;font-weight:900;color:#475569}.va-staff-actions{display:flex;gap:5px;flex-wrap:wrap}.va-staff-icon-btn{border:0;border-radius:7px;padding:7px 8px;font-size:9px;font-weight:900;cursor:pointer}.va-staff-icon-btn.in{background:#dcfce7;color:#166534}.va-staff-icon-btn.out{background:#fee2e2;color:#991b1b}.va-staff-icon-btn.note{background:#e2e8f0;color:#334155}.va-staff-icon-btn:disabled{opacity:.45;cursor:not-allowed}.va-staff-side{display:flex;flex-direction:column;gap:18px}.va-staff-status-list{display:flex;flex-direction:column;gap:2px}.va-staff-status-list>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #eef2f7;font-size:12px}.va-staff-status-list span{color:#64748b}.va-staff-status-list strong{color:#0f172a}.va-staff-note{margin-top:13px;padding:11px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:11px;line-height:1.5}.va-staff-wide-btn{width:100%;border:0;border-radius:9px;padding:10px;margin-top:10px;font-weight:900;cursor:pointer}.va-staff-wide-btn.success{background:#dcfce7;color:#166534}.va-staff-wide-btn.danger{background:#fee2e2;color:#991b1b}.va-staff-wide-btn.primary{background:#2563eb;color:#fff}.va-staff-loading,.va-staff-empty{padding:30px;text-align:center;color:#64748b}.va-payroll-employee-list{display:flex;flex-direction:column;gap:7px;max-height:520px;overflow:auto}.va-payroll-person{display:flex;align-items:center;gap:9px;width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:10px;text-align:left;cursor:pointer}.va-payroll-person:hover,.va-payroll-person.active{background:#eef2ff;border-color:#818cf8}.va-payroll-person-main{flex:1;min-width:0}.va-payroll-person-main strong{display:block;color:#0f172a;font-size:12px}.va-payroll-person-main small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-payroll-person-due{font-size:11px;font-weight:900}.va-payroll-person-due.due{color:#be123c}.va-payroll-person-due.clear{color:#059669}.va-payroll-priority-list{display:flex;flex-direction:column;gap:6px}.va-payroll-priority-list button{display:grid;grid-template-columns:25px 1fr auto;gap:7px;align-items:center;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:9px;cursor:pointer}.va-payroll-priority-list button:hover{background:#f8fafc}.va-payroll-priority-list strong{font-size:11px;color:#0f172a}.va-payroll-priority-list small{font-size:10px;color:#64748b}.va-payroll-priority-list span{font-size:13px}.va-staff-detail{background:#0f172a;color:#fff;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.12)}.va-staff-detail-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.va-staff-detail h3{margin:5px 0;font-size:23px}.va-staff-detail p{margin:0;color:#94a3b8;font-size:12px}.va-staff-detail-actions{display:flex;gap:7px;flex-wrap:wrap}.va-staff-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}.va-staff-detail-grid>div{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:11px}.va-staff-detail-grid span{display:block;color:#94a3b8;font-size:9px;text-transform:uppercase;font-weight:900}.va-staff-detail-grid strong{display:block;margin-top:5px;font-size:14px}.va-staff-detail-grid strong.due{color:#fda4af}.va-staff-detail-grid strong.clear{color:#6ee7b7}.va-staff-detail-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:#1e293b;border-radius:10px;color:#cbd5e1;font-size:11px}.va-staff-detail-note input{padding:8px 10px;border-radius:8px;border:1px solid #475569;min-width:160px}.va-payroll-table-card{margin-top:18px}.va-payroll-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payroll-table{width:100%;border-collapse:collapse;min-width:1050px}.va-payroll-table th,.va-payroll-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:right;font-size:11px;white-space:nowrap}.va-payroll-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-payroll-table th.left,.va-payroll-table td:first-child{text-align:left}.va-payroll-table td input{width:105px;padding:7px;border:1px solid #cbd5e1;border-radius:7px}.va-payroll-table .employee-cell small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-payroll-table .money{font-weight:900}.va-payroll-table .money.paid{color:#047857}.va-payroll-table .money.due{color:#be123c}.va-payroll-table .money.clear{color:#059669}.va-payroll-table .money.carry{color:#2563eb}.va-payroll-table .money small{display:block;font-size:8px;color:#d97706;margin-top:3px}@media(max-width:1150px){.va-staff-kpis{grid-template-columns:repeat(3,1fr)}.va-staff-row{grid-template-columns:1.5fr 125px 60px 60px 55px}.va-staff-actions{grid-column:1/-1}.va-staff-grid{grid-template-columns:1fr}.va-staff-side{display:grid;grid-template-columns:1fr 1fr}}@media(max-width:750px){.va-staff-hero{display:block}.va-staff-hero-actions{margin-top:15px}.va-staff-hero-actions>*{flex:1}.va-staff-kpis{grid-template-columns:1fr 1fr}.va-staff-row{grid-template-columns:1fr 1fr}.va-staff-person{grid-column:1/-1}.va-staff-actions{grid-column:1/-1}.va-staff-side{display:block}.va-staff-detail-grid{grid-template-columns:1fr 1fr}.va-staff-detail-head{display:block}.va-staff-detail-actions{margin-top:12px}.payroll-kpis{grid-template-columns:1fr 1fr}}@media(max-width:450px){.va-staff-kpis{grid-template-columns:1fr}.va-staff-detail-grid{grid-template-columns:1fr}.va-staff-card{padding:14px}.va-staff-row{padding:8px}.va-staff-hero{padding:18px}.va-staff-hero-actions{display:grid;grid-template-columns:1fr 1fr}.va-staff-hero-actions label{grid-column:1/-1}.va-staff-hero-actions>*{width:100%}}`;
 const dashboardCommandStyles = `
 .va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}`;
+
+
+const inventoryUiStyles = `
+.va-inventory-page{max-width:1500px;margin:0 auto}.va-inventory-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#0f172a,#14532d);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-inventory-hero h2{margin:6px 0;font-size:28px}.va-inventory-hero p{margin:0;color:#cbd5e1;font-size:13px}.va-inventory-hero-actions{display:flex;gap:8px}.va-inventory-hero-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;background:#10b981;color:#fff}.va-inventory-hero-actions button+button{background:#fff;color:#14532d}.va-inventory-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-inventory-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #10b981;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-inventory-kpis .warning{border-top-color:#f59e0b}.va-inventory-kpis .danger{border-top-color:#ef4444}.va-inventory-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-inventory-kpis strong{display:block;color:#0f172a;font-size:22px;margin-top:6px}.va-inventory-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-inventory-tabs{display:flex;gap:7px;margin-bottom:18px}.va-inventory-tabs button{border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:10px 13px;font-weight:900;color:#475569;cursor:pointer}.va-inventory-tabs button.active{background:#0f766e;color:#fff;border-color:#0f766e}.va-inventory-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px}.va-inventory-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-inventory-card-head{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:14px}.va-inventory-card-head h3{margin:0;font-size:19px}.va-inventory-card-head p{margin:4px 0 0;color:#64748b;font-size:12px}.va-inventory-card-head input{max-width:260px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-stock-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-stock-table{width:100%;border-collapse:collapse;min-width:780px}.va-stock-table th,.va-stock-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;font-size:11px}.va-stock-table th{background:#f8fafc;color:#475569;text-transform:uppercase;font-size:9px}.va-stock-table td small{display:block;color:#94a3b8;margin-top:3px}.va-stock-table .low-stock{color:#b91c1c;font-weight:900}.va-stock-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.va-stock-status.low{background:#fef2f2;color:#b91c1c}.va-stock-status.ok{background:#ecfdf5;color:#047857}.va-mini-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:7px;padding:6px 8px;font-size:9px;font-weight:900;cursor:pointer;margin-right:4px}.va-mini-btn.danger{background:#fff1f2;color:#be123c;border-color:#fecdd3}.va-purchase-list{display:flex;flex-direction:column;gap:7px}.va-purchase-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border:1px solid #e2e8f0;border-radius:10px}.va-purchase-row strong{font-size:11px}.va-purchase-row small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-purchase-row small.due{color:#be123c;font-weight:900}.va-purchase-form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.va-purchase-form-grid label{font-size:11px;font-weight:900;color:#475569}.va-purchase-form-grid input,.va-purchase-form-grid select,.va-purchase-lines input,.va-purchase-lines select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.va-purchase-lines{margin-top:16px}.va-purchase-line{display:grid;grid-template-columns:2fr .8fr 1fr .6fr 1fr 36px;gap:8px;align-items:center;margin-bottom:8px}.va-purchase-line span{font-size:11px;color:#64748b}.va-purchase-line strong{text-align:right}.va-add-line{border:1px dashed #94a3b8;background:#f8fafc;border-radius:9px;padding:9px 12px;font-weight:900;color:#475569;cursor:pointer}.va-purchase-total{display:flex;justify-content:space-between;align-items:center;padding:15px;margin-top:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px}.va-purchase-total strong{font-size:22px;color:#047857}.va-inventory-card textarea{width:100%;box-sizing:border-box;margin-top:12px;min-height:70px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-save-purchase{width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;background:#059669;color:#fff;font-weight:900;cursor:pointer}.va-supplier-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.va-supplier-card{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:12px;border:1px solid #e2e8f0;border-radius:11px}.va-supplier-avatar{width:36px;height:36px;border-radius:10px;background:#dcfce7;color:#166534;display:grid;place-items:center;font-weight:900;font-size:10px}.va-supplier-card strong{display:block;font-size:12px}.va-supplier-card small{display:block;color:#64748b;font-size:9px;margin-top:3px}.va-supplier-card b{font-size:11px;color:#059669}.va-supplier-card b.due{color:#be123c}.va-inventory-empty{padding:30px;text-align:center;color:#64748b}@media(max-width:1100px){.va-inventory-grid{grid-template-columns:1fr}.va-inventory-kpis{grid-template-columns:repeat(2,1fr)}.va-purchase-form-grid{grid-template-columns:1fr 1fr}}@media(max-width:700px){.va-inventory-hero{display:block}.va-inventory-hero-actions{margin-top:15px}.va-inventory-hero-actions button{flex:1}.va-inventory-tabs{overflow:auto}.va-inventory-card{padding:14px}.va-inventory-card-head{display:block}.va-inventory-card-head input{max-width:none;width:100%;margin-top:10px;box-sizing:border-box}.va-purchase-form-grid{grid-template-columns:1fr}.va-purchase-line{grid-template-columns:1fr 1fr}.va-purchase-line span,.va-purchase-line strong{display:none}.va-supplier-grid{grid-template-columns:1fr}}@media(max-width:450px){.va-inventory-kpis{grid-template-columns:1fr}.va-inventory-hero{padding:18px}}
+`;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
