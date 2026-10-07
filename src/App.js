@@ -1373,6 +1373,7 @@ export default function App() {
                 <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                 <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
                   <option value="Cash">Cash (Deduct from Till)</option>
+                  <option value="Available Cash">Cash – Available Cash (Deduct from Available Cash)</option>
                   <option value="Counter">Counter (Net Sale)</option>
                   <option value="Credit">Credit (Owe Later)</option>
                   <option value="Teja">Teja Paid</option>
