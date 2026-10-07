@@ -44,6 +44,7 @@ export default function App() {
   const [cashierStaffPayments, setCashierStaffPayments] = useState([]);
 
   const [activeTab, setActiveTab] = useState('daily');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [isFetching, setIsFetching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1254,6 +1255,9 @@ export default function App() {
         .va-status { display:flex; align-items:center; gap:8px; background:white; border:1px solid #e5e7eb; padding:9px 12px; border-radius:10px; font-size:12px; color:#475569; box-shadow:0 4px 14px rgba(15,23,42,.04); }
         .va-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; }
         .va-mobile-nav { display:none; }
+        .va-menu-toggle{position:fixed;top:18px;left:18px;z-index:1100;width:44px;height:44px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;box-shadow:0 8px 22px rgba(15,23,42,.12);cursor:pointer;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}.va-sidebar-close{display:none;margin-left:auto;border:0;background:transparent;color:#cbd5e1;font-size:28px;line-height:1;cursor:pointer}.sidebar-collapsed .va-sidebar{transform:translateX(-100%);width:0;min-width:0;padding:0;overflow:hidden}.va-sidebar{transition:width .25s ease, min-width .25s ease, transform .25s ease, padding .25s ease}.va-main{transition:padding-left .25s ease}.sidebar-open .va-main{padding-left:78px}.sidebar-collapsed .va-main{padding-left:78px}.va-sidebar-overlay{display:none}.va-menu-toggle:hover{background:#f8fafc;transform:translateY(-1px)}
+        @media (max-width: 850px){.va-menu-toggle{top:10px;left:10px}.va-sidebar{position:fixed!important;z-index:1050;left:0;top:0;width:280px!important;min-width:280px!important;height:100vh!important;padding:18px 14px!important;transform:translateX(-100%);box-shadow:16px 0 40px rgba(15,23,42,.2)}.sidebar-open .va-sidebar{transform:translateX(0)}.sidebar-collapsed .va-sidebar{width:280px!important;min-width:280px!important;padding:18px 14px!important;transform:translateX(-100%)}.sidebar-open .va-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1040}.va-sidebar-close{display:block}.va-brand{padding:5px 8px 18px!important;margin-bottom:16px!important}.va-nav{display:flex!important;flex-direction:column!important}.va-nav button{text-align:left!important;padding:12px 13px!important;font-size:14px!important}.va-logout{margin-top:auto!important}.va-main,.sidebar-open .va-main,.sidebar-collapsed .va-main{padding:64px 14px 14px!important}.va-topbar{align-items:flex-start}.va-page-title{font-size:21px}}
+
         @media (max-width: 850px) {
           .va-shell { display:block; }
           .va-sidebar { width:100%; min-width:0; height:auto; position:relative; padding:12px; }
@@ -1271,7 +1275,11 @@ export default function App() {
           .va-main { padding:10px; }
         }
       `}</style>
-      <div className="va-shell">
+      <div className={`va-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+        <button className="va-menu-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Hide menu' : 'Open menu'}>
+          {sidebarOpen ? '☰' : '☰'}
+        </button>
+        <div className="va-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
         <aside className="va-sidebar">
           <div className="va-brand">
             <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Accounts"/>
@@ -1279,6 +1287,7 @@ export default function App() {
               <div className="va-brand-title">Vintage Accounts</div>
               <div className="va-brand-sub">Restaurant Finance</div>
             </div>
+            <button className="va-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Hide menu">×</button>
           </div>
           <div className="va-nav">
             {[
@@ -1290,7 +1299,7 @@ export default function App() {
               ['payroll','💰','Employee Payroll'],
               ['tasks','🔔','Reminders']
             ].map(([tab,icon,label]) => (
-              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
+              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }}>
                 {icon} &nbsp;{label}
               </button>
             ))}
