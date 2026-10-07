@@ -448,6 +448,7 @@ export default function App() {
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
   const totalCreditSales = creditSales.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const totalCreditReceived = creditReceived.reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedOnline = creditReceived.filter(c => c.method === 'Online').reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
