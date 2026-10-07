@@ -273,12 +273,15 @@ export default function App() {
     const cashAdvance = currentPayments.filter(payment => payment.type === 'Cash Advance').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const wagesPaid = currentPayments.filter(payment => payment.type !== 'Cash Advance').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
+    // Payments are allocated to the month they belong to via dueFor.
+    // A payment allocated to the previous month is already included in previousTotalPaid,
+    // so it must NOT be subtracted a second time from the previous balance.
     const paidTowardPreviousDues = previousPayments
       .filter(payment => payment.paymentDate?.slice(0, 7) === payrollMonth)
       .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const previousTotalPaid = previousPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const previousDue = Math.max(0, previousEarnedPay - previousTotalPaid);
-    const previousDueAfterPayment = Math.max(0, previousDue - paidTowardPreviousDues);
+    const previousDueAfterPayment = previousDue;
     const currentBalanceToPay = Math.max(0, earnedPay - totalTaken);
     const totalBalanceToPay = previousDueAfterPayment + currentBalanceToPay;
     const overpaid = Math.max(0, totalTaken - earnedPay);
@@ -312,7 +315,7 @@ export default function App() {
       'Already Taken/Paid For Month (₹)':Number(r.totalTaken.toFixed(2)),
       'Cash Advances (₹)':Number(r.cashAdvance.toFixed(2)),
       'Wages Paid (₹)':Number(r.wagesPaid.toFixed(2)),
-      'Previous Month Due (₹)':Number(r.previousDueAfterPayment.toFixed(2)),
+      'Previous Month Closing Due (₹)':Number(r.previousDueAfterPayment.toFixed(2)),
       'Paid Toward Previous Dues (₹)':Number(r.paidTowardPreviousDues.toFixed(2)),
       'Total Balance To Pay (₹)':Number(r.totalBalanceToPay.toFixed(2)),
       'Overpaid (₹)':Number(r.overpaid.toFixed(2))
@@ -1383,6 +1386,7 @@ export default function App() {
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
+        <style>{payrollUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -2091,66 +2095,63 @@ export default function App() {
       )}
 
       {activeTab === 'payroll' && (
-        <>
-          <div style={{ ...cardStyle, overflowX: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>💰 Monthly Attendance & Payroll</h3>
-                <p style={{ color: '#6b7280', marginBottom: 0 }}>Assign each staff payment to the salary/dues month it belongs to. Payments made this month for last month's dues will reduce the previous month's balance, not this month's salary.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap' }}>
-                <label>
-                  Month:
-                  <input type="month" value={payrollMonth} onChange={e => setPayrollMonth(e.target.value)} style={inputStyle}/>
-                </label>
-                <button onClick={() => loadPayroll(payrollMonth)} disabled={isLoadingPayroll} style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}>
-                  {isLoadingPayroll ? '⏳ Loading...' : '🔄 Refresh Payroll'}
-                </button>
-                <button onClick={exportPayroll} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Export Payroll Excel</button>
-              </div>
+        <div className="va-payroll-page">
+          <div className="va-payroll-hero">
+            <div>
+              <span className="va-payroll-eyebrow">STAFF • ATTENDANCE • PAYROLL</span>
+              <h2>💰 Payroll & Salary Control</h2>
+              <p>Set monthly salaries, review attendance, track advances and wages, and carry unpaid previous-month dues forward accurately.</p>
             </div>
-            <div style={{ marginTop: '15px', overflowX: 'auto' }}>
-              {isLoadingPayroll ? <p>Loading payroll...</p> : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1350px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
-                      {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Earned Salary','Paid For Month','Previous Due','Paid Toward Previous','Total Balance'].map(h => <th key={h} style={{ padding: '9px', textAlign: h === 'Employee' ? 'left' : 'right' }}>{h}</th>)}
-                    </tr>
-                  </thead>
+            <div className="va-payroll-actions">
+              <label>Payroll Month<input type="month" value={payrollMonth} onChange={e => setPayrollMonth(e.target.value)} /></label>
+              <button onClick={() => loadPayroll(payrollMonth)} disabled={isLoadingPayroll} className="va-payroll-btn secondary">{isLoadingPayroll ? '⏳ Loading...' : '🔄 Refresh'}</button>
+              <button onClick={exportPayroll} className="va-payroll-btn success">📊 Export Excel</button>
+            </div>
+          </div>
+
+          <div className="va-payroll-kpis">
+            <div><span>👥 Employees</span><strong>{payrollRows.length}</strong><small>Configured staff</small></div>
+            <div><span>💵 Earned Salary</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.earnedPay, 0))}</strong><small>{payrollMonth}</small></div>
+            <div><span>💳 Paid / Taken</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.totalTaken, 0))}</strong><small>Allocated to this month</small></div>
+            <div><span>📌 Previous Due</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.previousDueAfterPayment, 0))}</strong><small>Closing carry-forward</small></div>
+            <div><span>⚠️ Total To Pay</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.totalBalanceToPay, 0))}</strong><small>Previous due + current balance</small></div>
+          </div>
+
+          <div className="va-payroll-note">
+            <strong>How payroll works:</strong> A staff payment is counted against the month selected in its <b>Due For</b> field. If you pay an old salary this month, allocate that payment to the old month. It will reduce that old month's closing due and will not reduce the current month's salary.
+          </div>
+
+          <div className="va-payroll-table-card">
+            <div className="va-payroll-table-head">
+              <div><h3>Employee Salary & Attendance</h3><p>Enter the monthly salary once; attendance determines earned salary.</p></div>
+              <div className="va-payroll-legend"><span>🔴 Due</span><span>🟢 Clear</span><span>🔵 Previous dues paid</span></div>
+            </div>
+            {isLoadingPayroll ? <p>Loading payroll...</p> : (
+              <div className="va-payroll-table-wrap">
+                <table className="va-payroll-table">
+                  <thead><tr>
+                    {['Employee','Monthly Salary','Present','Half Day','Leave','Absent','Weekly Off','Hours','Payable Days','Earned Salary','Paid For Month','Previous Due','Paid Toward Previous','Total Balance'].map(h => <th key={h} className={h === 'Employee' ? 'left' : ''}>{h}</th>)}
+                  </tr></thead>
                   <tbody>
                     {payrollRows.map(r => (
-                      <tr key={r.name} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '9px', fontWeight: 'bold' }}>{r.name}</td>
-                        <td style={{ padding: '9px' }}><input type="number" min="0" value={r.monthlySalary || ''} placeholder="₹ Salary" onChange={e => saveSalary(r.name, e.target.value)} style={{ ...inputStyle, minWidth: '120px' }}/></td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.present}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.half}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.leave}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.absent}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.weeklyOff}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.hours.toFixed(2)}</td>
-                        <td style={{ padding: '9px', textAlign: 'right' }}>{r.payableDays}</td>
-                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold' }}>{formatINR(r.earnedPay)}</td>
-                        <td style={{ padding: '9px', textAlign: 'right', color: '#b45309', fontWeight: 'bold' }}>
-                          {formatINR(r.totalTaken)}
-                          {r.cashAdvance > 0 && <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#6b7280' }}>Advance: {formatINR(r.cashAdvance)}</div>}
-                        </td>
-                        <td style={{ padding: '9px', textAlign: 'right', color: r.previousDueAfterPayment > 0 ? '#dc2626' : '#059669', fontWeight: 'bold' }}>
-                          {formatINR(r.previousDueAfterPayment)}
-                        </td>
-                        <td style={{ padding: '9px', textAlign: 'right', color: '#2563eb', fontWeight: 'bold' }}>
-                          {formatINR(r.paidTowardPreviousDues)}
-                        </td>
-                        <td style={{ padding: '9px', textAlign: 'right', fontWeight: 'bold', color: r.totalBalanceToPay > 0 ? '#dc2626' : '#059669' }}>
-                          {formatINR(r.totalBalanceToPay)}
-                        </td>
+                      <tr key={r.name}>
+                        <td className="employee-cell"><strong>{r.name}</strong><small>{r.monthlySalary > 0 ? 'Salary configured' : 'Salary not set'}</small></td>
+                        <td><input type="number" min="0" value={r.monthlySalary || ''} placeholder="₹ Salary" onChange={e => saveSalary(r.name, e.target.value)} /></td>
+                        <td>{r.present}</td><td>{r.half}</td><td>{r.leave}</td><td>{r.absent}</td><td>{r.weeklyOff}</td>
+                        <td>{r.hours.toFixed(2)}</td><td>{r.payableDays}</td>
+                        <td className="money strong">{formatINR(r.earnedPay)}</td>
+                        <td className="money paid">{formatINR(r.totalTaken)}{r.cashAdvance > 0 && <small>Advance {formatINR(r.cashAdvance)}</small>}</td>
+                        <td className={r.previousDueAfterPayment > 0 ? 'money due' : 'money clear'}>{formatINR(r.previousDueAfterPayment)}</td>
+                        <td className="money carry">{formatINR(r.paidTowardPreviousDues)}</td>
+                        <td className={r.totalBalanceToPay > 0 ? 'money due' : 'money clear'}>{formatINR(r.totalBalanceToPay)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        </>
+        </div>
       )}
 
       {activeTab === 'tasks' && (
@@ -2212,6 +2213,21 @@ const expenseUiStyles = `
 @media(max-width:560px){.va-line-item,.va-receive-line,.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr}.va-entry-head{display:block}.va-entry-total{display:inline-block;margin-top:8px}.va-icon-delete{width:100%}}
 .va-staff-card{background:#fff;border:1px solid #ddd6fe;border-top:4px solid #8b5cf6;border-radius:18px;padding:20px;margin-bottom:18px}.va-staff-help{background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}.va-staff-row{display:grid;grid-template-columns:1.05fr .9fr .85fr .75fr 1.3fr 38px;gap:8px;margin-bottom:9px}.va-drawer-card{background:#fff;border:1px solid #fde68a;border-top:4px solid #f59e0b;border-radius:18px;padding:20px;margin-bottom:18px}.va-drawer-total{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 16px;text-align:right;min-width:145px}.va-drawer-total span{display:block;color:#92400e;font-size:11px;font-weight:800}.va-drawer-total strong{font-size:20px;color:#78350f}.va-drawer-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:16px 0}.va-note-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center}.va-note-box span{display:block;font-weight:900;color:#334155}.va-note-box input{width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border:1px solid #cbd5e1;border-radius:8px;text-align:center}.va-note-box small{color:#64748b;font-weight:700}.va-coin-box{background:#fffbeb}.va-drawer-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.va-drawer-summary>div{background:#f8fafc;border-radius:12px;padding:13px;text-align:center}.va-drawer-summary span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-drawer-summary strong{display:block;font-size:20px;margin-top:5px}.va-drawer-summary .positive{background:#ecfdf5}.va-drawer-summary .negative{background:#fef2f2}.va-drawer-note{margin-top:12px;padding:10px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:12px}@media(max-width:1100px){.va-staff-row{grid-template-columns:1fr 1fr 1fr}.va-drawer-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.va-staff-row{grid-template-columns:1fr}.va-drawer-grid{grid-template-columns:repeat(2,1fr)}.va-drawer-summary{grid-template-columns:1fr}.va-drawer-total{text-align:left;margin-top:10px}.va-staff-row .va-icon-delete{width:100%}}
 `;
+const payrollUiStyles = `
+.va-payroll-page{max-width:1500px;margin:0 auto}
+.va-payroll-hero{display:flex;justify-content:space-between;gap:22px;align-items:center;background:linear-gradient(135deg,#111827,#4c1d95);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}
+.va-payroll-eyebrow{font-size:11px;font-weight:900;letter-spacing:.1em;color:#c4b5fd}
+.va-payroll-hero h2{margin:6px 0;font-size:27px}.va-payroll-hero p{margin:0;color:#ddd6fe;font-size:13px;max-width:720px}
+.va-payroll-actions{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.va-payroll-actions label{font-size:11px;font-weight:900;color:#ddd6fe}.va-payroll-actions input{display:block;margin-top:5px;padding:11px;border:0;border-radius:10px;background:#fff;color:#111827}
+.va-payroll-btn{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer}.va-payroll-btn.secondary{background:#ede9fe;color:#5b21b6}.va-payroll-btn.success{background:#10b981;color:#fff}.va-payroll-btn:disabled{opacity:.6;cursor:not-allowed}
+.va-payroll-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}.va-payroll-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #8b5cf6;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-payroll-kpis>div:nth-child(2){border-top-color:#2563eb}.va-payroll-kpis>div:nth-child(3){border-top-color:#f59e0b}.va-payroll-kpis>div:nth-child(4){border-top-color:#ef4444}.va-payroll-kpis>div:nth-child(5){border-top-color:#10b981}.va-payroll-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-payroll-kpis strong{display:block;font-size:21px;margin-top:7px;color:#0f172a}.va-payroll-kpis small{display:block;color:#94a3b8;margin-top:4px;font-size:11px}
+.va-payroll-note{padding:13px 15px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:12px;margin-bottom:18px;font-size:12px;line-height:1.5}.va-payroll-note strong{color:#1d4ed8}
+.va-payroll-table-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-payroll-table-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:14px}.va-payroll-table-head h3{margin:3px 0;font-size:19px}.va-payroll-table-head p{margin:0;color:#64748b;font-size:12px}.va-payroll-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;font-weight:800;color:#64748b}
+.va-payroll-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payroll-table{width:100%;border-collapse:collapse;min-width:1420px}.va-payroll-table th,.va-payroll-table td{padding:11px 10px;border-bottom:1px solid #eef2f7;text-align:right;white-space:nowrap;font-size:12px}.va-payroll-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.04em}.va-payroll-table th.left,.va-payroll-table td:first-child{text-align:left}.va-payroll-table tbody tr:hover{background:#fafaff}.va-payroll-table input{width:120px;padding:9px;border:1px solid #cbd5e1;border-radius:8px}.employee-cell small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.money{font-weight:900}.money strong{font-weight:900}.money.paid{color:#b45309}.money.due{color:#dc2626}.money.clear{color:#059669}.money.carry{color:#2563eb}.money.paid small{display:block;color:#6b7280;font-size:10px;font-weight:700;margin-top:2px}
+@media(max-width:1100px){.va-payroll-kpis{grid-template-columns:repeat(3,1fr)}.va-payroll-hero{display:block}.va-payroll-actions{margin-top:15px}.va-payroll-actions>*{flex:1}}
+@media(max-width:650px){.va-payroll-kpis{grid-template-columns:repeat(2,1fr)}.va-payroll-hero,.va-payroll-table-card{padding:15px}.va-payroll-hero h2{font-size:22px}.va-payroll-kpis strong{font-size:18px}.va-payroll-table-head{display:block}.va-payroll-legend{margin-top:10px}.va-payroll-actions{display:grid;grid-template-columns:1fr 1fr}.va-payroll-actions label{grid-column:1/-1}.va-payroll-actions>*{width:100%}}
+`;
+
 const khataUiStyles = `
 .va-khata-page{max-width:1500px;margin:0 auto}.va-khata-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#312e81);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-khata-hero h2{margin:5px 0;font-size:27px}.va-khata-hero p{margin:0;color:#cbd5e1}.va-khata-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-khata-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05);border-top:4px solid #64748b}.va-khata-kpi span{font-size:12px;color:#64748b;font-weight:800}.va-khata-kpi strong{display:block;font-size:24px;margin-top:7px;color:#0f172a}.va-khata-kpi small{display:block;color:#94a3b8;margin-top:4px}.va-khata-kpi.due{border-top-color:#e11d48}.va-khata-kpi.given{border-top-color:#f59e0b}.va-khata-kpi.received{border-top-color:#10b981}.va-khata-kpi.customers{border-top-color:#6366f1}.va-khata-grid{display:grid;grid-template-columns:minmax(330px,.8fr) minmax(0,1.8fr);gap:18px}.va-khata-list-card,.va-khata-detail-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);min-width:0}.va-khata-card-head,.va-khata-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:15px}.va-khata-card-head h3,.va-khata-detail-head h3{margin:4px 0;font-size:20px}.va-khata-count{background:#f1f5f9;color:#475569;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:800}.va-khata-customer-list{display:flex;flex-direction:column;gap:7px;max-height:590px;overflow:auto}.va-khata-customer{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:11px;cursor:pointer}.va-khata-customer:hover,.va-khata-customer.active{border-color:#818cf8;background:#eef2ff}.va-khata-avatar{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#e0e7ff;color:#4338ca;font-weight:900;flex:none}.va-khata-customer-main{flex:1;min-width:0}.va-khata-customer-main strong{display:block;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.va-khata-customer-main small{display:block;color:#94a3b8;margin-top:3px;font-size:11px}.va-khata-balance{font-weight:900;text-align:right;white-space:nowrap}.va-khata-balance small{display:block;font-size:10px;font-weight:800}.va-khata-balance.danger{color:#e11d48}.va-khata-balance.credit{color:#2563eb}.va-khata-balance.clear{color:#059669}.va-khata-detail-empty{min-height:420px;display:grid;place-items:center;text-align:center;align-content:center;color:#64748b}.va-khata-detail-empty div{font-size:46px}.va-khata-detail-empty h3{margin:8px 0 4px;color:#334155}.va-khata-detail-empty p{margin:0}.va-khata-detail-head p{margin:0;color:#64748b;font-size:12px}.va-khata-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.va-khata-balance-banner{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;padding:15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px}.va-khata-balance-banner div{padding:8px 10px}.va-khata-balance-banner div:first-child{background:#fff1f2;border-radius:10px}.va-khata-balance-banner span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-khata-balance-banner strong{display:block;color:#be123c;font-size:25px;margin-top:5px}.va-khata-balance-banner b{display:block;color:#0f172a;font-size:17px;margin-top:6px}.va-khata-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px}.va-khata-filters label{font-size:12px;font-weight:800;color:#475569}.va-khata-filters input{margin-top:5px}.va-khata-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-khata-table{width:100%;border-collapse:collapse;min-width:700px}.va-khata-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left}.va-khata-table th,.va-khata-table td{padding:11px;border-bottom:1px solid #eef2f7}.va-khata-table tbody tr:last-child td{border-bottom:0}.va-khata-pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.va-khata-pill.debit{background:#fff1f2;color:#be123c}.va-khata-pill.payment{background:#ecfdf5;color:#047857}.debit-text{color:#be123c;font-weight:800}.payment-text{color:#047857;font-weight:800}.va-khata-empty{padding:30px!important;text-align:center;color:#64748b}.va-khata-tip{margin-top:15px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px}.va-khata-tip strong{color:#1d4ed8}@media(max-width:1000px){.va-khata-grid{grid-template-columns:1fr}.va-khata-customer-list{max-height:420px}}@media(max-width:700px){.va-khata-kpis{grid-template-columns:repeat(2,1fr)}.va-khata-hero{display:block}.va-khata-hero button{margin-top:15px;width:100%}.va-khata-balance-banner{grid-template-columns:1fr}.va-khata-filters{grid-template-columns:1fr}.va-khata-detail-head{display:block}.va-khata-detail-actions{margin-top:12px}.va-khata-detail-actions button{flex:1}.va-khata-kpi strong{font-size:19px}}@media(max-width:430px){.va-khata-kpis{grid-template-columns:1fr}.va-khata-list-card,.va-khata-detail-card{padding:14px}.va-khata-customer{padding:9px}}
 `;
