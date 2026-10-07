@@ -102,6 +102,7 @@ export default function App() {
   const [cashierEntries, setCashierEntries] = useState([]);
   const [isLoadingCashierEntries, setIsLoadingCashierEntries] = useState(false);
   const [salaryMap, setSalaryMap] = useState(() => { try { return JSON.parse(localStorage.getItem('vintage_staff_salaries') || '{}'); } catch { return {}; } });
+  const [selectedStaffMember, setSelectedStaffMember] = useState(null);
   const [khataSearch, setKhataSearch] = useState('');
   const [selectedKhataCustomer, setSelectedKhataCustomer] = useState(null);
   const [khataStartDate, setKhataStartDate] = useState('');
@@ -386,6 +387,20 @@ export default function App() {
       previousDueAfterPayment, totalBalanceToPay, overpaid
     };
   }), [payrollLogs, payrollMonth, salaryMap, historyLogs]);
+
+  const staffManagement = useMemo(() => {
+    const totalEarned = payrollRows.reduce((s, r) => s + r.earnedPay, 0);
+    const totalPaid = payrollRows.reduce((s, r) => s + r.totalTaken, 0);
+    const totalDue = payrollRows.reduce((s, r) => s + r.totalBalanceToPay, 0);
+    const configured = payrollRows.filter(r => r.monthlySalary > 0).length;
+    const attendancePresent = payrollRows.reduce((s, r) => s + r.present, 0);
+    const attendancePayable = payrollRows.reduce((s, r) => s + r.payableDays, 0);
+    const advances = payrollRows.reduce((s, r) => s + r.cashAdvance, 0);
+    const priority = payrollRows
+      .filter(r => r.totalBalanceToPay > 0 || r.monthlySalary === 0)
+      .sort((a, b) => (b.totalBalanceToPay - a.totalBalanceToPay) || (a.monthlySalary - b.monthlySalary));
+    return { totalEarned, totalPaid, totalDue, configured, attendancePresent, attendancePayable, advances, priority };
+  }, [payrollRows]);
 
   const saveSalary = (name, value) => {
     const next = { ...salaryMap, [name]: value };
@@ -2325,102 +2340,64 @@ export default function App() {
       )}
 
       {activeTab === 'attendance' && (
-        <div>
-          <div style={{ ...cardStyle, borderTop: '4px solid #0ea5e9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-              <div>
-                <h2 style={{ color: '#0284c7', margin: 0 }}>👥 Employee Attendance</h2>
-                <p style={{ color: '#6b7280', marginBottom: 0 }}>Manage daily attendance, check-in/check-out times, and monthly payroll.</p>
-              </div>
-              <a href="/attendance.html" target="_blank" rel="noreferrer" style={{ ...btnStyle, backgroundColor: '#0ea5e9', textDecoration: 'none' }}>📱 Employee Phone Page</a>
+        <div className="va-staff-page">
+          <div className="va-staff-hero">
+            <div>
+              <span className="va-staff-eyebrow">STAFF OPERATIONS • DAILY CONTROL</span>
+              <h2>👥 Attendance Command Center</h2>
+              <p>Track who is working, who is absent, and who still needs a clock-out — without leaving the staff workspace.</p>
             </div>
-            <div style={{ display: 'flex', gap: '15px', marginTop: '20px', alignItems: 'end', flexWrap: 'wrap' }}>
-              <label style={{ minWidth: '220px', flex: 1 }}>
-                Attendance Date:
-                <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} style={inputStyle}/>
-              </label>
-              <button onClick={() => loadAttendance(attendanceDate)} disabled={isLoadingAttendance} style={{ ...btnStyle, backgroundColor: '#0284c7' }}>
-                {isLoadingAttendance ? '⏳ Loading...' : '🔄 Refresh Attendance'}
-              </button>
-            </div>
-            <div style={{ marginTop: '18px', padding: '16px', borderRadius: '14px', background: attendanceLocationRequired ? 'linear-gradient(135deg,#fff7ed,#ffedd5)' : 'linear-gradient(135deg,#ecfdf5,#d1fae5)', border: `1px solid ${attendanceLocationRequired ? '#fed7aa' : '#a7f3d0'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div><strong>{attendanceLocationRequired ? '📍 Location verification ON' : '🟢 Location verification OFF'}</strong><div style={{ color: '#6b7280', fontSize: '13px', marginTop: '4px' }}>{attendanceLocationRequired ? 'Employees must be within the workplace geofence.' : 'Employees can check in/out without GPS.'}</div></div>
-                <button onClick={() => setAttendanceLocation(!attendanceLocationRequired)} style={{ ...btnStyle, backgroundColor: attendanceLocationRequired ? '#dc2626' : '#059669' }}>{attendanceLocationRequired ? 'Turn Location Off' : 'Turn Location On'}</button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '20px' }}>
-              {Object.entries(attendanceSummary).map(([status, count]) => (
-                <div key={status} style={{ padding: '10px 14px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
-                  <strong>{status}:</strong> {count}
-                </div>
-              ))}
+            <div className="va-staff-hero-actions">
+              <label>Date<input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} /></label>
+              <button onClick={() => loadAttendance(attendanceDate)} disabled={isLoadingAttendance} className="va-staff-btn primary">{isLoadingAttendance ? '⏳ Loading...' : '🔄 Refresh'}</button>
+              <button onClick={() => setActiveTab('payroll')} className="va-staff-btn secondary">💰 Open Payroll</button>
             </div>
           </div>
 
-          <div style={{ ...cardStyle, overflowX: 'auto' }}>
-            <h3 style={{ marginTop: 0 }}>Daily Attendance — {attendanceDate}</h3>
-            {isLoadingAttendance ? <p>Loading attendance...</p> : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f8fafc' }}>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Employee</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Check In</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Check Out</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Hours</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+          <div className="va-staff-kpis">
+            <div><span>🟢 Present</span><strong>{attendanceSummary.Present}</strong><small>Working today</small></div>
+            <div><span>🕐 Clocked In</span><strong>{attendanceLogs.filter(r => r.check_in && !r.check_out).length}</strong><small>Needs checkout</small></div>
+            <div><span>🔴 Absent</span><strong>{attendanceSummary.Absent}</strong><small>Not working</small></div>
+            <div><span>🌴 Leave / Off</span><strong>{attendanceSummary.Leave + attendanceSummary['Weekly Off']}</strong><small>Planned non-working</small></div>
+            <div><span>⚠️ Not Marked</span><strong>{Math.max(0, employeeNames.length - attendanceLogs.length)}</strong><small>Needs attention</small></div>
+          </div>
+
+          <div className="va-staff-grid">
+            <div className="va-staff-card">
+              <div className="va-staff-card-head">
+                <div><h3>Today’s Team</h3><p>Update status or use the manual clock controls.</p></div>
+                <a href="/attendance.html" target="_blank" rel="noreferrer" className="va-staff-link">📱 Employee Phone Page</a>
+              </div>
+              {isLoadingAttendance ? <div className="va-staff-loading">Loading attendance...</div> : (
+                <div className="va-staff-list">
                   {employeeNames.map(name => {
                     const row = attendanceLogs.find(r => r.employee_name === name);
-                    const saveStatus = async (status) => {
-                      if (row) {
-                        await updateAttendance(row.id, { status });
-                      } else {
-                        const { error } = await supabase.from('employee_attendance').insert({
-                          employee_name: name,
-                          attendance_date: attendanceDate,
-                          status
-                        });
+                    const status = row?.status || 'Not Marked';
+                    const openShift = Boolean(row?.check_in && !row?.check_out);
+                    const statusClass = status === 'Present' ? 'present' : status === 'Absent' ? 'absent' : status === 'Leave' ? 'leave' : status === 'Weekly Off' ? 'off' : status === 'Half Day' ? 'half' : 'unmarked';
+                    const saveStatus = async (nextStatus) => {
+                      if (row) await updateAttendance(row.id, { status: nextStatus });
+                      else {
+                        const { error } = await supabase.from('employee_attendance').insert({ employee_name: name, attendance_date: attendanceDate, status: nextStatus });
                         if (error) alert('Attendance save failed: ' + error.message);
                         else await loadAttendance(attendanceDate);
                       }
                     };
                     return (
-                      <tr key={name} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '10px', fontWeight: 'bold' }}>{name}</td>
-                        <td style={{ padding: '10px' }}>
-                          <select value={row?.status || ''} onChange={e => saveStatus(e.target.value)} style={{ ...inputStyle, minWidth: '140px' }}>
-                            <option value="">Not Marked</option>
-                            <option value="Present">Present</option>
-                            <option value="Absent">Absent</option>
-                            <option value="Half Day">Half Day</option>
-                            <option value="Leave">Leave</option>
-                            <option value="Weekly Off">Weekly Off</option>
-                          </select>
-                        </td>
-                        <td style={{ padding: '10px' }}>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
-                        <td style={{ padding: '10px' }}>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</td>
-                        <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
-                          <button
-                            onClick={() => manualAttendanceAction(name, 'check_in')}
-                            disabled={Boolean(row?.check_in)}
-                            style={{ ...btnStyle, backgroundColor: row?.check_in ? '#cbd5e1' : '#16a34a', padding: '7px 9px', marginRight: '6px' }}
-                          >
-                            🟢 Check In
-                          </button>
-                          <button
-                            onClick={() => manualAttendanceAction(name, 'check_out')}
-                            disabled={!row?.check_in || Boolean(row?.check_out)}
-                            style={{ ...btnStyle, backgroundColor: !row?.check_in || row?.check_out ? '#cbd5e1' : '#dc2626', padding: '7px 9px' }}
-                          >
-                            🔴 Check Out
-                          </button>
-                        </td>
-                        <td style={{ padding: '10px' }}>{row ? attendanceHours(row) : '—'}</td>
-                        <td style={{ padding: '10px' }}>
+                      <div className="va-staff-row" key={name}>
+                        <button className="va-staff-person" onClick={() => setSelectedStaffMember(name)}>
+                          <span className="va-staff-avatar">{name.split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()}</span>
+                          <span><strong>{name}</strong><small>{openShift ? 'Currently clocked in' : row?.check_out ? 'Shift completed' : 'No active shift'}</small></span>
+                        </button>
+                        <select className={`va-status-select ${statusClass}`} value={row?.status || ''} onChange={e => saveStatus(e.target.value)}>
+                          <option value="">Not Marked</option><option value="Present">Present</option><option value="Absent">Absent</option><option value="Half Day">Half Day</option><option value="Leave">Leave</option><option value="Weekly Off">Weekly Off</option>
+                        </select>
+                        <div className="va-staff-time"><span>{row?.check_in ? new Date(row.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</span><small>IN</small></div>
+                        <div className="va-staff-time"><span>{row?.check_out ? new Date(row.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'}</span><small>OUT</small></div>
+                        <div className="va-staff-hours">{row ? attendanceHours(row) : '—'}</div>
+                        <div className="va-staff-actions">
+                          <button onClick={() => manualAttendanceAction(name, 'check_in')} disabled={Boolean(row?.check_in)} className="va-staff-icon-btn in">IN</button>
+                          <button onClick={() => manualAttendanceAction(name, 'check_out')} disabled={!row?.check_in || Boolean(row?.check_out)} className="va-staff-icon-btn out">OUT</button>
                           <button onClick={async () => {
                             const note = window.prompt('Attendance note (optional):', row?.notes || '');
                             if (note === null) return;
@@ -2430,50 +2407,127 @@ export default function App() {
                               if (error) alert('Attendance save failed: ' + error.message);
                               else await loadAttendance(attendanceDate);
                             }
-                          }} style={{ ...btnStyle, backgroundColor: '#64748b', padding: '7px 10px' }}>📝 Note</button>
-                        </td>
-                      </tr>
+                          }} className="va-staff-icon-btn note">NOTE</button>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            )}
+                </div>
+              )}
+            </div>
+
+            <div className="va-staff-side">
+              <div className="va-staff-card">
+                <div className="va-staff-card-head"><div><h3>Operating Status</h3><p>Daily workforce snapshot.</p></div></div>
+                <div className="va-staff-status-list">
+                  {Object.entries(attendanceSummary).map(([status, count]) => <div key={status}><span>{status}</span><strong>{count}</strong></div>)}
+                </div>
+                <div className="va-staff-note"><strong>Location verification:</strong> {attendanceLocationRequired ? 'ON — employees must meet the workplace geofence.' : 'OFF — employees can check in/out without GPS.'}</div>
+                <button onClick={() => setAttendanceLocation(!attendanceLocationRequired)} className={`va-staff-wide-btn ${attendanceLocationRequired ? 'danger' : 'success'}`}>{attendanceLocationRequired ? 'Turn Location Off' : 'Turn Location On'}</button>
+              </div>
+
+              <div className="va-staff-card">
+                <div className="va-staff-card-head"><div><h3>Payroll Handoff</h3><p>Attendance feeds directly into payroll calculations.</p></div></div>
+                <div className="va-staff-handoff"><span>Selected payroll month</span><strong>{payrollMonth}</strong></div>
+                <button onClick={() => setActiveTab('payroll')} className="va-staff-wide-btn primary">Review Salary & Due →</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {activeTab === 'payroll' && (
-        <div className="va-payroll-page">
-          <div className="va-payroll-hero">
+        <div className="va-staff-page">
+          <div className="va-staff-hero payroll">
             <div>
-              <span className="va-payroll-eyebrow">STAFF • ATTENDANCE • PAYROLL</span>
-              <h2>💰 Payroll & Salary Control</h2>
-              <p>Set monthly salaries, review attendance, track advances and wages, and carry unpaid previous-month dues forward accurately.</p>
+              <span className="va-staff-eyebrow">STAFF FINANCE • PAYROLL CONTROL</span>
+              <h2>💰 Payroll & Employee Management</h2>
+              <p>One place to review salary setup, attendance-driven earnings, advances, previous dues, and the amount still payable.</p>
             </div>
-            <div className="va-payroll-actions">
+            <div className="va-staff-hero-actions">
               <label>Payroll Month<input type="month" value={payrollMonth} onChange={e => setPayrollMonth(e.target.value)} /></label>
-              <button onClick={() => loadPayroll(payrollMonth)} disabled={isLoadingPayroll} className="va-payroll-btn secondary">{isLoadingPayroll ? '⏳ Loading...' : '🔄 Refresh'}</button>
-              <button onClick={exportPayroll} className="va-payroll-btn success">📊 Export Excel</button>
+              <button onClick={() => loadPayroll(payrollMonth)} disabled={isLoadingPayroll} className="va-staff-btn primary">{isLoadingPayroll ? '⏳ Loading...' : '🔄 Refresh'}</button>
+              <button onClick={exportPayroll} className="va-staff-btn success">📊 Export Excel</button>
             </div>
           </div>
 
-          <div className="va-payroll-kpis">
-            <div><span>👥 Employees</span><strong>{payrollRows.length}</strong><small>Configured staff</small></div>
-            <div><span>💵 Earned Salary</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.earnedPay, 0))}</strong><small>{payrollMonth}</small></div>
-            <div><span>💳 Paid / Taken</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.totalTaken, 0))}</strong><small>Allocated to this month</small></div>
-            <div><span>📌 Previous Due</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.previousDueAfterPayment, 0))}</strong><small>Closing carry-forward</small></div>
-            <div><span>⚠️ Total To Pay</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.totalBalanceToPay, 0))}</strong><small>Previous due + current balance</small></div>
+          <div className="va-staff-kpis payroll-kpis">
+            <div><span>👥 Staff</span><strong>{payrollRows.length}</strong><small>{staffManagement.configured} salaries configured</small></div>
+            <div><span>💵 Earned</span><strong>{formatINR(staffManagement.totalEarned)}</strong><small>Attendance-based</small></div>
+            <div><span>💳 Paid / Taken</span><strong>{formatINR(staffManagement.totalPaid)}</strong><small>Allocated to {payrollMonth}</small></div>
+            <div><span>📌 Previous Due</span><strong>{formatINR(payrollRows.reduce((s,r) => s + r.previousDueAfterPayment, 0))}</strong><small>Carry-forward</small></div>
+            <div><span>⚠️ Total To Pay</span><strong>{formatINR(staffManagement.totalDue)}</strong><small>Current + previous due</small></div>
           </div>
 
-          <div className="va-payroll-note">
-            <strong>How payroll works:</strong> A staff payment is counted against the month selected in its <b>Due For</b> field. If you pay an old salary this month, allocate that payment to the old month. It will reduce that old month's closing due and will not reduce the current month's salary.
-          </div>
-
-          <div className="va-payroll-table-card">
-            <div className="va-payroll-table-head">
-              <div><h3>Employee Salary & Attendance</h3><p>Enter the monthly salary once; attendance determines earned salary.</p></div>
-              <div className="va-payroll-legend"><span>🔴 Due</span><span>🟢 Clear</span><span>🔵 Previous dues paid</span></div>
+          <div className="va-staff-grid payroll-grid">
+            <div className="va-staff-card">
+              <div className="va-staff-card-head">
+                <div><h3>Employee Salary Control</h3><p>Click an employee to inspect their payroll position. Salary values are saved locally as before.</p></div>
+                <button onClick={() => setActiveTab('attendance')} className="va-staff-link-btn">👥 Open Attendance</button>
+              </div>
+              <div className="va-payroll-employee-list">
+                {payrollRows.map(r => (
+                  <button key={r.name} onClick={() => setSelectedStaffMember(r.name)} className={`va-payroll-person ${selectedStaffMember === r.name ? 'active' : ''}`}>
+                    <span className="va-staff-avatar">{r.name.split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()}</span>
+                    <span className="va-payroll-person-main"><strong>{r.name}</strong><small>{r.monthlySalary > 0 ? `Salary ₹${Number(r.monthlySalary).toLocaleString('en-IN')}` : 'Salary not configured'}</small></span>
+                    <span className={`va-payroll-person-due ${r.totalBalanceToPay > 0 ? 'due' : 'clear'}`}>{r.totalBalanceToPay > 0 ? formatINR(r.totalBalanceToPay) : 'Clear'}</span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            <div className="va-staff-side">
+              <div className="va-staff-card">
+                <div className="va-staff-card-head"><div><h3>Payroll Health</h3><p>Management snapshot for {payrollMonth}.</p></div></div>
+                <div className="va-staff-status-list">
+                  <div><span>Payable attendance days</span><strong>{staffManagement.attendancePayable.toFixed(1)}</strong></div>
+                  <div><span>Cash advances</span><strong>{formatINR(staffManagement.advances)}</strong></div>
+                  <div><span>Employees with due</span><strong>{payrollRows.filter(r => r.totalBalanceToPay > 0).length}</strong></div>
+                  <div><span>Employees without salary</span><strong>{payrollRows.filter(r => r.monthlySalary <= 0).length}</strong></div>
+                </div>
+                <div className="va-staff-note"><strong>Accounting control:</strong> Old salary payments should use the old month in <b>Due For</b>. This preserves the existing carry-forward calculation.</div>
+              </div>
+              <div className="va-staff-card">
+                <div className="va-staff-card-head"><div><h3>Priority Payroll</h3><p>People requiring a manager review.</p></div></div>
+                <div className="va-payroll-priority-list">
+                  {staffManagement.priority.slice(0,5).map(r => <button key={r.name} onClick={() => setSelectedStaffMember(r.name)}><span>{r.monthlySalary <= 0 ? '⚙️' : '💸'}</span><strong>{r.name}</strong><small>{r.monthlySalary <= 0 ? 'Salary not configured' : `Due ${formatINR(r.totalBalanceToPay)}`}</small></button>)}
+                  {staffManagement.priority.length === 0 && <div className="va-staff-empty">No payroll exceptions.</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {selectedStaffMember && (() => {
+            const r = payrollRows.find(x => x.name === selectedStaffMember);
+            if (!r) return null;
+            const attendanceRow = attendanceLogs.find(x => x.employee_name === r.name);
+            return (
+              <div className="va-staff-detail">
+                <div className="va-staff-detail-head">
+                  <div><span className="va-staff-eyebrow">EMPLOYEE DETAIL</span><h3>{r.name}</h3><p>Payroll and attendance position for {payrollMonth}.</p></div>
+                  <div className="va-staff-detail-actions"><button onClick={() => setActiveTab('attendance')} className="va-staff-btn secondary">View Attendance</button><button onClick={() => setSelectedStaffMember(null)} className="va-staff-btn ghost">Close</button></div>
+                </div>
+                <div className="va-staff-detail-grid">
+                  <div><span>Monthly Salary</span><strong>{r.monthlySalary > 0 ? formatINR(r.monthlySalary) : 'Not set'}</strong></div>
+                  <div><span>Present</span><strong>{r.present}</strong></div>
+                  <div><span>Payable Days</span><strong>{r.payableDays}</strong></div>
+                  <div><span>Earned Salary</span><strong>{formatINR(r.earnedPay)}</strong></div>
+                  <div><span>Paid / Taken</span><strong>{formatINR(r.totalTaken)}</strong></div>
+                  <div><span>Cash Advance</span><strong>{formatINR(r.cashAdvance)}</strong></div>
+                  <div><span>Previous Due</span><strong>{formatINR(r.previousDueAfterPayment)}</strong></div>
+                  <div><span>Total Balance</span><strong className={r.totalBalanceToPay > 0 ? 'due' : 'clear'}>{formatINR(r.totalBalanceToPay)}</strong></div>
+                </div>
+                <div className="va-staff-detail-note">
+                  <strong>Quick salary setup:</strong>
+                  <input type="number" min="0" value={r.monthlySalary || ''} placeholder="Monthly salary" onChange={e => saveSalary(r.name, e.target.value)} />
+                  {attendanceRow ? <span>Today: {attendanceRow.status || 'Not marked'} {attendanceRow.check_in ? '• Checked in' : ''}</span> : <span>No attendance record loaded for today.</span>}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="va-staff-card va-payroll-table-card">
+            <div className="va-staff-card-head"><div><h3>Payroll Detail</h3><p>Full calculation table remains available for audit and export.</p></div></div>
             {isLoadingPayroll ? <p>Loading payroll...</p> : (
               <div className="va-payroll-table-wrap">
                 <table className="va-payroll-table">
@@ -2486,8 +2540,7 @@ export default function App() {
                         <td className="employee-cell"><strong>{r.name}</strong><small>{r.monthlySalary > 0 ? 'Salary configured' : 'Salary not set'}</small></td>
                         <td><input type="number" min="0" value={r.monthlySalary || ''} placeholder="₹ Salary" onChange={e => saveSalary(r.name, e.target.value)} /></td>
                         <td>{r.present}</td><td>{r.half}</td><td>{r.leave}</td><td>{r.absent}</td><td>{r.weeklyOff}</td>
-                        <td>{r.hours.toFixed(2)}</td><td>{r.payableDays}</td>
-                        <td className="money strong">{formatINR(r.earnedPay)}</td>
+                        <td>{r.hours.toFixed(2)}</td><td>{r.payableDays}</td><td className="money strong">{formatINR(r.earnedPay)}</td>
                         <td className="money paid">{formatINR(r.totalTaken)}{r.cashAdvance > 0 && <small>Advance {formatINR(r.cashAdvance)}</small>}</td>
                         <td className={r.previousDueAfterPayment > 0 ? 'money due' : 'money clear'}>{formatINR(r.previousDueAfterPayment)}</td>
                         <td className="money carry">{formatINR(r.paidTowardPreviousDues)}</td>
@@ -2600,6 +2653,8 @@ const fundUiStyles = `
 .va-funds-page{max-width:1500px;margin:0 auto}.va-funds-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#164e63);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-funds-hero h2{margin:5px 0;font-size:27px}.va-funds-hero p{margin:0;color:#cbd5e1}.va-fund-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-fund-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #0ea5e9;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-fund-kpis .due{border-top-color:#dc2626}.va-fund-kpis span{font-size:12px;color:#64748b;font-weight:800}.va-fund-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-fund-workspace{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-fund-entry-card,.va-fund-ledger-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-fund-entry-card:first-child{border-top:4px solid #0ea5e9}.va-fund-entry-card:nth-child(2){border-top:4px solid #dc2626}.va-fund-entry-row{display:grid;grid-template-columns:1.3fr .8fr .9fr .7fr .9fr 1fr 38px;gap:7px;margin-bottom:9px;align-items:center}.va-fund-entry-row .va-icon-delete{min-height:42px}.va-fund-ledger-card{margin-bottom:18px}.va-fund-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-fund-table{width:100%;border-collapse:collapse;min-width:850px}.va-fund-table th,.va-fund-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:left}.va-fund-table th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase}.va-fund-table tbody tr:last-child td{border-bottom:0}.va-fund-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.va-fund-status.open{background:#fff7ed;color:#c2410c}.va-fund-status.overdue{background:#fef2f2;color:#b91c1c}.va-fund-status.closed{background:#ecfdf5;color:#047857}@media(max-width:1050px){.va-fund-workspace{grid-template-columns:1fr}.va-fund-entry-row{grid-template-columns:1fr 1fr 1fr}.va-fund-entry-row .va-icon-delete{width:100%}}@media(max-width:650px){.va-fund-kpis{grid-template-columns:repeat(2,1fr)}.va-funds-hero{display:block}.va-funds-hero button{margin-top:15px;width:100%}.va-fund-entry-row{grid-template-columns:1fr}.va-fund-entry-card,.va-fund-ledger-card{padding:14px}.va-fund-kpis strong{font-size:19px}}
 `;
 
+const staffManagementStyles = `
+.va-staff-page{max-width:1500px;margin:0 auto}.va-staff-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#075985 62%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 18px 45px rgba(15,23,42,.14)}.va-staff-hero.payroll{background:linear-gradient(135deg,#111827,#312e81 65%,#0f766e)}.va-staff-eyebrow{font-size:10px;font-weight:900;letter-spacing:.1em;color:#93c5fd}.va-staff-hero h2{margin:6px 0;font-size:28px}.va-staff-hero p{margin:0;color:#cbd5e1;font-size:13px;line-height:1.5;max-width:720px}.va-staff-hero-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.va-staff-hero-actions label{font-size:10px;font-weight:900;color:#cbd5e1}.va-staff-hero-actions input{display:block;margin-top:5px;padding:10px;border:1px solid #475569;background:#fff;color:#0f172a;border-radius:9px}.va-staff-btn{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer}.va-staff-btn.primary{background:#2563eb;color:#fff}.va-staff-btn.secondary{background:#fff;color:#1e40af}.va-staff-btn.success{background:#10b981;color:#fff}.va-staff-btn.ghost{background:#f1f5f9;color:#334155}.va-staff-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:18px}.va-staff-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:15px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-staff-kpis>div:nth-child(2){border-top-color:#10b981}.va-staff-kpis>div:nth-child(3){border-top-color:#ef4444}.va-staff-kpis>div:nth-child(4){border-top-color:#8b5cf6}.va-staff-kpis>div:nth-child(5){border-top-color:#f59e0b}.va-staff-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-staff-kpis strong{display:block;color:#0f172a;font-size:23px;margin-top:6px}.va-staff-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-staff-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:18px;margin-bottom:18px}.va-staff-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-staff-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:15px}.va-staff-card-head h3{margin:2px 0;font-size:19px;color:#0f172a}.va-staff-card-head p{margin:3px 0 0;color:#64748b;font-size:12px}.va-staff-link{color:#2563eb;font-size:12px;font-weight:900;text-decoration:none}.va-staff-link-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:9px;padding:9px 11px;font-weight:900;cursor:pointer}.va-staff-list{display:flex;flex-direction:column;gap:7px}.va-staff-row{display:grid;grid-template-columns:minmax(180px,1.4fr) 135px 65px 65px 55px minmax(160px,.8fr);gap:8px;align-items:center;border:1px solid #e2e8f0;border-radius:12px;padding:9px;background:#fff}.va-staff-row:hover{background:#f8fafc}.va-staff-person{display:flex;gap:9px;align-items:center;border:0;background:none;text-align:left;padding:0;cursor:pointer}.va-staff-avatar{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:#e0e7ff;color:#4338ca;font-weight:900;font-size:11px;flex:none}.va-staff-person strong{display:block;font-size:12px;color:#0f172a}.va-staff-person small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-status-select{width:100%;padding:8px;border-radius:9px;border:1px solid #cbd5e1;font-size:11px;font-weight:800}.va-status-select.present{background:#ecfdf5;color:#047857}.va-status-select.absent{background:#fff1f2;color:#be123c}.va-status-select.leave{background:#f5f3ff;color:#6d28d9}.va-status-select.off{background:#f1f5f9;color:#475569}.va-status-select.half{background:#fffbeb;color:#92400e}.va-status-select.unmarked{background:#fff}.va-staff-time{padding:7px;background:#f8fafc;border-radius:8px;text-align:center}.va-staff-time span{display:block;font-size:11px;font-weight:900;color:#0f172a}.va-staff-time small{display:block;color:#94a3b8;font-size:8px;margin-top:2px}.va-staff-hours{text-align:center;font-size:11px;font-weight:900;color:#475569}.va-staff-actions{display:flex;gap:5px;flex-wrap:wrap}.va-staff-icon-btn{border:0;border-radius:7px;padding:7px 8px;font-size:9px;font-weight:900;cursor:pointer}.va-staff-icon-btn.in{background:#dcfce7;color:#166534}.va-staff-icon-btn.out{background:#fee2e2;color:#991b1b}.va-staff-icon-btn.note{background:#e2e8f0;color:#334155}.va-staff-icon-btn:disabled{opacity:.45;cursor:not-allowed}.va-staff-side{display:flex;flex-direction:column;gap:18px}.va-staff-status-list{display:flex;flex-direction:column;gap:2px}.va-staff-status-list>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #eef2f7;font-size:12px}.va-staff-status-list span{color:#64748b}.va-staff-status-list strong{color:#0f172a}.va-staff-note{margin-top:13px;padding:11px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:11px;line-height:1.5}.va-staff-wide-btn{width:100%;border:0;border-radius:9px;padding:10px;margin-top:10px;font-weight:900;cursor:pointer}.va-staff-wide-btn.success{background:#dcfce7;color:#166534}.va-staff-wide-btn.danger{background:#fee2e2;color:#991b1b}.va-staff-wide-btn.primary{background:#2563eb;color:#fff}.va-staff-loading,.va-staff-empty{padding:30px;text-align:center;color:#64748b}.va-payroll-employee-list{display:flex;flex-direction:column;gap:7px;max-height:520px;overflow:auto}.va-payroll-person{display:flex;align-items:center;gap:9px;width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:10px;text-align:left;cursor:pointer}.va-payroll-person:hover,.va-payroll-person.active{background:#eef2ff;border-color:#818cf8}.va-payroll-person-main{flex:1;min-width:0}.va-payroll-person-main strong{display:block;color:#0f172a;font-size:12px}.va-payroll-person-main small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-payroll-person-due{font-size:11px;font-weight:900}.va-payroll-person-due.due{color:#be123c}.va-payroll-person-due.clear{color:#059669}.va-payroll-priority-list{display:flex;flex-direction:column;gap:6px}.va-payroll-priority-list button{display:grid;grid-template-columns:25px 1fr auto;gap:7px;align-items:center;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:9px;cursor:pointer}.va-payroll-priority-list button:hover{background:#f8fafc}.va-payroll-priority-list strong{font-size:11px;color:#0f172a}.va-payroll-priority-list small{font-size:10px;color:#64748b}.va-payroll-priority-list span{font-size:13px}.va-staff-detail{background:#0f172a;color:#fff;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.12)}.va-staff-detail-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.va-staff-detail h3{margin:5px 0;font-size:23px}.va-staff-detail p{margin:0;color:#94a3b8;font-size:12px}.va-staff-detail-actions{display:flex;gap:7px;flex-wrap:wrap}.va-staff-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}.va-staff-detail-grid>div{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:11px}.va-staff-detail-grid span{display:block;color:#94a3b8;font-size:9px;text-transform:uppercase;font-weight:900}.va-staff-detail-grid strong{display:block;margin-top:5px;font-size:14px}.va-staff-detail-grid strong.due{color:#fda4af}.va-staff-detail-grid strong.clear{color:#6ee7b7}.va-staff-detail-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:#1e293b;border-radius:10px;color:#cbd5e1;font-size:11px}.va-staff-detail-note input{padding:8px 10px;border-radius:8px;border:1px solid #475569;min-width:160px}.va-payroll-table-card{margin-top:18px}.va-payroll-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-payroll-table{width:100%;border-collapse:collapse;min-width:1050px}.va-payroll-table th,.va-payroll-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:right;font-size:11px;white-space:nowrap}.va-payroll-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-payroll-table th.left,.va-payroll-table td:first-child{text-align:left}.va-payroll-table td input{width:105px;padding:7px;border:1px solid #cbd5e1;border-radius:7px}.va-payroll-table .employee-cell small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-payroll-table .money{font-weight:900}.va-payroll-table .money.paid{color:#047857}.va-payroll-table .money.due{color:#be123c}.va-payroll-table .money.clear{color:#059669}.va-payroll-table .money.carry{color:#2563eb}.va-payroll-table .money small{display:block;font-size:8px;color:#d97706;margin-top:3px}@media(max-width:1150px){.va-staff-kpis{grid-template-columns:repeat(3,1fr)}.va-staff-row{grid-template-columns:1.5fr 125px 60px 60px 55px}.va-staff-actions{grid-column:1/-1}.va-staff-grid{grid-template-columns:1fr}.va-staff-side{display:grid;grid-template-columns:1fr 1fr}}@media(max-width:750px){.va-staff-hero{display:block}.va-staff-hero-actions{margin-top:15px}.va-staff-hero-actions>*{flex:1}.va-staff-kpis{grid-template-columns:1fr 1fr}.va-staff-row{grid-template-columns:1fr 1fr}.va-staff-person{grid-column:1/-1}.va-staff-actions{grid-column:1/-1}.va-staff-side{display:block}.va-staff-detail-grid{grid-template-columns:1fr 1fr}.va-staff-detail-head{display:block}.va-staff-detail-actions{margin-top:12px}.payroll-kpis{grid-template-columns:1fr 1fr}}@media(max-width:450px){.va-staff-kpis{grid-template-columns:1fr}.va-staff-detail-grid{grid-template-columns:1fr}.va-staff-card{padding:14px}.va-staff-row{padding:8px}.va-staff-hero{padding:18px}.va-staff-hero-actions{display:grid;grid-template-columns:1fr 1fr}.va-staff-hero-actions label{grid-column:1/-1}.va-staff-hero-actions>*{width:100%}}`;
 const dashboardCommandStyles = `
 .va-command-actions{display:flex;gap:8px;flex-wrap:wrap}.va-command-actions button{white-space:nowrap}.va-dashboard-command-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.va-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.va-money-grid>div{padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-money-grid span{display:block;color:#64748b;font-size:11px}.va-money-grid strong{display:block;margin-top:5px;font-size:18px;color:#0f172a}.va-command-links{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}.va-command-links button{border:1px solid #e2e8f0;background:#fff;border-radius:9px;padding:10px 6px;font-weight:800;color:#334155;cursor:pointer}.va-command-links button:hover{background:#eef2ff;border-color:#c7d2fe}.va-health-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid #eef2f7}.va-health-row span{color:#64748b}.va-health-row strong{color:#0f172a}.va-health-track{height:9px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:9px 0}.va-health-track i{display:block;height:100%;background:#f59e0b;border-radius:99px}.va-health-note{margin-top:13px;padding:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#475569;font-size:11px;line-height:1.5}@media(max-width:1000px){.va-dashboard-command-grid{grid-template-columns:1fr}}@media(max-width:700px){.va-command-actions{margin-top:14px}.va-command-actions button{flex:1}.va-money-grid{grid-template-columns:1fr 1fr}.va-command-links{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-money-grid{grid-template-columns:1fr}.va-command-links{grid-template-columns:1fr 1fr}}`;
 
