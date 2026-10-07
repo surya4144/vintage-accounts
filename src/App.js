@@ -54,9 +54,8 @@ export default function App() {
 
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
-  const [yesterdayAvailableCash, setYesterdayAvailableCash] = useState(0);
+  // Cash In Hand is the single physical cash balance used by the system.
   const [cashSale, setCashSale] = useState(0);
-  const [cashTakenToAvailable, setCashTakenToAvailable] = useState(0);
   const [onlineSale, setOnlineSale] = useState(0);
   const [parcelCounterCash, setParcelCounterCash] = useState(0);
   const [parcelCounterOnline, setParcelCounterOnline] = useState(0);
@@ -372,7 +371,7 @@ export default function App() {
       // THE FIX: Priority overrides based on how the fetch was triggered
       if (isManualClick && currentData) {
         // User explicitly clicked fetch, and DB data exists -> OVERRIDE DRAFT
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setCashTakenToAvailable(currentData.expense_details?.sales?.cash_taken_to_available || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0);
+        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0);
         setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
         setCreditReceived(currentData.expense_details?.credit_received || []);
@@ -381,28 +380,28 @@ export default function App() {
       } 
       else if (isManualClick && !currentData) {
         // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setCashTakenToAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
       }
       else if (!isManualClick && draft) {
         // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setCashTakenToAvailable(draft.cashTakenToAvailable || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       } 
       else if (!isManualClick && currentData) {
         // Initial page load, load DB data
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setCashTakenToAvailable(currentData.expense_details?.sales?.cash_taken_to_available || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0); setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []); setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []); setCreditReceived(currentData.expense_details?.credit_received || []); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
+        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0); setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []); setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []); setCreditReceived(currentData.expense_details?.credit_received || []); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
       } 
       else {
         // Initial page load, empty DB
-        setCashSale(0); setCashTakenToAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       }
 
       // Fetch yesterday's balances logically
-      const { data: prevData } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance, available_cash_balance').lt('date', targetDate).order('date', { ascending: false }).limit(1);
+      const { data: prevData } = await supabase.from('daily_logs').select('total_cash_in_hand, total_online_balance').lt('date', targetDate).order('date', { ascending: false }).limit(1);
       if (prevData && prevData.length > 0) {
-        setYesterdayCash(prevData[0].total_cash_in_hand); setYesterdayOnline(prevData[0].total_online_balance); setYesterdayAvailableCash(Number(prevData[0].available_cash_balance || 0));
+        setYesterdayCash(Number(prevData[0].total_cash_in_hand || 0)); setYesterdayOnline(Number(prevData[0].total_online_balance || 0));
       } else {
-        setYesterdayCash(0); setYesterdayOnline(0); setYesterdayAvailableCash(0);
+        setYesterdayCash(0); setYesterdayOnline(0);
       }
 
       setDate(targetDate);
@@ -425,18 +424,18 @@ export default function App() {
   // --- 5. BACKGROUND AUTO-SAVE ---
   useEffect(() => {
     if (isDataLoaded && session) {
-      const draft = { cashSale, cashTakenToAvailable, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
+      const draft = { cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
       localStorage.setItem(`vintage_draft_${date}`, JSON.stringify(draft));
     }
-  }, [isDataLoaded, session, date, cashSale, cashTakenToAvailable, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
+  }, [isDataLoaded, session, date, cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalAvailableCashExpenses = cashExpenses.filter(exp => exp.type === 'Available Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalStaffAvailableCash = staffPayments.filter(s => s.method === 'Available Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalCashExpenses = totalTillCashExpenses + totalAvailableCashExpenses;
-  const availableCashBalance = Number(yesterdayAvailableCash || 0) + Number(cashTakenToAvailable || 0) - totalAvailableCashExpenses - totalStaffAvailableCash;
+  const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash' || exp.type === 'Available Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalAvailableCashExpenses = 0;
+  const totalStaffAvailableCash = 0;
+  const totalCashExpenses = totalTillCashExpenses;
+  const availableCashBalance = 0;
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -465,10 +464,9 @@ export default function App() {
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-  // Cash sales are entered after till expenses are already deducted, so till expenses are not subtracted again.
-  // Available-cash expenses are different: they are paid from cash held/taken home, so they reduce Expected Cash In Hand.
-  // Moving cash from till to Available Cash is only an internal transfer and does not reduce total physical cash.
-  const totalCashInHand = Math.max(0, yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalAvailableCashExpenses - totalStaffAvailableCash);
+  // Cash In Hand is the single physical cash pool. Every expense or staff payment paid in cash reduces it.
+  const totalPhysicalStaffCash = staffPayments.filter(s => s.method === 'Cash' || s.method === 'Available Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalCashInHand = Math.max(0, Number(yesterdayCash || 0) + Number(cashSale || 0) + totalParcelCounterCash + creditReceivedCash - totalTillCashExpenses - totalPhysicalStaffCash);
   // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
@@ -600,7 +598,7 @@ export default function App() {
 
   const clearUnsavedForm = () => {
     if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
-    setCashSale(0); setCashTakenToAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
+    setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
     setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
     localStorage.removeItem(`vintage_draft_${date}`);
   };
@@ -609,8 +607,8 @@ export default function App() {
     if (isSaving) return;
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
-        date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance, available_cash_balance: availableCashBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline, cash_taken_to_available: cashTakenToAvailable }, credit_sales: creditSales, credit_received: creditReceived }
+        date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance, available_cash_balance: totalCashInHand,
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -1346,9 +1344,8 @@ export default function App() {
             <div className="va-yesterday-card">
               <span className="va-eyebrow">Opening balances</span>
               <div className="va-opening-grid">
-                <label>Cash<input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label>
-                <label>Online<input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label>
-                <label>Available Cash<input type="number" value={yesterdayAvailableCash} onChange={e => setYesterdayAvailableCash(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Cash In Hand<input type="number" value={yesterdayCash} onChange={e => setYesterdayCash(Number(e.target.value))} style={inputStyle}/></label>
+                <label>Online Balance<input type="number" value={yesterdayOnline} onChange={e => setYesterdayOnline(Number(e.target.value))} style={inputStyle}/></label>
               </div>
             </div>
           </div>
@@ -1358,7 +1355,7 @@ export default function App() {
             <div className="va-kpi va-kpi-cash"><span>Cash In Hand</span><strong>{formatINR(totalCashInHand)}</strong><small>Expected physical cash</small></div>
             <div className="va-kpi va-kpi-online"><span>Online Balance</span><strong>{formatINR(totalOnlineBalance)}</strong><small>Online funds after payments</small></div>
             <div className="va-kpi va-kpi-expense"><span>Total Expenses</span><strong>{formatINR(totalOperatingExpenses)}</strong><small>Operating + staff costs</small></div>
-            <div className="va-kpi va-kpi-available"><span>Available Cash</span><strong>{formatINR(availableCashBalance)}</strong><small>After available-cash expenses</small></div>
+            <div className="va-kpi va-kpi-available"><span>Cash Available</span><strong>{formatINR(totalCashInHand)}</strong><small>Same as Cash In Hand</small></div>
             <div className="va-kpi va-kpi-profit"><span>Est. Profit</span><strong>{formatINR(estimatedProfit)}</strong><small>Daily estimate</small></div>
           </div>
 
@@ -1428,15 +1425,14 @@ export default function App() {
 
             <div className="va-entry-card va-cash-card">
               <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is deducted from.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
-              <div className="va-helper"><strong>💡 Available Cash</strong> reduces Available Cash, not the Net Sale/Till.</div>
+              <div className="va-helper"><strong>💡 Cash expenses</strong> reduce Cash In Hand. There is no separate Available Cash pool.</div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} className="va-expense-row va-cash-expense-row">
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
                   <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
                   <input type="number" placeholder="Amount ₹" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
                   <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={inputStyle}>
-                    <option value="Cash">💰 Cash — Till</option>
-                    <option value="Available Cash">💵 Cash — Available Cash</option>
+                    <option value="Cash">💰 Cash — Cash In Hand</option>
                     <option value="Counter">Counter — Net Sale</option>
                     <option value="Credit">Credit — Owe Later</option>
                     <option value="Teja">Teja Paid</option>
@@ -1449,7 +1445,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">Payroll payments</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffAvailableCash + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Available Cash</strong> deducts from Available Cash. <strong>Cash — Till</strong> deducts from the Till.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Till</option><option value="Available Cash">💵 Cash — Available Cash</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
+          <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">Payroll payments</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Cash</strong> payments reduce Cash In Hand. Cash In Hand is the available physical cash.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Cash In Hand</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
           <div className="va-drawer-card"><div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div>
           <div className="va-final-card">
             <div className="va-final-head">
