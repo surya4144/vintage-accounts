@@ -434,7 +434,9 @@ export default function App() {
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  // "Till" expenses were already deducted before the user enters the final daily Cash/Parcel Counter amount, so never deduct them again from Cash In Hand.
   const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash' || exp.type === 'Available Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCashFromTillExpenses = cashExpenses.filter(exp => exp.type === 'Till').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalAvailableCashExpenses = 0;
   const totalStaffAvailableCash = 0;
   const totalCashExpenses = totalTillCashExpenses;
@@ -1484,7 +1486,7 @@ export default function App() {
 
             <div className="va-entry-card va-cash-card">
               <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is deducted from.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
-              <div className="va-helper"><strong>💡 Cash expenses</strong> reduce Cash In Hand. There is no separate Available Cash pool.</div>
+              <div className="va-helper"><strong>💡 Cash In Hand</strong> expenses reduce the physical cash balance. <strong>Cash From Till</strong> expenses are already deducted from the daily cash/parcel amount you enter, so they are recorded for reference but are not deducted again.</div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} className="va-expense-row va-cash-expense-row">
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
@@ -1492,6 +1494,7 @@ export default function App() {
                   <input type="number" placeholder="Amount ₹" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
                   <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={inputStyle}>
                     <option value="Cash">💰 Cash — Cash In Hand</option>
+                    <option value="Till">🧾 Cash From Till — Already Deducted</option>
                     <option value="Counter">Counter — Net Sale</option>
                     <option value="Credit">Credit — Owe Later</option>
                     <option value="Teja">Teja Paid</option>
