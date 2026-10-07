@@ -1020,6 +1020,63 @@ export default function App() {
     };
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
+  const businessAlerts = useMemo(() => {
+    const alerts = [];
+    const today = new Date().toISOString().split('T')[0];
+
+    const overdueFunds = fundLedger.filter(f => f.status === 'Overdue');
+    overdueFunds.slice(0, 3).forEach(f => alerts.push({
+      type: 'danger', icon: '🏦', title: 'Fund repayment overdue',
+      text: `${f.source} has ${formatINR(f.outstanding)} outstanding and is past its due date.`,
+      action: 'sources'
+    }));
+
+    if (khataSummary.outstanding > 0) {
+      const topCustomer = khataCustomers.find(c => c.balance > 0);
+      alerts.push({
+        type: 'warning', icon: '📒', title: 'Customer credit outstanding',
+        text: `${formatINR(khataSummary.outstanding)} is currently outstanding across ${khataSummary.customersWithDue} customer${khataSummary.customersWithDue === 1 ? '' : 's'}.${topCustomer ? ` ${topCustomer.name} is highest at ${formatINR(topCustomer.balance)}.` : ''}`,
+        action: 'ledger'
+      });
+    }
+
+    const payrollDue = payrollRows.reduce((sum, r) => sum + Number(r.totalBalanceToPay || 0), 0);
+    if (payrollDue > 0) {
+      alerts.push({
+        type: 'warning', icon: '💰', title: 'Payroll balance pending',
+        text: `${formatINR(payrollDue)} is currently due across employee payroll for ${payrollMonth}.`,
+        action: 'payroll'
+      });
+    }
+
+    if (analyticsData.totalSales > 0 && analyticsData.totalExpenses > analyticsData.totalSales * 0.75) {
+      alerts.push({
+        type: 'warning', icon: '📉', title: 'Expense pressure is high',
+        text: `Expenses are ${Math.round((analyticsData.totalExpenses / analyticsData.totalSales) * 100)}% of sales for the selected analytics period.`,
+        action: 'analytics'
+      });
+    }
+
+    const todaySaved = historyLogs.some(log => log.date === today);
+    if (!todaySaved) {
+      alerts.push({
+        type: 'info', icon: '📝', title: 'Today’s accounts are not saved',
+        text: `No daily accounting record was found for ${today}. Enter today’s sales and expenses when the day is ready.`,
+        action: 'daily'
+      });
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        type: 'success', icon: '✅', title: 'No priority alerts',
+        text: 'Your current accounting data does not show any immediate items requiring attention.',
+        action: 'analytics'
+      });
+    }
+
+    return alerts.slice(0, 6);
+  }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs]);
+
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
     return (
@@ -1470,6 +1527,7 @@ export default function App() {
   return (
     <>
         <style>{dailyUiStyles}</style>
+        <style>{alertUiStyles}</style>
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
@@ -1618,6 +1676,22 @@ export default function App() {
             <div className="va-dash-kpi online"><span>Online Balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong><small>Online funds</small></div>
             <div className="va-dash-kpi expense"><span>Today's Expenses</span><strong>{formatINR(dashboardData.todayExpenses)}</strong><small>Operating + staff</small></div>
             <div className="va-dash-kpi profit"><span>Today's Est. Profit</span><strong>{formatINR(dashboardData.todaySales - dashboardData.todayExpenses)}</strong><small>Sales less expenses</small></div>
+          </div>
+
+          <div className="va-dashboard-alerts">
+            <div className="va-dashboard-card-head">
+              <div><span className="va-eyebrow">Needs attention</span><h3>🔔 Smart Business Alerts</h3></div>
+              <span className="va-dashboard-badge">{businessAlerts.length} active</span>
+            </div>
+            <div className="va-alert-list">
+              {businessAlerts.map((alert, index) => (
+                <button key={index} className={'va-alert-item ' + alert.type} onClick={() => setActiveTab(alert.action)}>
+                  <span className="va-alert-icon">{alert.icon}</span>
+                  <span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span>
+                  <span className="va-alert-arrow">→</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="va-dashboard-grid">
@@ -2346,6 +2420,10 @@ export default function App() {
     </>
   );
 }
+
+const alertUiStyles = `
+.va-dashboard-alerts{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-alert-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.va-alert-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:13px;padding:12px;cursor:pointer;transition:.15s}.va-alert-item:hover{transform:translateY(-1px);box-shadow:0 6px 15px rgba(15,23,42,.06)}.va-alert-item.danger{border-left:4px solid #dc2626;background:#fffafa}.va-alert-item.warning{border-left:4px solid #f59e0b;background:#fffdf7}.va-alert-item.info{border-left:4px solid #2563eb;background:#f8fbff}.va-alert-item.success{border-left:4px solid #10b981;background:#f7fffb}.va-alert-icon{width:34px;height:34px;border-radius:10px;background:#f1f5f9;display:grid;place-items:center;flex:none}.va-alert-copy{flex:1;min-width:0}.va-alert-copy strong{display:block;color:#0f172a;font-size:12px}.va-alert-copy small{display:block;color:#64748b;font-size:11px;line-height:1.45;margin-top:3px}.va-alert-arrow{color:#94a3b8;font-weight:900}@media(max-width:800px){.va-alert-list{grid-template-columns:1fr}}@media(max-width:500px){.va-dashboard-alerts{padding:14px}.va-alert-item{padding:10px}}
+`;
 
 const dailyUiStyles = `
 .va-daily-toolbar{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;margin-bottom:18px}
