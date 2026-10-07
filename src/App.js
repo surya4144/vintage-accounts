@@ -45,6 +45,16 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('daily');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('vintage_collapsed_sections') || '{}'); } catch { return {}; }
+  });
+  const toggleSection = (key) => setCollapsedSections(prev => {
+    const next = { ...prev, [key]: !prev[key] };
+    localStorage.setItem('vintage_collapsed_sections', JSON.stringify(next));
+    return next;
+  });
+
+
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [isFetching, setIsFetching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -2205,12 +2215,12 @@ export default function App() {
           </div>
 
           <div className="va-financial-grid va-financial-top-grid">
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head">
-                <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3></div>
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.profitBridge?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head">
+                <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3><button className="va-collapse-btn" onClick={()=>toggleSection('profitBridge')} aria-label={collapsedSections.profitBridge?'Expand section':'Collapse section'}>{collapsedSections.profitBridge?'⌄':'⌃'}</button></div>
                 <span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span>
               </div>
-              <div className="va-profit-bridge">
+              {!collapsedSections.profitBridge && <div className="va-collapsible-body"><div className="va-profit-bridge">
                 <div><span>Sales</span><strong>{formatINR(financialDashboardData.sales)}</strong></div>
                 <i>−</i>
                 <div><span>Operating + Staff</span><strong>{formatINR(financialDashboardData.operatingExpenses)}</strong></div>
@@ -2224,17 +2234,17 @@ export default function App() {
                 <div><span>Purchase ratio</span><strong>{financialDashboardData.purchaseRatio}%</strong></div>
                 <div><span>Staff share of costs</span><strong>{financialDashboardData.staffShare}%</strong></div>
                 <div><span>Cash conversion</span><strong>{financialDashboardData.cashConversion}%</strong></div>
-              </div>
+              </div>              </div>
             </section>
 
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">LIQUIDITY</span><h3>🏦 Current Money Position</h3></div></div>
-              <div className="va-liquidity-main"><span>Today's available balances</span><strong>{formatINR(financialDashboardData.todayLiquidFunds)}</strong></div>
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.liquidity?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">LIQUIDITY</span><h3>🏦 Current Money Position</h3><button className="va-collapse-btn" onClick={()=>toggleSection('liquidity')} aria-label={collapsedSections.liquidity?'Expand section':'Collapse section'}>{collapsedSections.liquidity?'⌄':'⌃'}</button></div></div>
+              {!collapsedSections.liquidity && <div className="va-collapsible-body"><div className="va-liquidity-main"><span>Today's available balances</span><strong>{formatINR(financialDashboardData.todayLiquidFunds)}</strong></div>
               <div className="va-liquidity-row"><span>💵 Cash in hand</span><strong>{formatINR(dashboardData.todayCash)}</strong></div>
               <div className="va-liquidity-row"><span>💳 Online balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong></div>
               <div className="va-liquidity-row"><span>📒 Customer receivables</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong></div>
               <div className="va-liquidity-row"><span>📦 Supplier payables</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong></div>
-              <div className="va-liquidity-note">Receivables are money expected from customers; payables are money still owed to suppliers. Neither is treated as today's cash.</div>
+              <div className="va-liquidity-note">Receivables are money expected from customers; payables are money still owed to suppliers. Neither is treated as today's cash.</div>              </div>
             </section>
           </div>
 
@@ -2256,9 +2266,9 @@ export default function App() {
           </div>
 
 <div className="va-financial-grid">
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3></div><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button></div>
-              <div className="va-cashflow-summary">
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.cashflow?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3><button className="va-collapse-btn" onClick={()=>toggleSection('cashflow')} aria-label={collapsedSections.cashflow?'Expand section':'Collapse section'}>{collapsedSections.cashflow?'⌄':'⌃'}</button></div><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button></div>
+              {!collapsedSections.cashflow && <div className="va-collapsible-body"><div className="va-cashflow-summary">
                 <div className="in"><span>Total inflow</span><strong>{formatINR(cashFlowData.inflow)}</strong></div>
                 <div className="out"><span>Total outflow</span><strong>{formatINR(cashFlowData.outflow)}</strong></div>
                 <div className={cashFlowData.net>=0?'net-good':'net-bad'}><span>Net movement</span><strong>{formatINR(cashFlowData.net)}</strong></div>
@@ -2268,24 +2278,24 @@ export default function App() {
                 <div><span>Operating + staff</span><b>{formatINR(cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
                 <div><span>Purchase + supplier settlement</span><b>{formatINR(cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
               </div>
-              <div className="va-financial-footnote">Internal Cash ↔ Online transfers are excluded from net cash movement because they move money between your own accounts.</div>
+              <div className="va-financial-footnote">Internal Cash ↔ Online transfers are excluded from net cash movement because they move money between your own accounts.</div>              </div>
             </section>
 
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">WORKING CAPITAL</span><h3>📊 Receivables vs Payables</h3></div></div>
-              <div className="va-balance-compare">
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.workingCapital?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">WORKING CAPITAL</span><h3>📊 Receivables vs Payables</h3><button className="va-collapse-btn" onClick={()=>toggleSection('workingCapital')} aria-label={collapsedSections.workingCapital?'Expand section':'Collapse section'}>{collapsedSections.workingCapital?'⌄':'⌃'}</button></div></div>
+              {!collapsedSections.workingCapital && <div className="va-collapsible-body"><div className="va-balance-compare">
                 <div><span>Customer money to collect</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong><small>{financialDashboardData.customersDue} customers with outstanding credit</small></div>
                 <div><span>Supplier money to pay</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong><small>{financialDashboardData.suppliersDue} suppliers with outstanding balances</small></div>
               </div>
               <div className="va-working-capital-result"><span>Net working-capital exposure</span><strong className={financialDashboardData.workingCapitalExposure>=0?'success-text':'danger-text'}>{formatINR(financialDashboardData.workingCapitalExposure)}</strong></div>
-              <div className="va-financial-actions"><button onClick={()=>setActiveTab('ledger')}>📒 Collect Customer Dues</button><button onClick={()=>{setActiveTab('inventory');setInventoryView('suppliers')}}>📦 Settle Supplier Dues</button></div>
+              <div className="va-financial-actions"><button onClick={()=>setActiveTab('ledger')}>📒 Collect Customer Dues</button><button onClick={()=>{setActiveTab('inventory');setInventoryView('suppliers')}}>📦 Settle Supplier Dues</button></div>              </div>
             </section>
           </div>
 
           <div className="va-financial-grid">
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">PERIOD TREND</span><h3>📈 Sales vs Total Costs</h3></div><span className="va-dashboard-badge">{financialDashboardData.daysWithSales} selling days</span></div>
-              <div className="va-financial-trend">
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.periodTrend?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">PERIOD TREND</span><h3>📈 Sales vs Total Costs</h3><button className="va-collapse-btn" onClick={()=>toggleSection('periodTrend')} aria-label={collapsedSections.periodTrend?'Expand section':'Collapse section'}>{collapsedSections.periodTrend?'⌄':'⌃'}</button></div><span className="va-dashboard-badge">{financialDashboardData.daysWithSales} selling days</span></div>
+              {!collapsedSections.periodTrend && <div className="va-collapsible-body"><div className="va-financial-trend">
                 {financialDashboardData.trend.length===0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : financialDashboardData.trend.map(row => {
                   const max=Math.max(...financialDashboardData.trend.map(x=>Math.max(x.sales,x.totalCosts)),1);
                   return <div className="va-financial-trend-day" key={row.date}>
@@ -2295,7 +2305,7 @@ export default function App() {
                   </div>;
                 })}
               </div>
-              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>
+              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>
             </section>
 
             <section className="va-dashboard-card va-financial-card">
