@@ -326,6 +326,10 @@ export default function App() {
   };
 
   useEffect(() => { if (session && activeTab === 'payroll') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
+  // Payroll employee detail also needs the selected day's attendance snapshot.
+  useEffect(() => {
+    if (session && activeTab === 'payroll') loadAttendance(attendanceDate);
+  }, [session, activeTab, attendanceDate]);
 
   const payrollRows = useMemo(() => employeeNames.map(name => {
     const previousMonth = getPreviousMonth(payrollMonth);
@@ -1641,7 +1645,7 @@ export default function App() {
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
-        <style>{payrollUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
+        <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
@@ -2520,7 +2524,7 @@ export default function App() {
                 <div className="va-staff-detail-note">
                   <strong>Quick salary setup:</strong>
                   <input type="number" min="0" value={r.monthlySalary || ''} placeholder="Monthly salary" onChange={e => saveSalary(r.name, e.target.value)} />
-                  {attendanceRow ? <span>Today: {attendanceRow.status || 'Not marked'} {attendanceRow.check_in ? '• Checked in' : ''}</span> : <span>No attendance record loaded for today.</span>}
+                  {attendanceRow ? <span>{attendanceRow ? `Today: ${attendanceRow.status || "Not marked"} ${attendanceRow.check_in ? "• Checked in" : ""}` : 'Today: No attendance record'}</span> : <span>No attendance record loaded for today.</span>}
                 </div>
               </div>
             );
