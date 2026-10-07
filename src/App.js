@@ -54,6 +54,7 @@ export default function App() {
   const [yesterdayCash, setYesterdayCash] = useState(0);
   const [yesterdayOnline, setYesterdayOnline] = useState(0);
   const [cashSale, setCashSale] = useState(0);
+  const [handCashAvailable, setHandCashAvailable] = useState(0);
   const [onlineSale, setOnlineSale] = useState(0);
   const [parcelCounterCash, setParcelCounterCash] = useState(0);
   const [parcelCounterOnline, setParcelCounterOnline] = useState(0);
@@ -369,7 +370,7 @@ export default function App() {
       // THE FIX: Priority overrides based on how the fetch was triggered
       if (isManualClick && currentData) {
         // User explicitly clicked fetch, and DB data exists -> OVERRIDE DRAFT
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0);
+        setCashSale(currentData.expense_details?.sales?.cash || 0); setHandCashAvailable(currentData.expense_details?.hand_cash_available || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0);
         setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
         setCreditReceived(currentData.expense_details?.credit_received || []);
@@ -378,20 +379,20 @@ export default function App() {
       } 
       else if (isManualClick && !currentData) {
         // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setHandCashAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
       }
       else if (!isManualClick && draft) {
         // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(draft.cashSale || 0); setHandCashAvailable(draft.handCashAvailable || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       } 
       else if (!isManualClick && currentData) {
         // Initial page load, load DB data
-        setCashSale(currentData.expense_details?.sales?.cash || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0); setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []); setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []); setCreditReceived(currentData.expense_details?.credit_received || []); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
+        setCashSale(currentData.expense_details?.sales?.cash || 0); setHandCashAvailable(currentData.expense_details?.hand_cash_available || 0); setOnlineSale(currentData.expense_details?.sales?.online || 0); setParcelCounterCash(currentData.expense_details?.sales?.parcel_counter_cash || 0); setParcelCounterOnline(currentData.expense_details?.sales?.parcel_counter_online || 0); setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []); setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []); setCreditReceived(currentData.expense_details?.credit_received || []); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
       } 
       else {
         // Initial page load, empty DB
-        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setHandCashAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       }
 
       // Fetch yesterday's balances logically
@@ -422,14 +423,17 @@ export default function App() {
   // --- 5. BACKGROUND AUTO-SAVE ---
   useEffect(() => {
     if (isDataLoaded && session) {
-      const draft = { cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
+      const draft = { cashSale, handCashAvailable, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
       localStorage.setItem(`vintage_draft_${date}`, JSON.stringify(draft));
     }
-  }, [isDataLoaded, session, date, cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
+  }, [isDataLoaded, session, date, cashSale, handCashAvailable, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
-  const totalCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalHandCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalCashExpenses = totalTillCashExpenses + totalHandCashExpenses;
+  const remainingHandCash = Math.max(0, Number(handCashAvailable || 0) - totalHandCashExpenses);
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -452,7 +456,7 @@ export default function App() {
   const trueGrossSale = grossCashSale + grossOnlineSale + totalCreditSales;
   // Daily Snapshot Gross Sales = all sales entered in Today Sales, plus cash expenses that were already deducted from the till.
   // This restores the pre-expense gross sales figure without including credit sales or non-cash expense methods.
-  const dailySnapshotGrossSale = trueGrossSale + totalCashExpenses;
+  const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses;
   const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -592,7 +596,7 @@ export default function App() {
 
   const clearUnsavedForm = () => {
     if (!window.confirm('Clear all unsaved entries for this date? Saved database records will not be deleted.')) return;
-    setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
+    setCashSale(0); setHandCashAvailable(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]);
     setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
     localStorage.removeItem(`vintage_draft_${date}`);
   };
@@ -602,7 +606,7 @@ export default function App() {
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived }
+        expense_details: { hand_cash_available: handCashAvailable, online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -1332,7 +1336,14 @@ export default function App() {
             </div>
 
             <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
-              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3><p style={{color:'#6b7280',fontSize:'13px',marginTop:'-8px'}}>Choose <strong>Cash in Hand</strong> when this expense was paid from the physical till.</p>
+              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
+              <p style={{color:'#6b7280',fontSize:'13px',marginTop:'-8px'}}>Choose <strong>Cash – Till</strong> for business till cash. Choose <strong>Cash in Hand</strong> when you pay from cash you are personally holding or have taken home.</p>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px', padding: '10px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <label style={{ fontWeight: 600 }}>💵 Hand Cash Available / Taken Home
+                  <input type="number" min="0" step="0.01" value={handCashAvailable || ''} onChange={e => setHandCashAvailable(e.target.value)} placeholder="Amount ₹" style={{ ...inputStyle, marginLeft: '8px', width: '170px' }} />
+                </label>
+                <span style={{ fontWeight: 700, color: remainingHandCash < 0 ? '#dc2626' : '#166534' }}>Remaining Hand Cash: {formatINR(remainingHandCash)}</span>
+              </div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
@@ -1340,7 +1351,7 @@ export default function App() {
                   <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
                   <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
                     <option value="Cash">💰 Cash (Deduct from Till)</option>
-                    <option value="Cash in Hand">💵 Cash in Hand (from Sale Cash)</option>
+                    <option value="Cash in Hand">💵 Cash in Hand (Deduct from Hand Cash)</option>
                     <option value="Counter">Counter (Net Sale)</option>
                     <option value="Credit">Credit (Owe Later)</option>
                     <option value="Teja">Teja Paid</option>
