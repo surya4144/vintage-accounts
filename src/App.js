@@ -1305,6 +1305,7 @@ export default function App() {
         .va-nav button:hover { background:#1f2937; color:white; }
         .va-nav button.active { background:#2563eb; color:white; box-shadow:0 7px 18px rgba(37,99,235,.28); }
         .va-logout { margin-top:auto; width:100%; border:0; border-radius:10px; padding:11px; background:#1f2937; color:#fca5a5; cursor:pointer; font-weight:800; }
+        .va-daily-command-bar{display:flex;align-items:center;gap:16px;background:#0f172a;color:#fff;border-radius:16px;padding:13px 16px;margin-bottom:18px;box-shadow:0 10px 28px rgba(15,23,42,.12);flex-wrap:wrap}.va-command-item{display:flex;align-items:center;gap:9px}.va-command-icon{width:34px;height:34px;border-radius:10px;background:#1e293b;display:flex;align-items:center;justify-content:center}.va-command-item small{display:block;color:#94a3b8;font-size:9px;font-weight:900;letter-spacing:.08em}.va-command-item strong{display:block;font-size:14px;margin-top:2px}.va-command-divider{width:1px;height:28px;background:#334155}.va-command-actions{margin-left:auto;display:flex;gap:7px}.va-command-actions button{border:1px solid #475569;background:#1e293b;color:#fff;border-radius:9px;padding:8px 11px;font-weight:800;cursor:pointer}.va-command-actions button:hover{background:#334155}
         .va-dashboard{display:flex;flex-direction:column;gap:18px}
         .va-dashboard-hero{background:linear-gradient(135deg,#0f172a,#1e3a5f 65%,#0f766e);color:#fff;border-radius:22px;padding:28px;display:flex;justify-content:space-between;align-items:center;gap:20px;box-shadow:0 18px 45px rgba(15,23,42,.16)}
         .va-dashboard-hero h2{font-size:30px;margin:6px 0}.va-dashboard-hero p{margin:0;color:#cbd5e1;font-size:14px}
@@ -1559,10 +1560,24 @@ export default function App() {
             <div className="va-kpi va-kpi-profit"><span>Est. Profit</span><strong>{formatINR(estimatedProfit)}</strong><small>Daily estimate</small></div>
           </div>
 
+          <div className="va-daily-command-bar">
+            <div className="va-command-item"><span className="va-command-icon">📅</span><div><small>ACCOUNT DATE</small><strong>{date}</strong></div></div>
+            <div className="va-command-divider"></div>
+            <div className="va-command-item"><span className="va-command-icon">💰</span><div><small>SALES</small><strong>{formatINR(trueGrossSale)}</strong></div></div>
+            <div className="va-command-divider"></div>
+            <div className="va-command-item"><span className="va-command-icon">💸</span><div><small>EXPENSES</small><strong>{formatINR(totalOperatingExpenses)}</strong></div></div>
+            <div className="va-command-divider"></div>
+            <div className="va-command-item"><span className="va-command-icon">💼</span><div><small>MONEY LEFT</small><strong>{formatINR(totalAmountLeft)}</strong></div></div>
+            <div className="va-command-actions">
+              <button onClick={() => setActiveTab('dashboard')}>🏠 Dashboard</button>
+              <button onClick={clearUnsavedForm}>↺ Reset</button>
+            </div>
+          </div>
+
           <div className="va-sales-panel">
             <div className="va-section-heading">
-              <div><span className="va-eyebrow">Step 1</span><h3>💰 Record Today’s Sales</h3><p>Enter the final amounts received by payment channel.</p></div>
-              <div className="va-mini-total">Gross {formatINR(trueGrossSale)}</div>
+              <div><span className="va-eyebrow">STEP 1 • SALES</span><h3>💰 Record Today’s Sales</h3><p>Enter the final amounts received by payment channel. Cash and parcel cash should be the net amount after any till deductions.</p></div>
+              <div className="va-mini-total"><span>Gross Sales</span><strong>{formatINR(trueGrossSale)}</strong></div>
             </div>
             <div className="va-sales-grid">
               <label>Cash — Net Box<input type="number" value={cashSale} onChange={e => setCashSale(Number(e.target.value))} style={inputStyle}/>{totalCounterExpenses > 0 && <small>True gross: {formatINR(grossCashSale)}</small>}</label>
@@ -1611,7 +1626,7 @@ export default function App() {
 
           <div className="va-expense-grid">
             <div className="va-entry-card va-online-card">
-              <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💳 Online Expenses</h3><p>Expenses paid from online balances.</p></div><span className="va-entry-total">{formatINR(totalOnlineExpenses)}</span></div>
+              <div className="va-entry-head"><div><span className="va-eyebrow">STEP 3 • PAYMENTS</span><h3>💳 Online Expenses</h3><p>Expenses paid from the online balance. These reduce Online Balance.</p></div><span className="va-entry-total">{formatINR(totalOnlineExpenses)}</span></div>
               {onlineExpenses.map(exp => (
                 <div key={exp.id} className="va-expense-row">
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
@@ -1624,7 +1639,7 @@ export default function App() {
             </div>
 
             <div className="va-entry-card va-cash-card">
-              <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is deducted from.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
+              <div className="va-entry-head"><div><span className="va-eyebrow">STEP 3 • PAYMENTS</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is accounted for.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
               <div className="va-helper"><strong>💡 Cash In Hand</strong> expenses reduce the physical cash balance. <strong>Cash From Till</strong> expenses are already deducted from the daily cash/parcel amount you enter, so they are recorded for reference but are not deducted again.</div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} className="va-expense-row va-cash-expense-row">
@@ -1646,7 +1661,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">Payroll payments</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Cash</strong> payments reduce Cash In Hand. <strong>Cash From Till</strong> wages are already deducted from the daily cash you enter, so they count as expenses but are not deducted again.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Cash In Hand</option><option value="Till">🧾 Cash From Till — Already Deducted</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
+          <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">STEP 4 • STAFF</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Cash</strong> payments reduce Cash In Hand. <strong>Cash From Till</strong> wages are already deducted from the daily cash you enter, so they count as expenses but are not deducted again.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Cash In Hand</option><option value="Till">🧾 Cash From Till — Already Deducted</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
           <div className="va-drawer-card"><div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div>
           <div className="va-final-card">
             <div className="va-final-head">
