@@ -433,8 +433,9 @@ export default function App() {
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTillCashExpenses = cashExpenses.filter(exp => exp.type === 'Cash').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalAvailableCashExpenses = cashExpenses.filter(exp => exp.type === 'Available Cash' || exp.type === 'Cash in Hand').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  const totalStaffAvailableCash = staffPayments.filter(s => s.method === 'Available Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
   const totalCashExpenses = totalTillCashExpenses + totalAvailableCashExpenses;
-  const availableCashBalance = Number(yesterdayAvailableCash || 0) + Number(cashTakenToAvailable || 0) - totalAvailableCashExpenses;
+  const availableCashBalance = Number(yesterdayAvailableCash || 0) + Number(cashTakenToAvailable || 0) - totalAvailableCashExpenses - totalStaffAvailableCash;
   const totalCounterExpenses = cashExpenses.filter(exp => exp.type === 'Counter').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalCreditExpenses = cashExpenses.filter(exp => exp.type === 'Credit').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   const totalTejaExpenses = cashExpenses.filter(exp => exp.type === 'Teja').reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -458,14 +459,14 @@ export default function App() {
   // Daily Snapshot Gross Sales = all sales entered in Today Sales, plus cash expenses that were already deducted from the till.
   // This restores the pre-expense gross sales figure without including credit sales or non-cash expense methods.
   const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses;
-  const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
+  const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffAvailableCash + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   // Cash sales are entered after till expenses are already deducted, so till expenses are not subtracted again.
   // Available-cash expenses are different: they are paid from cash held/taken home, so they reduce Expected Cash In Hand.
   // Moving cash from till to Available Cash is only an internal transfer and does not reduce total physical cash.
-  const totalCashInHand = Math.max(0, yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalAvailableCashExpenses);
+  const totalCashInHand = Math.max(0, yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalAvailableCashExpenses - totalStaffAvailableCash);
   // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
