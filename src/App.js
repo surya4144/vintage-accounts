@@ -79,6 +79,12 @@ export default function App() {
 
   const [historyLogs, setHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyType, setHistoryType] = useState('all');
+  const [historyStart, setHistoryStart] = useState('');
+  const [historyEnd, setHistoryEnd] = useState('');
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+
   const [analyticsStart, setAnalyticsStart] = useState(() => {
     let d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
   });
@@ -979,6 +985,64 @@ export default function App() {
   }, [historyLogs, analyticsStart, analyticsEnd]);
 
 
+  const historyRows = useMemo(() => historyLogs.map(log => {
+    const s = log.expense_details?.sales || {};
+    const cash = Number(s.cash || 0) + Number(s.parcel_counter_cash || 0);
+    const online = Number(s.online || 0) + Number(s.parcel_counter_online || 0);
+    const credit = (log.expense_details?.credit_sales || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const received = (log.expense_details?.credit_received || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const onlineExpense = (log.expense_details?.online || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const cashExpense = (log.expense_details?.cash || []).filter(x=>!['Counter','Credit','Teja','Anil'].includes(x.type)).reduce((a,x)=>a+Number(x.amount||0),0);
+    const staff = (log.expense_details?.staff || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const transfers = (log.expense_details?.account_transfers || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const fundsIn = (log.expense_details?.external_funds || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const repayments = (log.expense_details?.fund_repayments || []).reduce((a,x)=>a+Number(x.amount||0),0);
+    const totalSales = cash + online + credit;
+    const totalExpenses = onlineExpense + cashExpense + staff;
+    return { ...log, cash, online, credit, received, totalSales, totalExpenses, staff, transfers, fundsIn, repayments,
+      counts: {
+        credit: (log.expense_details?.credit_sales || []).length,
+        received: (log.expense_details?.credit_received || []).length,
+        expenses: (log.expense_details?.online || []).length + (log.expense_details?.cash || []).length,
+        staff: (log.expense_details?.staff || []).length,
+        transfers: (log.expense_details?.account_transfers || []).length,
+        funds: (log.expense_details?.external_funds || []).length,
+        repayments: (log.expense_details?.fund_repayments || []).length
+      }
+    };
+  }), [historyLogs]);
+
+  const filteredHistoryRows = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    return historyRows.filter(row => {
+      if (historyStart && row.date < historyStart) return false;
+      if (historyEnd && row.date > historyEnd) return false;
+      if (historyType !== 'all') {
+        const map = {
+          sales: row.totalSales > 0,
+          expenses: row.totalExpenses > 0,
+          credit: row.credit > 0 || row.received > 0,
+          staff: row.staff > 0,
+          transfers: row.transfers > 0,
+          funds: row.fundsIn > 0 || row.repayments > 0
+        };
+        if (!map[historyType]) return false;
+      }
+      if (q && ![
+        row.date, row.id, JSON.stringify(row.expense_details || {})
+      ].join(' ').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [historyRows, historySearch, historyType, historyStart, historyEnd]);
+
+  const historySummary = useMemo(() => ({
+    days: filteredHistoryRows.length,
+    sales: filteredHistoryRows.reduce((s,r)=>s+r.totalSales,0),
+    expenses: filteredHistoryRows.reduce((s,r)=>s+r.totalExpenses,0),
+    cash: filteredHistoryRows.reduce((s,r)=>s+Number(r.total_cash_in_hand||0),0),
+    online: filteredHistoryRows.reduce((s,r)=>s+Number(r.total_online_balance||0),0)
+  }), [filteredHistoryRows]);
+
   // --- EXECUTIVE DASHBOARD ---
   const dashboardData = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -1527,6 +1591,7 @@ export default function App() {
   return (
     <>
         <style>{dailyUiStyles}</style>
+        <style>{historyUiStyles}</style>
         <style>{alertUiStyles}</style>
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
@@ -2017,28 +2082,62 @@ export default function App() {
       )}
 
       {activeTab === 'history' && (
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{margin: 0}}>Past Records</h2>
-            <button onClick={exportToExcel} style={{ ...btnStyle, backgroundColor: '#10b981' }}>📊 Download Multi-Sheet Excel</button>
+        <div className="va-history-page">
+          <div className="va-history-hero">
+            <div><span className="va-eyebrow">AUDIT • TRANSACTIONS • CONTROL</span><h2>📋 Transaction History</h2><p>Search, filter and inspect saved daily accounts without changing the original records.</p></div>
+            <button onClick={exportToExcel} className="va-history-export">📊 Export Excel</button>
           </div>
-          {isLoadingHistory ? <p>Loading...</p> : (
-            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '2px solid #ccc' }}><th style={{padding: '10px'}}>Date</th><th style={{padding: '10px'}}>Cash</th><th style={{padding: '10px'}}>Online</th><th style={{padding: '10px'}}>Total</th></tr></thead>
-              <tbody>
-                {historyLogs.map(log => (
-                  <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '10px' }}><strong>{log.date}</strong></td>
-                    <td style={{ padding: '10px', color: 'green' }}>{log.total_cash_in_hand}</td>
-                    <td style={{ padding: '10px', color: 'blue' }}>{log.total_online_balance}</td>
-                    <td style={{ padding: '10px', fontWeight: 'bold' }}>{Number(log.total_cash_in_hand) + Number(log.total_online_balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+
+          <div className="va-history-summary">
+            <div><span>Recorded Days</span><strong>{historySummary.days}</strong></div>
+            <div><span>Sales in View</span><strong>{formatINR(historySummary.sales)}</strong></div>
+            <div><span>Expenses in View</span><strong>{formatINR(historySummary.expenses)}</strong></div>
+            <div><span>Closing Cash Total</span><strong>{formatINR(historySummary.cash)}</strong></div>
+          </div>
+
+          <div className="va-history-filter-card">
+            <div className="va-history-filter-grid">
+              <label>Search<input value={historySearch} onChange={e=>setHistorySearch(e.target.value)} placeholder="Date, customer, employee, category..." /></label>
+              <label>From<input type="date" value={historyStart} onChange={e=>setHistoryStart(e.target.value)} /></label>
+              <label>To<input type="date" value={historyEnd} onChange={e=>setHistoryEnd(e.target.value)} /></label>
+              <label>Transaction Type<select value={historyType} onChange={e=>setHistoryType(e.target.value)}>
+                <option value="all">All records</option><option value="sales">Sales</option><option value="expenses">Expenses</option><option value="credit">Credit / Collections</option><option value="staff">Staff payments</option><option value="transfers">Transfers</option><option value="funds">Funds / Repayments</option>
+              </select></label>
+              <button onClick={()=>{setHistorySearch('');setHistoryStart('');setHistoryEnd('');setHistoryType('all');setSelectedHistoryId(null)}} className="va-history-clear">Clear Filters</button>
+            </div>
+          </div>
+
+          <div className="va-history-table-card">
+            <div className="va-history-table-head"><div><h3>Saved Daily Accounts</h3><p>Click any row to inspect its accounting components.</p></div><span>{filteredHistoryRows.length} record{filteredHistoryRows.length===1?'':'s'}</span></div>
+            {isLoadingHistory ? <p>Loading history...</p> : filteredHistoryRows.length === 0 ? <div className="va-empty-state">No records match your filters.</div> : (
+              <div className="va-history-table-wrap">
+                <table className="va-history-table"><thead><tr><th>Date</th><th>Sales</th><th>Expenses</th><th>Cash</th><th>Online</th><th>Credit</th><th>Staff</th><th></th></tr></thead>
+                  <tbody>{filteredHistoryRows.map(row => <React.Fragment key={row.id}>
+                    <tr className={selectedHistoryId===row.id?'selected':''} onClick={()=>setSelectedHistoryId(selectedHistoryId===row.id?null:row.id)}>
+                      <td><strong>{row.date}</strong><small>{row.id ? 'Saved record' : 'Record'}</small></td>
+                      <td className="history-sales">{formatINR(row.totalSales)}</td><td className="history-expense">{formatINR(row.totalExpenses)}</td>
+                      <td>{formatINR(row.total_cash_in_hand)}</td><td>{formatINR(row.total_online_balance)}</td><td>{formatINR(row.credit)}</td><td>{formatINR(row.staff)}</td><td>⌄</td>
+                    </tr>
+                    {selectedHistoryId===row.id && <tr className="va-history-detail-row"><td colSpan="8">
+                      <div className="va-history-detail">
+                        <div><span>Sales</span><strong>{formatINR(row.totalSales)}</strong><small>Cash {formatINR(row.cash)} • Online {formatINR(row.online)} • Credit {formatINR(row.credit)}</small></div>
+                        <div><span>Expenses</span><strong>{formatINR(row.totalExpenses)}</strong><small>Operating + staff entries</small></div>
+                        <div><span>Credit Activity</span><strong>{formatINR(row.received)} received</strong><small>{row.counts.credit} credit sales • {row.counts.received} collections</small></div>
+                        <div><span>Staff</span><strong>{formatINR(row.staff)}</strong><small>{row.counts.staff} payment entries</small></div>
+                        <div><span>Money Movement</span><strong>{formatINR(row.transfers)}</strong><small>{row.counts.transfers} transfers • Funds in {formatINR(row.fundsIn)} • Repayments {formatINR(row.repayments)}</small></div>
+                        <div><span>Closing Position</span><strong>{formatINR(Number(row.total_cash_in_hand||0)+Number(row.total_online_balance||0))}</strong><small>Cash + Online balance</small></div>
+                      </div>
+                      <div className="va-history-detail-actions"><button onClick={(e)=>{e.stopPropagation();setDateSelection(row.date);setActiveTab('daily');handleFetchData(row.date,true)}}>✏️ Open in Daily Accounting</button><span>Inspection is read-only until you explicitly open the date for editing.</span></div>
+                    </td></tr>}
+                  </React.Fragment>)}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="va-history-note"><strong>🔒 Audit control:</strong> History is an inspection layer. Opening a record in Daily Accounting is a separate action, so reviewing transactions does not accidentally modify saved financial data.</div>
         </div>
       )}
+
 
       {activeTab === 'analytics' && (
         <div className="va-analytics-page">
@@ -2423,6 +2522,10 @@ export default function App() {
 
 const alertUiStyles = `
 .va-dashboard-alerts{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-alert-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.va-alert-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:13px;padding:12px;cursor:pointer;transition:.15s}.va-alert-item:hover{transform:translateY(-1px);box-shadow:0 6px 15px rgba(15,23,42,.06)}.va-alert-item.danger{border-left:4px solid #dc2626;background:#fffafa}.va-alert-item.warning{border-left:4px solid #f59e0b;background:#fffdf7}.va-alert-item.info{border-left:4px solid #2563eb;background:#f8fbff}.va-alert-item.success{border-left:4px solid #10b981;background:#f7fffb}.va-alert-icon{width:34px;height:34px;border-radius:10px;background:#f1f5f9;display:grid;place-items:center;flex:none}.va-alert-copy{flex:1;min-width:0}.va-alert-copy strong{display:block;color:#0f172a;font-size:12px}.va-alert-copy small{display:block;color:#64748b;font-size:11px;line-height:1.45;margin-top:3px}.va-alert-arrow{color:#94a3b8;font-weight:900}@media(max-width:800px){.va-alert-list{grid-template-columns:1fr}}@media(max-width:500px){.va-dashboard-alerts{padding:14px}.va-alert-item{padding:10px}}
+`;
+
+const historyUiStyles = `
+.va-history-page{max-width:1500px;margin:0 auto}.va-history-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#334155);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-history-hero h2{margin:6px 0;font-size:28px}.va-history-hero p{margin:0;color:#cbd5e1;font-size:13px}.va-history-export{border:0;border-radius:10px;padding:11px 15px;background:#10b981;color:#fff;font-weight:900;cursor:pointer}.va-history-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-history-summary>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #64748b;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-history-summary>div:nth-child(2){border-top-color:#2563eb}.va-history-summary>div:nth-child(3){border-top-color:#ef4444}.va-history-summary>div:nth-child(4){border-top-color:#10b981}.va-history-summary span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-history-summary strong{display:block;margin-top:6px;font-size:21px;color:#0f172a}.va-history-filter-card,.va-history-table-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-history-filter-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.2fr auto;gap:10px;align-items:end}.va-history-filter-grid label{font-size:11px;font-weight:900;color:#475569}.va-history-filter-grid input,.va-history-filter-grid select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff}.va-history-clear{border:0;border-radius:10px;padding:11px 14px;background:#334155;color:#fff;font-weight:900;cursor:pointer}.va-history-table-head{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:14px}.va-history-table-head h3{margin:0;font-size:19px}.va-history-table-head p{margin:4px 0 0;color:#64748b;font-size:12px}.va-history-table-head>span{background:#f1f5f9;padding:7px 10px;border-radius:999px;font-size:11px;font-weight:900;color:#475569}.va-history-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-history-table{width:100%;border-collapse:collapse;min-width:850px}.va-history-table th,.va-history-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-history-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.04em}.va-history-table th:first-child,.va-history-table td:first-child{text-align:left}.va-history-table tbody tr:not(.va-history-detail-row){cursor:pointer}.va-history-table tbody tr:not(.va-history-detail-row):hover,.va-history-table tr.selected{background:#f8fafc}.va-history-table td small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.history-sales{color:#047857;font-weight:900}.history-expense{color:#b91c1c;font-weight:900}.va-history-detail-row td{background:#f8fafc;padding:0}.va-history-detail{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:15px}.va-history-detail>div{background:#fff;border:1px solid #e2e8f0;border-radius:11px;padding:12px}.va-history-detail span{display:block;color:#64748b;font-size:10px;font-weight:900;text-transform:uppercase}.va-history-detail strong{display:block;margin-top:5px;font-size:15px;color:#0f172a}.va-history-detail small{display:block;color:#64748b;font-size:10px;line-height:1.4;margin-top:4px}.va-history-detail-actions{display:flex;align-items:center;gap:10px;padding:0 15px 15px}.va-history-detail-actions button{border:0;border-radius:10px;padding:10px 13px;background:#2563eb;color:#fff;font-weight:900;cursor:pointer}.va-history-detail-actions span{font-size:10px;color:#64748b}.va-history-note{padding:13px 15px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:12px;line-height:1.5;margin-bottom:20px}@media(max-width:1000px){.va-history-filter-grid{grid-template-columns:1fr 1fr}.va-history-clear{width:100%}.va-history-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.va-history-hero{display:block}.va-history-export{margin-top:14px;width:100%}.va-history-summary{grid-template-columns:1fr 1fr}.va-history-filter-grid{grid-template-columns:1fr}.va-history-table-card,.va-history-filter-card{padding:14px}.va-history-detail{grid-template-columns:1fr}.va-history-detail-actions{display:block}.va-history-detail-actions button{width:100%}.va-history-detail-actions span{display:block;margin-top:8px}}
 `;
 
 const dailyUiStyles = `
