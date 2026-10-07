@@ -462,10 +462,10 @@ export default function App() {
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-  // Cash/online sales are entered by the cashier AFTER expenses are already paid and deducted.
-  // Therefore, do not subtract expense entries again from the closing balances.
-  // Expenses remain recorded separately for reporting/analytics.
-  const totalCashInHand = Math.max(0, yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - Number(cashTakenToAvailable || 0));
+  // Cash sales are entered after till expenses are already deducted, so till expenses are not subtracted again.
+  // Available-cash expenses are different: they are paid from cash held/taken home, so they reduce Expected Cash In Hand.
+  // Moving cash from till to Available Cash is only an internal transfer and does not reduce total physical cash.
+  const totalCashInHand = Math.max(0, yesterdayCash + Number(cashSale) + totalParcelCounterCash + creditReceivedCash - totalAvailableCashExpenses);
   // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
   const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
