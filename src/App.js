@@ -1374,69 +1374,66 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            <div style={{ ...cardStyle, flex: 1, minWidth: '350px', borderTop: '4px solid #f43f5e' }}>
-              <h3 style={{color: '#e11d48'}}>🔴 Give Credit (Sale Today, Pay Later)</h3>
+          <div className="va-credit-grid">
+            <div className="va-entry-card va-credit-card">
+              <div className="va-entry-head"><div><span className="va-eyebrow">Receivables</span><h3>🔴 Give Credit</h3><p>Sale today, customer pays later.</p></div><span className="va-entry-total">{formatINR(totalCreditSales)}</span></div>
               {creditSales.map(c => (
-                <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input placeholder="Customer/App Name" value={c.name} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <button onClick={() => removeArrItem(setCreditSales, creditSales, c.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
+                <div key={c.id} className="va-line-item">
+                  <input placeholder="Customer / App" value={c.name} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'name', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount ₹" value={c.amount} onChange={e => updateArrItem(setCreditSales, creditSales, c.id, 'amount', e.target.value)} style={inputStyle}/>
+                  <button onClick={() => removeArrItem(setCreditSales, creditSales, c.id)} className="va-icon-delete">✕</button>
                 </div>
               ))}
-              <button onClick={addCreditSale} style={{...btnStyle, backgroundColor: '#e11d48'}}>+ Add Credit Sale</button>
+              <button onClick={addCreditSale} style={{...btnStyle, backgroundColor:'#e11d48'}}>+ Add Credit Sale</button>
             </div>
-
-            <div style={{ ...cardStyle, flex: 1, minWidth: '350px', borderTop: '4px solid #10b981' }}>
-              <h3 style={{color: '#059669'}}>🟢 Receive Credit Payment</h3>
+            <div className="va-entry-card va-receive-card">
+              <div className="va-entry-head"><div><span className="va-eyebrow">Collections</span><h3>🟢 Receive Credit</h3><p>Record payments from existing credit customers.</p></div><span className="va-entry-total">{formatINR(totalCreditReceived)}</span></div>
               {creditReceived.map(c => (
-                <div key={c.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input placeholder="Customer Name" value={c.name} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input type="number" placeholder="Amount" value={c.amount} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option>Cash</option><option>Online</option>
-                  </select>
-                  <button onClick={() => removeArrItem(setCreditReceived, creditReceived, c.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
+                <div key={c.id} className="va-line-item va-receive-line">
+                  <input placeholder="Customer" value={c.name} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'name', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount ₹" value={c.amount} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'amount', e.target.value)} style={inputStyle}/>
+                  <select value={c.method} onChange={e => updateArrItem(setCreditReceived, creditReceived, c.id, 'method', e.target.value)} style={inputStyle}><option>Cash</option><option>Online</option></select>
+                  <button onClick={() => removeArrItem(setCreditReceived, creditReceived, c.id)} className="va-icon-delete">✕</button>
                 </div>
               ))}
-              <button onClick={addCreditReceived} style={{...btnStyle, backgroundColor: '#059669'}}>+ Settle Payment</button>
+              <button onClick={addCreditReceived} style={{...btnStyle, backgroundColor:'#059669'}}>+ Settle Payment</button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
-              <h3 style={{color: '#3b82f6'}}>💳 Online Expenses</h3>
+          <div className="va-expense-grid">
+            <div className="va-entry-card va-online-card">
+              <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💳 Online Expenses</h3><p>Expenses paid from online balances.</p></div><span className="va-entry-total">{formatINR(totalOnlineExpenses)}</span></div>
               {onlineExpenses.map(exp => (
-                <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <button onClick={() => removeArrItem(setOnlineExpenses, onlineExpenses, exp.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
+                <div key={exp.id} className="va-expense-row">
+                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
+                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount ₹" value={exp.amount} onChange={e => updateArrItem(setOnlineExpenses, onlineExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                  <button onClick={() => removeArrItem(setOnlineExpenses, onlineExpenses, exp.id)} className="va-icon-delete">✕</button>
                 </div>
               ))}
-              <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Exp</button>
+              <button onClick={addOnlineExpense} style={btnStyle}>+ Add Online Expense</button>
             </div>
 
-            <div style={{ ...cardStyle, flex: 1, minWidth: '350px' }}>
-              <h3 style={{color: '#10b981'}}>💵 Offline & Owner Expenses</h3>
-              <p style={{color:'#6b7280',fontSize:'13px',marginTop:'-8px'}}>Choose <strong>Cash – Till</strong> for business till cash. Choose <strong>Cash – Available Cash</strong> when you pay from the cash you currently hold or have taken home. This amount is deducted from the available-cash balance only.</p>
+            <div className="va-entry-card va-cash-card">
+              <div className="va-entry-head"><div><span className="va-eyebrow">Payments</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is deducted from.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
+              <div className="va-helper"><strong>💡 Available Cash</strong> reduces Available Cash, not the Net Sale/Till.</div>
               {cashExpenses.map(exp => (
-                <div key={exp.id} style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                  <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}>
-                    <option value="Cash">💰 Cash (Deduct from Till)</option>
-                    <option value="Available Cash">💵 Cash – Available Cash (Deduct from Available Cash)</option>
-                    <option value="Counter">Counter (Net Sale)</option>
-                    <option value="Credit">Credit (Owe Later)</option>
+                <div key={exp.id} className="va-expense-row va-cash-expense-row">
+                  <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
+                  <input placeholder="Details" value={exp.description} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'description', e.target.value)} style={inputStyle}/>
+                  <input type="number" placeholder="Amount ₹" value={exp.amount} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'amount', e.target.value)} style={inputStyle}/>
+                  <select value={exp.type || 'Cash'} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'type', e.target.value)} style={inputStyle}>
+                    <option value="Cash">💰 Cash — Till</option>
+                    <option value="Available Cash">💵 Cash — Available Cash</option>
+                    <option value="Counter">Counter — Net Sale</option>
+                    <option value="Credit">Credit — Owe Later</option>
                     <option value="Teja">Teja Paid</option>
                     <option value="Anil">Anil Paid</option>
                   </select>
-                  <button onClick={() => removeArrItem(setCashExpenses, cashExpenses, exp.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
+                  <button onClick={() => removeArrItem(setCashExpenses, cashExpenses, exp.id)} className="va-icon-delete">✕</button>
                 </div>
               ))}
-              <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Exp</button>
+              <button onClick={addCashExpense} style={btnStyle}>+ Add Offline Expense</button>
             </div>
           </div>
 
@@ -1875,6 +1872,19 @@ const dailyUiStyles = `
 .va-sales-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.va-sales-grid small{display:block;color:#059669;margin-top:4px}
 @media(max-width:1100px){.va-kpi-grid{grid-template-columns:repeat(3,1fr)}.va-daily-toolbar{grid-template-columns:1fr}.va-sales-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.va-kpi-grid{grid-template-columns:repeat(2,1fr)}.va-date-card{display:block}.va-date-actions{min-width:0;margin-top:14px}.va-opening-grid,.va-sales-grid{grid-template-columns:1fr}.va-kpi strong{font-size:18px}.va-section-heading{display:block}.va-mini-total{display:inline-block;margin-top:10px}}
+`;
+
+const expenseUiStyles = `
+.va-credit-grid,.va-expense-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}
+.va-entry-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
+.va-credit-card{border-top:4px solid #f43f5e}.va-receive-card{border-top:4px solid #10b981}.va-online-card{border-top:4px solid #3b82f6}.va-cash-card{border-top:4px solid #10b981}
+.va-entry-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:15px}.va-entry-head h3{margin:4px 0;font-size:18px}.va-entry-head p{margin:0;color:#64748b;font-size:12px}.va-entry-total{font-weight:900;font-size:17px;color:#0f172a;white-space:nowrap}
+.va-line-item{display:grid;grid-template-columns:1.4fr 1fr 38px;gap:8px;margin-bottom:9px}.va-receive-line{grid-template-columns:1.2fr 1fr .8fr 38px}
+.va-expense-row{display:grid;grid-template-columns:1fr 1.1fr .7fr 38px;gap:8px;margin-bottom:9px}.va-cash-expense-row{grid-template-columns:.9fr 1fr .65fr 1.25fr 38px}
+.va-icon-delete{border:0;border-radius:9px;background:#fee2e2;color:#dc2626;font-weight:900;cursor:pointer;min-height:42px}
+.va-helper{background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:12px}
+@media(max-width:900px){.va-credit-grid,.va-expense-grid{grid-template-columns:1fr}.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr 1fr}.va-expense-row .va-icon-delete,.va-cash-expense-row .va-icon-delete{grid-column:auto}}
+@media(max-width:560px){.va-line-item,.va-receive-line,.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr}.va-entry-head{display:block}.va-entry-total{display:inline-block;margin-top:8px}.va-icon-delete{width:100%}}
 `;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
