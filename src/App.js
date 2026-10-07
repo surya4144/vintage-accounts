@@ -66,6 +66,8 @@ export default function App() {
   
   const [creditSales, setCreditSales] = useState([]);
   const [creditReceived, setCreditReceived] = useState([]);
+  const [accountTransfers, setAccountTransfers] = useState([]);
+  const [externalFunds, setExternalFunds] = useState([]);
   const [notes, setNotes] = useState({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
 
   const [tasks, setTasks] = useState(() => {
@@ -375,17 +377,18 @@ export default function App() {
         setOnlineExpenses(currentData.expense_details?.online || []); setCashExpenses(currentData.expense_details?.cash || []);
         setStaffPayments(currentData.expense_details?.staff || []); setCreditSales(currentData.expense_details?.credit_sales || []);
         setCreditReceived(currentData.expense_details?.credit_received || []);
+        setAccountTransfers(currentData.expense_details?.account_transfers || []); setExternalFunds(currentData.expense_details?.external_funds || []);
         setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' }); 
         alert(`✅ System loaded database records for ${targetDate}`);
       } 
       else if (isManualClick && !currentData) {
         // User explicitly clicked fetch, but DB is empty
-        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(0); setOnlineSale(0); setParcelCounterCash(0); setParcelCounterOnline(0); setOnlineExpenses([]); setCashExpenses([]); setStaffPayments([]); setCreditSales([]); setCreditReceived([]); setAccountTransfers([]); setExternalFunds([]); setNotes({ 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
         alert(`ℹ️ No database records found for ${targetDate}. The page is clear.`);
       }
       else if (!isManualClick && draft) {
         // Initial page load, restore an unsaved draft if it exists
-        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
+        setCashSale(draft.cashSale || 0); setOnlineSale(draft.onlineSale || 0); setParcelCounterCash(draft.parcelCounterCash || 0); setParcelCounterOnline(draft.parcelCounterOnline || 0); setOnlineExpenses(draft.onlineExpenses || []); setCashExpenses(draft.cashExpenses || []); setStaffPayments(draft.staffPayments || []); setCreditSales(draft.creditSales || []); setCreditReceived(draft.creditReceived || []); setAccountTransfers(draft.accountTransfers || []); setExternalFunds(draft.externalFunds || []); setNotes(draft.notes || { 500: '', 200: '', 100: '', 50: '', 20: '', 10: '', coins: '' });
       } 
       else if (!isManualClick && currentData) {
         // Initial page load, load DB data
@@ -424,10 +427,10 @@ export default function App() {
   // --- 5. BACKGROUND AUTO-SAVE ---
   useEffect(() => {
     if (isDataLoaded && session) {
-      const draft = { cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes };
+      const draft = { cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, accountTransfers, externalFunds, notes };
       localStorage.setItem(`vintage_draft_${date}`, JSON.stringify(draft));
     }
-  }, [isDataLoaded, session, date, cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, notes]);
+  }, [isDataLoaded, session, date, cashSale, onlineSale, parcelCounterCash, parcelCounterOnline, onlineExpenses, cashExpenses, staffPayments, creditSales, creditReceived, accountTransfers, externalFunds, notes]);
 
   // --- MATH LOGIC ---
   const totalOnlineExpenses = onlineExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
@@ -448,6 +451,12 @@ export default function App() {
   const totalStaffOnline = staffPayments.filter(s => s.method === 'Online').reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
   const totalCreditSales = creditSales.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const transferCashOut = accountTransfers.filter(t => t.from === 'Cash').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const transferCashIn = accountTransfers.filter(t => t.to === 'Cash').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const transferOnlineOut = accountTransfers.filter(t => t.from === 'Online').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const transferOnlineIn = accountTransfers.filter(t => t.to === 'Online').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const externalCashIn = externalFunds.filter(f => f.account === 'Cash').reduce((sum, f) => sum + Number(f.amount || 0), 0);
+  const externalOnlineIn = externalFunds.filter(f => f.account === 'Online').reduce((sum, f) => sum + Number(f.amount || 0), 0);
   const totalCreditReceived = creditReceived.reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedCash = creditReceived.filter(c => c.method === 'Cash').reduce((sum, c) => sum + Number(c.amount || 0), 0);
   const creditReceivedOnline = creditReceived.filter(c => c.method === 'Online').reduce((sum, c) => sum + Number(c.amount || 0), 0);
@@ -466,9 +475,9 @@ export default function App() {
 
   // Cash In Hand is the single physical cash pool. Every expense or staff payment paid in cash reduces it.
   const totalPhysicalStaffCash = staffPayments.filter(s => s.method === 'Cash' || s.method === 'Available Cash').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-  const totalCashInHand = Math.max(0, Number(yesterdayCash || 0) + Number(cashSale || 0) + totalParcelCounterCash + creditReceivedCash - totalTillCashExpenses - totalPhysicalStaffCash);
+  const totalCashInHand = Math.max(0, Number(yesterdayCash || 0) + Number(cashSale || 0) + totalParcelCounterCash + creditReceivedCash + transferCashIn - transferCashOut + externalCashIn - totalTillCashExpenses - totalPhysicalStaffCash);
   // Online expenses and online-paid staff wages are paid from the online balance, so deduct them from the available online amount.
-  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline - totalOnlineExpenses - totalStaffOnline;
+  const totalOnlineBalance = yesterdayOnline + Number(onlineSale) + totalParcelCounterOnline + creditReceivedOnline + transferOnlineIn - transferOnlineOut + externalOnlineIn - totalOnlineExpenses - totalStaffOnline;
   const totalAmountLeft = totalCashInHand + totalOnlineBalance;
 
   // Cash Drawer is a standalone physical cash-counting tool. It never affects accounting calculations.
@@ -483,6 +492,9 @@ export default function App() {
   const addCreditReceived = () => addArrItem(setCreditReceived, creditReceived, { name: '', amount: 0, method: 'Cash' });
   const addOnlineExpense = () => addArrItem(setOnlineExpenses, onlineExpenses, { category: '', description: '', amount: 0 });
   const addCashExpense = () => addArrItem(setCashExpenses, cashExpenses, { category: '', description: '', amount: 0, type: 'Cash' });
+  const addAccountTransfer = () => addArrItem(setAccountTransfers, accountTransfers, { from: 'Cash', to: 'Online', amount: 0, note: '' });
+  const addExternalFund = () => addArrItem(setExternalFunds, externalFunds, { source: '', mode: 'Borrowed', account: 'Cash', amount: 0, dueDate: '', note: '' });
+
   const addStaffPayment = () => addArrItem(setStaffPayments, staffPayments, {
     name: '',
     amount: 0,
@@ -608,7 +620,7 @@ export default function App() {
     setIsSaving(true);
     const { error } = await supabase.from('daily_logs').upsert({ 
         date: date, total_cash_in_hand: totalCashInHand, total_online_balance: totalOnlineBalance, available_cash_balance: totalCashInHand,
-        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived }
+        expense_details: { online: onlineExpenses, cash: cashExpenses, staff: staffPayments, sales: { cash: cashSale, online: onlineSale, parcel_counter_cash: parcelCounterCash, parcel_counter_online: parcelCounterOnline }, credit_sales: creditSales, credit_received: creditReceived, account_transfers: accountTransfers, external_funds: externalFunds }
       }, { onConflict: 'date' });
     if (error) {
       alert("Error saving data: " + error.message); 
@@ -1246,6 +1258,12 @@ export default function App() {
         .va-nav button:hover { background:#1f2937; color:white; }
         .va-nav button.active { background:#2563eb; color:white; box-shadow:0 7px 18px rgba(37,99,235,.28); }
         .va-logout { margin-top:auto; width:100%; border:0; border-radius:10px; padding:11px; background:#1f2937; color:#fca5a5; cursor:pointer; font-weight:800; }
+        .va-feature-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:22px; box-shadow:0 8px 24px rgba(15,23,42,.06); margin-bottom:20px; }
+        .va-feature-grid { display:flex; flex-direction:column; gap:10px; margin:16px 0; }
+        .va-feature-row { display:grid; grid-template-columns:1fr 30px 1fr 1fr 1.4fr 38px; gap:10px; align-items:center; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; }
+        .va-fund-row { grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 1.2fr 38px; }
+        .va-transfer-arrow { text-align:center; font-size:20px; font-weight:900; color:#2563eb; }
+        .va-feature-note { margin-top:14px; padding:12px 14px; border-radius:10px; background:#eff6ff; color:#1e40af; font-size:13px; line-height:1.5; }
         .va-main { flex:1; min-width:0; padding:24px; }
         .va-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:20px; }
         .va-page-title { margin:0; font-size:25px; font-weight:900; color:#111827; }
@@ -1290,6 +1308,8 @@ export default function App() {
           <div className="va-nav">
             {[
               ['daily','📝','Daily Entry'],
+              ['funds','🔄','Money Transfers'],
+              ['sources','🏦','Fund Sources'],
               ['ledger','📒','Customer Khata'],
               ['history','📋','History'],
               ['analytics','📈','Analytics'],
@@ -1310,6 +1330,8 @@ export default function App() {
             <div>
               <h1 className="va-page-title">
                 {activeTab === 'daily' ? 'Daily Accounting' :
+                 activeTab === 'funds' ? 'Money Transfers' :
+                 activeTab === 'sources' ? 'Fund Sources' :
                  activeTab === 'ledger' ? 'Customer Khata' :
                  activeTab === 'history' ? 'Transaction History' :
                  activeTab === 'analytics' ? 'Business Analytics' :
@@ -1320,6 +1342,43 @@ export default function App() {
             </div>
             <div className="va-status"><span className="va-dot"></span> System Online</div>
           </div>
+
+      {activeTab === 'funds' && (
+        <div className="va-feature-card">
+          <div className="va-entry-head"><div><span className="va-eyebrow">Internal movement</span><h3>🔄 Transfer Money Between Accounts</h3><p>Move money between Cash In Hand and Online Balance without treating it as sales or expenses.</p></div></div>
+          <div className="va-feature-grid">
+            {accountTransfers.map(t => <div key={t.id} className="va-feature-row">
+              <select value={t.from} onChange={e=>updateArrItem(setAccountTransfers,accountTransfers,t.id,'from',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select>
+              <span className="va-transfer-arrow">→</span>
+              <select value={t.to} onChange={e=>updateArrItem(setAccountTransfers,accountTransfers,t.id,'to',e.target.value)} style={inputStyle}><option value="Online">💳 Online Balance</option><option value="Cash">💵 Cash In Hand</option></select>
+              <input type="number" min="0" placeholder="Amount ₹" value={t.amount} onChange={e=>updateArrItem(setAccountTransfers,accountTransfers,t.id,'amount',e.target.value)} style={inputStyle}/>
+              <input placeholder="Purpose / Note" value={t.note} onChange={e=>updateArrItem(setAccountTransfers,accountTransfers,t.id,'note',e.target.value)} style={inputStyle}/>
+              <button onClick={()=>removeArrItem(setAccountTransfers,accountTransfers,t.id)} className="va-icon-delete">✕</button>
+            </div>)}
+          </div>
+          <button onClick={addAccountTransfer} style={btnStyle}>+ Add Transfer</button>
+          <div className="va-feature-note">Example: If Online Balance is empty, transfer ₹10,000 from Cash In Hand to Online. Cash decreases ₹10,000 and Online increases ₹10,000. Total money stays the same.</div>
+        </div>
+      )}
+
+      {activeTab === 'sources' && (
+        <div className="va-feature-card">
+          <div className="va-entry-head"><div><span className="va-eyebrow">External funding</span><h3>🏦 Add Funds From Other Sources</h3><p>Record money received from an owner, friend, credit source, borrower, loan, or another outside source.</p></div></div>
+          <div className="va-feature-grid">
+            {externalFunds.map(f => <div key={f.id} className="va-feature-row va-fund-row">
+              <input placeholder="Source / Person / Bank" value={f.source} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'source',e.target.value)} style={inputStyle}/>
+              <select value={f.mode} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'mode',e.target.value)} style={inputStyle}><option>Borrowed</option><option>Loan</option><option>Credit</option><option>Owner Funds</option><option>Partner Funds</option><option>Other</option></select>
+              <select value={f.account} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'account',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select>
+              <input type="number" min="0" placeholder="Amount ₹" value={f.amount} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'amount',e.target.value)} style={inputStyle}/>
+              <input type="date" value={f.dueDate || ''} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'dueDate',e.target.value)} style={inputStyle}/>
+              <input placeholder="Notes" value={f.note} onChange={e=>updateArrItem(setExternalFunds,externalFunds,f.id,'note',e.target.value)} style={inputStyle}/>
+              <button onClick={()=>removeArrItem(setExternalFunds,externalFunds,f.id)} className="va-icon-delete">✕</button>
+            </div>)}
+          </div>
+          <button onClick={addExternalFund} style={btnStyle}>+ Add Fund Source</button>
+          <div className="va-feature-note">These funds increase the selected balance but are kept separate from Sales. The mode tells you whether the money is borrowed, a loan, credit, owner funding, or another source.</div>
+        </div>
+      )}
 
       {activeTab === 'daily' && (
         <>
