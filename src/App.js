@@ -48,6 +48,11 @@ const expenseUiStyles = `
 .va-line-item{display:grid;grid-template-columns:1.4fr 1fr 38px;gap:8px;margin-bottom:9px}.va-receive-line{grid-template-columns:1.2fr 1fr .8fr 38px}
 .va-expense-row{display:grid;grid-template-columns:1fr 1.1fr .7fr 38px;gap:8px;margin-bottom:9px}.va-cash-expense-row{grid-template-columns:.9fr 1fr .65fr 1.25fr 38px}
 .va-icon-delete{border:0;border-radius:9px;background:#fee2e2;color:#dc2626;font-weight:900;cursor:pointer;min-height:42px}
+.va-staff-card{background:#fff;border:1px solid #ddd6fe;border-top:4px solid #8b5cf6;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 8px 25px rgba(15,23,42,.055)}
+.va-staff-help{background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:14px}
+.va-staff-row{display:grid;grid-template-columns:1.05fr .9fr .85fr .75fr 1.3fr 38px;gap:8px;margin-bottom:9px}
+@media(max-width:1100px){.va-staff-row{grid-template-columns:1fr 1fr 1fr}.va-staff-row .va-icon-delete{grid-column:auto}}
+@media(max-width:650px){.va-staff-row{grid-template-columns:1fr}.va-staff-row .va-icon-delete{width:100%}}
 .va-helper{background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:12px}
 @media(max-width:900px){.va-credit-grid,.va-expense-grid{grid-template-columns:1fr}.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr 1fr}.va-expense-row .va-icon-delete,.va-cash-expense-row .va-icon-delete{grid-column:auto}}
 @media(max-width:560px){.va-line-item,.va-receive-line,.va-expense-row,.va-cash-expense-row{grid-template-columns:1fr}.va-entry-head{display:block}.va-entry-total{display:inline-block;margin-top:8px}.va-icon-delete{width:100%}}
@@ -1471,32 +1476,36 @@ export default function App() {
             </div>
           </div>
 
-          <div style={cardStyle}>
-            <h3 style={{color: '#8b5cf6'}}>👨‍🍳 Staff Wages & Advances</h3>
-            <p style={{ color: '#6b7280', marginTop: 0 }}>“Salary / Dues For” is the month this payment belongs to. Example: if you pay September salary on October 5, select <strong>September</strong>.</p>
+          <div className="va-staff-card">
+            <div className="va-entry-head">
+              <div><span className="va-eyebrow">Payroll payments</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, the salary month, and exactly where the payment is deducted from.</p></div>
+              <span className="va-entry-total">{formatINR(totalStaffCash + totalStaffAvailableCash + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span>
+            </div>
+            <div className="va-staff-help">💡 <strong>Available Cash</strong> deducts from Available Cash. <strong>Cash — Till</strong> deducts from the Till. The “Salary / Dues For” month controls payroll allocation.</div>
             {staffPayments.map(s => (
-              <div key={s.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'name', e.target.value)} style={{...inputStyle, flex: 1}}>
+              <div key={s.id} className="va-staff-row">
+                <select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'name', e.target.value)} style={inputStyle}>
                   <option value="">Staff Name</option>
                   {employeeNames.map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
-                <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={{...inputStyle, flex: 1}}><option>Full Wage</option><option>Cash Advance</option></select>
-                <input type="month" value={s.dueFor || date?.slice(0, 7) || new Date().toISOString().slice(0, 7)} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'dueFor', e.target.value)} title="Salary / dues this payment belongs to" style={{...inputStyle, flex: 1}}/>
-                <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={{...inputStyle, flex: 1}}/>
-                <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={{...inputStyle, flex: 1}}>
-                  <option value="Cash">Cash (Deduct from Till)</option>
-                  <option value="Available Cash">Cash – Available Cash (Deduct from Available Cash)</option>
-                  <option value="Counter">Counter (Net Sale)</option>
-                  <option value="Credit">Credit (Owe Later)</option>
+                <select value={s.type} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'type', e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select>
+                <input type="month" value={s.dueFor || date?.slice(0, 7) || new Date().toISOString().slice(0, 7)} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'dueFor', e.target.value)} title="Salary / dues this payment belongs to" style={inputStyle}/>
+                <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Amount (₹)" value={s.amount ?? ''} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'amount', e.target.value)} style={inputStyle}/>
+                <select value={s.method} onChange={e => updateArrItem(setStaffPayments, staffPayments, s.id, 'method', e.target.value)} style={inputStyle}>
+                  <option value="Cash">💰 Cash — Till</option>
+                  <option value="Available Cash">💵 Cash — Available Cash</option>
+                  <option value="Counter">Counter — Net Sale</option>
+                  <option value="Credit">Credit — Owe Later</option>
                   <option value="Teja">Teja Paid</option>
                   <option value="Anil">Anil Paid</option>
-                  <option value="Online">Online (Deduct from Online Balance)</option>
+                  <option value="Online">💳 Online — Online Balance</option>
                 </select>
-                <button onClick={() => removeArrItem(setStaffPayments, staffPayments, s.id)} style={{...btnStyle, backgroundColor: '#ef4444', padding: '8px 10px'}}>✕</button>
+                <button onClick={() => removeArrItem(setStaffPayments, staffPayments, s.id)} className="va-icon-delete">✕</button>
               </div>
             ))}
             <button onClick={addStaffPayment} style={{...btnStyle, backgroundColor: '#8b5cf6'}}>+ Log Staff Payment</button>
           </div>
+
 
           <div style={{ ...cardStyle, backgroundColor: '#fdfbc8', border: '1px solid #fde047' }}>
             <h3 style={{ color: '#854d0e', marginTop: 0 }}>🧮 Cash Drawer — Daily Count Only</h3>
