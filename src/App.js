@@ -102,6 +102,9 @@ export default function App() {
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiMessages, setAiMessages] = useState([{ role: 'assistant', text: 'Hi! I’m your read-only Vintage Accounts assistant. Ask me about sales, expenses, profit, customer credit, staff costs, or trends.' }]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [reportType, setReportType] = useState('pnl');
+  const [reportStart, setReportStart] = useState(() => { let d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; });
+  const [reportEnd, setReportEnd] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [attendanceLocationRequired, setAttendanceLocationRequired] = useState(false);
@@ -165,7 +168,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (session && activeTab === 'inventory') loadInventoryModule();
+    if (session && ['inventory','reports'].includes(activeTab)) loadInventoryModule();
   }, [session, activeTab]);
 
   useEffect(() => {
@@ -467,7 +470,7 @@ export default function App() {
     setIsLoadingPayroll(false);
   };
 
-  useEffect(() => { if (session && activeTab === 'payroll') loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
+  useEffect(() => { if (session && ['payroll','reports'].includes(activeTab)) loadPayroll(payrollMonth); }, [session, activeTab, payrollMonth]);
   // Payroll employee detail also needs the selected day's attendance snapshot.
   useEffect(() => {
     if (session && activeTab === 'payroll') loadAttendance(attendanceDate);
@@ -1465,6 +1468,101 @@ export default function App() {
     };
   }, [historyLogs, purchases, supplierPayments, analyticsStart, analyticsEnd]);
   
+
+  const advancedReportData = useMemo(() => {
+    const inRange = date => date >= reportStart && date <= reportEnd;
+    const definitions = {
+      pnl: { title:'Profit & Loss', subtitle:'Management P&L using saved sales, operating expenses and purchase costs.', columns:['Date','Sales','Operating Expenses','Purchase Costs','Profit After Purchases'] },
+      cashflow: { title:'Cash Flow', subtitle:'Actual cash and online movement including settlements.', columns:['Date','Inflow','Outflow','Net','Cash Sales','Online Sales','Supplier Paid','Purchase Paid'] },
+      sales: { title:'Sales Report', subtitle:'Sales by date and collection channel.', columns:['Date','Cash Sales','Online Sales','Credit Sales','Credit Received','Total Sales'] },
+      purchases: { title:'Purchase Report', subtitle:'Inventory purchases and supplier settlement exposure.', columns:['Date','Supplier','Invoice','Payment Method','Status','Subtotal','Paid','Due'] },
+      customers: { title:'Customer / Khata Report', subtitle:'Current customer receivables and collection position.', columns:['Customer','Credit Given','Received','Outstanding','Transactions'] },
+      suppliers: { title:'Supplier Payables Report', subtitle:'Current supplier balances after recorded settlements.', columns:['Supplier','Opening Balance','Purchase Due','Paid','Outstanding','Age Days','Status'] },
+      payroll: { title:'Payroll Report', subtitle:'Current payroll month calculation and outstanding employee balances.', columns:['Employee','Monthly Salary','Payable Days','Earned Salary','Paid / Taken','Previous Due','Total Balance'] },
+      inventory: { title:'Inventory Valuation Report', subtitle:'Current stock quantities and estimated inventory value.', columns:['Item','Category','Unit','Current Stock','Unit Cost','Stock Value','Reorder Level','Status'] }
+    };
+    const def = definitions[reportType] || definitions.pnl;
+    let rows = [];
+
+    if (reportType === 'pnl') {
+      rows = historyRows.filter(r=>inRange(r.date)).map(r=>({
+        Date:r.date, Sales:r.totalSales, 'Operating Expenses':r.totalExpenses, 'Purchase Costs':r.purchaseTotal,
+        'Profit After Purchases':r.totalSales-r.totalExpenses-r.purchaseTotal
+      }));
+    } else if (reportType === 'cashflow') {
+      rows = cashFlowData.rows.filter(r=>inRange(r.date)).map(r=>({
+        Date:r.date, Inflow:r.inflow, Outflow:r.outflow, Net:r.net, 'Cash Sales':r.salesCash,
+        'Online Sales':r.salesOnline, 'Supplier Paid':r.supplierCash+r.supplierOnline, 'Purchase Paid':r.purchaseCash+r.purchaseOnline
+      }));
+    } else if (reportType === 'sales') {
+      rows = historyRows.filter(r=>inRange(r.date)).map(r=>({
+        Date:r.date, 'Cash Sales':r.cash, 'Online Sales':r.online, 'Credit Sales':r.credit,
+        'Credit Received':r.received, 'Total Sales':r.totalSales
+      }));
+    } else if (reportType === 'purchases') {
+      rows = purchases.filter(p=>inRange(p.purchase_date)).map(p=>({
+        Date:p.purchase_date || '', Supplier:p.supplier_name || '—', Invoice:p.invoice_no || '—',
+        'Payment Method':p.payment_method || '—', Status:p.payment_status || '—',
+        Subtotal:Number(p.subtotal||0), Paid:Number(p.paid_amount||0), Due:Number(p.due_amount||0)
+      }));
+    } else if (reportType === 'customers') {
+      rows = khataCustomers.map(c=>({
+        Customer:c.name, 'Credit Given':Number(c.given||0), Received:Number(c.received||0),
+        Outstanding:Number(c.balance||0), Transactions:c.transactions.length
+      }));
+    } else if (reportType === 'suppliers') {
+      rows = supplierPayables.map(s=>({
+        Supplier:s.name, 'Opening Balance':Number(s.openingBalance||0), 'Purchase Due':Number(s.purchaseDue||0),
+        Paid:Number(s.payments||0), Outstanding:Number(s.outstanding||0), 'Age Days':s.oldestDays||0, Status:s.status
+      }));
+    } else if (reportType === 'payroll') {
+      rows = payrollRows.map(r=>({
+        Employee:r.name, 'Monthly Salary':Number(r.monthlySalary||0), 'Payable Days':Number(r.payableDays||0),
+        'Earned Salary':Number(r.earnedPay||0), 'Paid / Taken':Number(r.totalTaken||0),
+        'Previous Due':Number(r.previousDueAfterPayment||0), 'Total Balance':Number(r.totalBalanceToPay||0)
+      }));
+    } else if (reportType === 'inventory') {
+      rows = inventoryItems.map(i=>{
+        const stock=Number(i.current_stock||0), cost=Number(i.unit_cost||0), reorder=Number(i.reorder_level||0);
+        return { Item:i.name, Category:i.category||'—', Unit:i.unit||'unit', 'Current Stock':stock,
+          'Unit Cost':cost, 'Stock Value':stock*cost, 'Reorder Level':reorder, Status:stock<=reorder?'Reorder':'Healthy' };
+      });
+    }
+
+    const moneyKeys = Object.keys(rows[0] || {}).filter(k => typeof rows[0][k] === 'number');
+    const totals = {};
+    moneyKeys.forEach(k => totals[k] = rows.reduce((s,r)=>s+Number(r[k]||0),0));
+    return { ...def, rows, totals };
+  }, [reportType, reportStart, reportEnd, historyRows, cashFlowData, purchases, khataCustomers, supplierPayables, payrollRows, inventoryItems]);
+
+  const exportAdvancedReport = () => {
+    if (!advancedReportData.rows.length) return alert('No data is available for this report and date range.');
+    const wb = XLSX.utils.book_new();
+    const summary = [
+      { Field:'Report', Value:advancedReportData.title },
+      { Field:'Period', Value:reportType === 'customers' || reportType === 'suppliers' || reportType === 'inventory' || reportType === 'payroll' ? 'Current balances / selected payroll month' : reportStart + ' to ' + reportEnd },
+      { Field:'Generated', Value:new Date().toLocaleString('en-IN') },
+      { Field:'Records', Value:advancedReportData.rows.length }
+    ];
+    Object.entries(advancedReportData.totals).forEach(([key,value])=>summary.push({Field:key,Value:Number(value.toFixed(2))}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Report Summary');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advancedReportData.rows), 'Report Detail');
+    XLSX.writeFile(wb, 'Vintage-' + advancedReportData.title.replace(/[^a-z0-9]+/gi,'-') + '-' + new Date().toISOString().split('T')[0] + '.xlsx');
+  };
+
+  const printAdvancedReport = () => {
+    if (!advancedReportData.rows.length) return alert('No data is available to print.');
+    const escapeHtml = value => String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const headers = advancedReportData.columns;
+    const body = advancedReportData.rows.map(row => '<tr>' + headers.map(h => '<td>' + escapeHtml(typeof row[h] === 'number' ? formatINR(row[h]) : row[h]) + '</td>').join('') + '</tr>').join('');
+    const win = window.open('', '_blank', 'width=1200,height=800');
+    if (!win) return alert('Please allow pop-ups to print this report.');
+    win.document.write('<!doctype html><html><head><title>' + escapeHtml(advancedReportData.title) + '</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#111827}h1{margin:0 0 6px}p{color:#64748b}table{width:100%;border-collapse:collapse;margin-top:18px;font-size:11px}th,td{border:1px solid #d1d5db;padding:7px;text-align:right}th{background:#f3f4f6;text-align:center}th:first-child,td:first-child{text-align:left}@media print{body{padding:10px}}</style></head><body><h1>Vintage Accounts — ' + escapeHtml(advancedReportData.title) + '</h1><p>Period: ' + escapeHtml(reportStart + ' to ' + reportEnd) + ' • Generated: ' + escapeHtml(new Date().toLocaleString('en-IN')) + '</p><table><thead><tr>' + headers.map(h=>'<th>'+escapeHtml(h)+'</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table></body></html>');
+    win.document.close();
+    win.focus();
+    setTimeout(()=>win.print(), 250);
+  };
+
   const smartInsights = useMemo(() => {
     const insights = [];
     const sales = Number(analyticsData.totalSales || 0);
@@ -2063,6 +2161,7 @@ export default function App() {
         <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>
       <style>{payablesUiStyles}</style><style>{cashflowUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
+        <style>{reportsUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -2145,6 +2244,7 @@ export default function App() {
               ['history','📋','History'],
               ['analytics','📈','Analytics'],
               ['cashflow','💵','Cash Flow'],
+              ['reports','📑','Advanced Reports'],
               ['ai','✨','AI Assistant'],
               ['attendance','👥','Attendance'],
               ['payroll','💰','Employee Payroll'],
@@ -2171,6 +2271,7 @@ export default function App() {
                  activeTab === 'history' ? 'Transaction History' :
                  activeTab === 'analytics' ? 'Business Analytics' :
                  activeTab === 'cashflow' ? 'Cash Flow Management' :
+                 activeTab === 'reports' ? 'Advanced Reports & Exports' :
                  activeTab === 'ai' ? 'AI Business Assistant' :
                  activeTab === 'attendance' ? 'Employee Attendance' :
                  activeTab === 'payroll' ? 'Employee Payroll' : 'Reminders'}
@@ -2916,6 +3017,71 @@ export default function App() {
         </div>
       )}
 
+
+      {activeTab === 'reports' && (
+        <div className="va-reports-page">
+          <div className="va-reports-hero">
+            <div>
+              <span className="va-eyebrow">MANAGEMENT • REPORTING • EXPORTS</span>
+              <h2>📑 Advanced Reports & Exports</h2>
+              <p>Generate focused management reports from the same accounting ledgers used by Dashboard, Analytics, Cash Flow, Khata, Suppliers, Payroll and Inventory.</p>
+            </div>
+            <div className="va-reports-actions">
+              <label>Report<select value={reportType} onChange={e=>setReportType(e.target.value)}>
+                <option value="pnl">Profit & Loss</option><option value="cashflow">Cash Flow</option><option value="sales">Sales</option><option value="purchases">Purchases</option>
+                <option value="customers">Customer / Khata</option><option value="suppliers">Supplier Payables</option><option value="payroll">Payroll</option><option value="inventory">Inventory Valuation</option>
+              </select></label>
+              <label>From<input type="date" value={reportStart} onChange={e=>setReportStart(e.target.value)} /></label>
+              <label>To<input type="date" value={reportEnd} onChange={e=>setReportEnd(e.target.value)} /></label>
+              <button className="va-reports-btn" onClick={exportAdvancedReport}>📥 Excel</button>
+              <button className="va-reports-btn secondary" onClick={printAdvancedReport}>🖨️ Print</button>
+            </div>
+          </div>
+
+          <div className="va-report-tabs">
+            {[
+              ['pnl','💰 Profit & Loss','Sales, expenses, purchases and profit'],
+              ['cashflow','💵 Cash Flow','Actual inflows, outflows and net movement'],
+              ['sales','🧾 Sales Report','Daily sales by collection channel'],
+              ['purchases','🛒 Purchase Report','Purchases, payments and supplier dues'],
+              ['customers','📒 Customer Report','Current Khata receivables'],
+              ['suppliers','🤝 Supplier Report','Current supplier payables'],
+              ['payroll','👥 Payroll Report','Salary, earned, paid and due'],
+              ['inventory','📦 Inventory Report','Stock quantity and valuation']
+            ].map(([type,label,desc])=><button key={type} className={'va-report-tab '+(reportType===type?'active':'')} onClick={()=>setReportType(type)}><strong>{label}</strong><small>{desc}</small></button>)}
+          </div>
+
+          <div className="va-report-kpis">
+            <div><span>Report</span><strong>{advancedReportData.title}</strong><small>{advancedReportData.rows.length} records</small></div>
+            <div><span>Primary Total</span><strong>{formatINR(Number(Object.values(advancedReportData.totals)[0] || 0))}</strong><small>Based on current report</small></div>
+            <div><span>Period</span><strong style={{fontSize:'15px'}}>{reportStart}</strong><small>to {reportEnd}</small></div>
+            <div><span>Generated</span><strong style={{fontSize:'15px'}}>{new Date().toLocaleDateString('en-IN')}</strong><small>Live data view</small></div>
+          </div>
+
+          <div className="va-report-card">
+            <div className="va-report-head"><div><span className="va-eyebrow">REPORT DETAIL</span><h3>{advancedReportData.title}</h3><p>{advancedReportData.subtitle}</p></div><span>{advancedReportData.rows.length} record{advancedReportData.rows.length===1?'':'s'}</span></div>
+            {advancedReportData.rows.length === 0 ? <div className="va-report-empty">No records are available for this report. Try a wider date range or open the relevant module to load its latest data.</div> : (
+              <div className="va-report-table-wrap">
+                <table className="va-report-table">
+                  <thead><tr>{advancedReportData.columns.map(h=><th key={h}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {advancedReportData.rows.map((row,i)=><tr key={i}>{advancedReportData.columns.map(h=><td key={h}>{typeof row[h] === 'number' ? formatINR(row[h]) : row[h] || '—'}</td>)}</tr>)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="va-report-card">
+            <div className="va-report-head"><div><span className="va-eyebrow">REPORT CONTROLS</span><h3>Export & Review</h3><p>Excel exports contain a summary sheet and a full detail sheet for management use.</p></div></div>
+            <div className="va-report-footer">
+              <small>For statutory filing, reconcile these management reports with your final accounting and tax records.</small>
+              <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}><button className="va-reports-btn" onClick={exportAdvancedReport}>📊 Export Excel</button><button className="va-reports-btn secondary" onClick={printAdvancedReport}>🖨️ Print / PDF</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'cashflow' && (
         <div className="va-cashflow-page">
           <div className="va-cashflow-hero">
@@ -3410,6 +3576,10 @@ const payablesUiStyles = `
 const inventoryUiStyles = `
 .va-inventory-page{max-width:1500px;margin:0 auto}.va-inventory-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#0f172a,#14532d);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-inventory-hero h2{margin:6px 0;font-size:28px}.va-inventory-hero p{margin:0;color:#cbd5e1;font-size:13px}.va-inventory-hero-actions{display:flex;gap:8px}.va-inventory-hero-actions button{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;background:#10b981;color:#fff}.va-inventory-hero-actions button+button{background:#fff;color:#14532d}.va-inventory-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-inventory-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #10b981;border-radius:16px;padding:17px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-inventory-kpis .warning{border-top-color:#f59e0b}.va-inventory-kpis .danger{border-top-color:#ef4444}.va-inventory-kpis span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-inventory-kpis strong{display:block;color:#0f172a;font-size:22px;margin-top:6px}.va-inventory-kpis small{display:block;color:#94a3b8;font-size:10px;margin-top:3px}.va-inventory-tabs{display:flex;gap:7px;margin-bottom:18px}.va-inventory-tabs button{border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:10px 13px;font-weight:900;color:#475569;cursor:pointer}.va-inventory-tabs button.active{background:#0f766e;color:#fff;border-color:#0f766e}.va-inventory-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px}.va-inventory-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-inventory-card-head{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:14px}.va-inventory-card-head h3{margin:0;font-size:19px}.va-inventory-card-head p{margin:4px 0 0;color:#64748b;font-size:12px}.va-inventory-card-head input{max-width:260px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-stock-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-stock-table{width:100%;border-collapse:collapse;min-width:780px}.va-stock-table th,.va-stock-table td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;font-size:11px}.va-stock-table th{background:#f8fafc;color:#475569;text-transform:uppercase;font-size:9px}.va-stock-table td small{display:block;color:#94a3b8;margin-top:3px}.va-stock-table .low-stock{color:#b91c1c;font-weight:900}.va-stock-status{display:inline-block;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.va-stock-status.low{background:#fef2f2;color:#b91c1c}.va-stock-status.ok{background:#ecfdf5;color:#047857}.va-mini-btn{border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;border-radius:7px;padding:6px 8px;font-size:9px;font-weight:900;cursor:pointer;margin-right:4px}.va-mini-btn.danger{background:#fff1f2;color:#be123c;border-color:#fecdd3}.va-purchase-list{display:flex;flex-direction:column;gap:7px}.va-purchase-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border:1px solid #e2e8f0;border-radius:10px}.va-purchase-row strong{font-size:11px}.va-purchase-row small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-purchase-row small.due{color:#be123c;font-weight:900}.va-purchase-form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.va-purchase-form-grid label{font-size:11px;font-weight:900;color:#475569}.va-purchase-form-grid input,.va-purchase-form-grid select,.va-purchase-lines input,.va-purchase-lines select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.va-purchase-lines{margin-top:16px}.va-purchase-line{display:grid;grid-template-columns:2fr .8fr 1fr .6fr 1fr 36px;gap:8px;align-items:center;margin-bottom:8px}.va-purchase-line span{font-size:11px;color:#64748b}.va-purchase-line strong{text-align:right}.va-add-line{border:1px dashed #94a3b8;background:#f8fafc;border-radius:9px;padding:9px 12px;font-weight:900;color:#475569;cursor:pointer}.va-purchase-total{display:flex;justify-content:space-between;align-items:center;padding:15px;margin-top:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px}.va-purchase-total strong{font-size:22px;color:#047857}.va-inventory-card textarea{width:100%;box-sizing:border-box;margin-top:12px;min-height:70px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-save-purchase{width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;background:#059669;color:#fff;font-weight:900;cursor:pointer}.va-supplier-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.va-supplier-card{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;padding:12px;border:1px solid #e2e8f0;border-radius:11px}.va-supplier-avatar{width:36px;height:36px;border-radius:10px;background:#dcfce7;color:#166534;display:grid;place-items:center;font-weight:900;font-size:10px}.va-supplier-card strong{display:block;font-size:12px}.va-supplier-card small{display:block;color:#64748b;font-size:9px;margin-top:3px}.va-supplier-card b{font-size:11px;color:#059669}.va-supplier-card b.due{color:#be123c}.va-inventory-empty{padding:30px;text-align:center;color:#64748b}@media(max-width:1100px){.va-inventory-grid{grid-template-columns:1fr}.va-inventory-kpis{grid-template-columns:repeat(2,1fr)}.va-purchase-form-grid{grid-template-columns:1fr 1fr}}@media(max-width:700px){.va-inventory-hero{display:block}.va-inventory-hero-actions{margin-top:15px}.va-inventory-hero-actions button{flex:1}.va-inventory-tabs{overflow:auto}.va-inventory-card{padding:14px}.va-inventory-card-head{display:block}.va-inventory-card-head input{max-width:none;width:100%;margin-top:10px;box-sizing:border-box}.va-purchase-form-grid{grid-template-columns:1fr}.va-purchase-line{grid-template-columns:1fr 1fr}.va-purchase-line span,.va-purchase-line strong{display:none}.va-supplier-grid{grid-template-columns:1fr}}@media(max-width:450px){.va-inventory-kpis{grid-template-columns:1fr}.va-inventory-hero{padding:18px}}
 `;
+
+
+const reportsUiStyles = `
+.va-reports-page{max-width:1500px;margin:0 auto}.va-reports-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#1e3a5f 65%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-reports-hero h2{margin:6px 0;font-size:28px}.va-reports-hero p{margin:0;color:#cbd5e1;font-size:13px;max-width:800px}.va-reports-actions{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.va-reports-actions label{font-size:10px;font-weight:900;color:#cbd5e1}.va-reports-actions input,.va-reports-actions select{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-reports-btn{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#10b981;color:#fff}.va-reports-btn.secondary{background:#fff;color:#1e3a5f}.va-report-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}.va-report-tab{border:1px solid #e2e8f0;background:#fff;border-radius:11px;padding:11px;text-align:left;cursor:pointer}.va-report-tab strong{display:block;color:#0f172a;font-size:11px}.va-report-tab small{display:block;color:#64748b;font-size:9px;margin-top:3px}.va-report-tab.active{background:#eff6ff;border-color:#93c5fd;box-shadow:0 6px 16px rgba(37,99,235,.08)}.va-report-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-report-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-report-kpis>div:nth-child(2){border-top-color:#10b981}.va-report-kpis>div:nth-child(3){border-top-color:#f59e0b}.va-report-kpis>div:nth-child(4){border-top-color:#8b5cf6}.va-report-kpis span{display:block;color:#64748b;font-size:10px;font-weight:800}.va-report-kpis strong{display:block;margin-top:6px;font-size:21px;color:#0f172a}.va-report-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-report-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-report-head h3{margin:3px 0;font-size:19px}.va-report-head p{margin:0;color:#64748b;font-size:12px}.va-report-head>span{background:#f1f5f9;padding:7px 10px;border-radius:999px;color:#475569;font-size:10px;font-weight:900}.va-report-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-report-table{width:100%;border-collapse:collapse;min-width:900px}.va-report-table th,.va-report-table td{padding:11px;border-bottom:1px solid #eef2f7;font-size:11px;text-align:right;white-space:nowrap}.va-report-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase;letter-spacing:.04em}.va-report-table th:first-child,.va-report-table td:first-child{text-align:left}.va-report-table tbody tr:hover{background:#f8fafc}.va-report-note{padding:13px 15px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:11px;line-height:1.5}.va-report-empty{padding:38px;text-align:center;color:#94a3b8;background:#f8fafc;border-radius:11px}.va-report-footer{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.va-report-footer small{color:#64748b}@media(max-width:1050px){.va-report-tabs{grid-template-columns:repeat(2,1fr)}.va-report-kpis{grid-template-columns:repeat(2,1fr)}.va-reports-hero{display:block}.va-reports-actions{margin-top:15px}.va-reports-actions>*{flex:1}}@media(max-width:650px){.va-report-tabs{grid-template-columns:1fr}.va-report-kpis{grid-template-columns:1fr 1fr}.va-reports-hero,.va-report-card{padding:15px}.va-reports-actions{display:grid;grid-template-columns:1fr 1fr}.va-reports-actions label{grid-column:span 1}.va-reports-actions button{width:100%}}@media(max-width:430px){.va-report-kpis{grid-template-columns:1fr}.va-reports-actions{grid-template-columns:1fr}}`;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
