@@ -2218,8 +2218,8 @@ export default function App() {
           <div className="va-financial-grid va-financial-top-grid">
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.profitBridge?'collapsed':''}`}>
               <div className="va-dashboard-card-head va-collapsible-head">
-                <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3><button className="va-collapse-btn" onClick={()=>toggleSection('profitBridge')} aria-label={collapsedSections.profitBridge?'Expand section':'Collapse section'}>{collapsedSections.profitBridge?'⌄':'⌃'}</button></div>
-                <span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span>
+                <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3></div>
+                <div className="va-section-head-actions"><span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span>
               </div>
               {!collapsedSections.profitBridge && <div className="va-collapsible-body"><div className="va-profit-bridge">
                 <div><span>Sales</span><strong>{formatINR(financialDashboardData.sales)}</strong></div>
@@ -2239,7 +2239,7 @@ export default function App() {
             </section>
 
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.liquidity?'collapsed':''}`}>
-              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">LIQUIDITY</span><h3>🏦 Current Money Position</h3><button className="va-collapse-btn" onClick={()=>toggleSection('liquidity')} aria-label={collapsedSections.liquidity?'Expand section':'Collapse section'}>{collapsedSections.liquidity?'⌄':'⌃'}</button></div></div>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">LIQUIDITY</span><h3>🏦 Current Money Position</h3></div><button className="va-collapse-btn" onClick={()=>toggleSection('liquidity')} aria-label={collapsedSections.liquidity?'Expand section':'Collapse section'}>{collapsedSections.liquidity?'+':'−'}</button></div>
               {!collapsedSections.liquidity && <div className="va-collapsible-body"><div className="va-liquidity-main"><span>Today's available balances</span><strong>{formatINR(financialDashboardData.todayLiquidFunds)}</strong></div>
               <div className="va-liquidity-row"><span>💵 Cash in hand</span><strong>{formatINR(dashboardData.todayCash)}</strong></div>
               <div className="va-liquidity-row"><span>💳 Online balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong></div>
@@ -2251,8 +2251,7 @@ export default function App() {
 
                     <div className={`va-smart-insights va-collapsible-section ${collapsedSections.smartInsights?'collapsed':''}`}>
             <div className="va-smart-insights-head">
-              <div><span className="va-eyebrow">SMART BUSINESS INTELLIGENCE</span><h3>What needs your attention?</h3><p>Automatic recommendations based on the selected financial period.</p></div><button className="va-collapse-btn" onClick={()=>toggleSection('smartInsights')} aria-label={collapsedSections.smartInsights?'Expand Smart Business Intelligence':'Collapse Smart Business Intelligence'}>{collapsedSections.smartInsights?'⌄':'⌃'}</button>
-              <span className="va-smart-insights-badge">LIVE</span>
+              <div><span className="va-eyebrow">SMART BUSINESS INTELLIGENCE</span><h3>What needs your attention?</h3><p>Automatic recommendations based on the selected financial period.</p></div><div className="va-section-head-actions"><span className="va-smart-insights-badge">LIVE</span><button className="va-collapse-btn" onClick={()=>toggleSection('smartInsights')} aria-label={collapsedSections.smartInsights?'Expand Smart Business Intelligence':'Collapse Smart Business Intelligence'}>{collapsedSections.smartInsights?'+':'−'}</button></div>
             </div>
             {!collapsedSections.smartInsights && <>{smartInsights.length === 0 ? <div className="va-smart-empty">No immediate issues detected. Your current indicators are within the dashboard thresholds.</div> : (
               <div className="va-smart-grid">
@@ -2268,7 +2267,7 @@ export default function App() {
 
 <div className="va-financial-grid">
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.cashflow?'collapsed':''}`}>
-              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3><button className="va-collapse-btn" onClick={()=>toggleSection('cashflow')} aria-label={collapsedSections.cashflow?'Expand section':'Collapse section'}>{collapsedSections.cashflow?'⌄':'⌃'}</button></div><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button></div>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">CASH FLOW</span><h3>💵 Actual Cash Movement</h3></div><div className="va-section-head-actions"><button className="va-link-btn" onClick={()=>setActiveTab('cashflow')}>Open Cash Flow →</button><button className="va-collapse-btn" onClick={()=>toggleSection('cashflow')} aria-label={collapsedSections.cashflow?'Expand section':'Collapse section'}>{collapsedSections.cashflow?'+':'−'}</button></div></div>
               {!collapsedSections.cashflow && <div className="va-collapsible-body"><div className="va-cashflow-summary">
                 <div className="in"><span>Total inflow</span><strong>{formatINR(cashFlowData.inflow)}</strong></div>
                 <div className="out"><span>Total outflow</span><strong>{formatINR(cashFlowData.outflow)}</strong></div>
@@ -2283,7 +2282,7 @@ export default function App() {
             </section>
 
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.workingCapital?'collapsed':''}`}>
-              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">WORKING CAPITAL</span><h3>📊 Receivables vs Payables</h3><button className="va-collapse-btn" onClick={()=>toggleSection('workingCapital')} aria-label={collapsedSections.workingCapital?'Expand section':'Collapse section'}>{collapsedSections.workingCapital?'⌄':'⌃'}</button></div></div>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">WORKING CAPITAL</span><h3>📊 Receivables vs Payables</h3></div><button className="va-collapse-btn" onClick={()=>toggleSection('workingCapital')} aria-label={collapsedSections.workingCapital?'Expand section':'Collapse section'}>{collapsedSections.workingCapital?'+':'−'}</button></div>
               {!collapsedSections.workingCapital && <div className="va-collapsible-body"><div className="va-balance-compare">
                 <div><span>Customer money to collect</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong><small>{financialDashboardData.customersDue} customers with outstanding credit</small></div>
                 <div><span>Supplier money to pay</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong><small>{financialDashboardData.suppliersDue} suppliers with outstanding balances</small></div>
@@ -2295,7 +2294,7 @@ export default function App() {
 
           <div className="va-financial-grid">
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.periodTrend?'collapsed':''}`}>
-              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">PERIOD TREND</span><h3>📈 Sales vs Total Costs</h3><button className="va-collapse-btn" onClick={()=>toggleSection('periodTrend')} aria-label={collapsedSections.periodTrend?'Expand section':'Collapse section'}>{collapsedSections.periodTrend?'⌄':'⌃'}</button></div><span className="va-dashboard-badge">{financialDashboardData.daysWithSales} selling days</span></div>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">PERIOD TREND</span><h3>📈 Sales vs Total Costs</h3></div><div className="va-section-head-actions"><span className="va-dashboard-badge">{financialDashboardData.daysWithSales} selling days</span><button className="va-collapse-btn" onClick={()=>toggleSection('periodTrend')} aria-label={collapsedSections.periodTrend?'Expand section':'Collapse section'}>{collapsedSections.periodTrend?'+':'−'}</button></div></div>
               {!collapsedSections.periodTrend && <div className="va-collapsible-body"><div className="va-financial-trend">
                 {financialDashboardData.trend.length===0 ? <div className="va-empty-state">No saved daily accounts in this period yet.</div> : financialDashboardData.trend.map(row => {
                   const max=Math.max(...financialDashboardData.trend.map(x=>Math.max(x.sales,x.totalCosts)),1);
@@ -2309,20 +2308,22 @@ export default function App() {
               <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>}
             </section>
 
-            <section className="va-dashboard-card va-financial-card">
-              <div className="va-dashboard-card-head"><div><span className="va-eyebrow">PEOPLE & INVENTORY</span><h3>👥 Cost Control</h3></div></div>
+            <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.peopleInventory?'collapsed':''}`}>
+              <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">PEOPLE & INVENTORY</span><h3>👥 Cost Control</h3></div><button className="va-collapse-btn" onClick={()=>toggleSection('peopleInventory')} aria-label={collapsedSections.peopleInventory?'Expand section':'Collapse section'}>{collapsedSections.peopleInventory?'+':'−'}</button></div>
+              {!collapsedSections.peopleInventory && <div className="va-collapsible-body">
               <div className="va-control-row"><span>Staff cost</span><strong>{formatINR(financialDashboardData.staffCost)}</strong></div>
               <div className="va-control-row"><span>Purchase costs</span><strong>{formatINR(financialDashboardData.purchaseCosts)}</strong></div>
               <div className="va-control-row"><span>Operating expenses</span><strong>{formatINR(financialDashboardData.operatingExpenses)}</strong></div>
               <div className="va-control-row"><span>Total tracked costs</span><strong>{formatINR(financialDashboardData.totalCosts)}</strong></div>
               <div className="va-control-note">{financialDashboardData.sales ? (financialDashboardData.profitAfterPurchases>=0 ? '✅ Costs are currently below sales for the selected period.' : '⚠️ Total tracked costs are above sales. Review expenses and purchasing.') : '📝 Save daily accounts to activate cost analysis.'}</div>
               <div className="va-financial-actions"><button onClick={()=>setActiveTab('payroll')}>💰 Review Payroll</button><button onClick={()=>setActiveTab('inventory')}>📦 Review Purchases</button></div>
+              </div>}
             </section>
           </div>
 
-          <div className="va-dashboard-card va-financial-card va-financial-alert-card">
-            <div className="va-dashboard-card-head"><div><span className="va-eyebrow">ACTION QUEUE</span><h3>🔔 What Needs Attention</h3></div><span className="va-dashboard-badge">{businessAlerts.length} active</span></div>
-            <div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div>
+          <div className={`va-dashboard-card va-financial-card va-financial-alert-card va-collapsible-section ${collapsedSections.actionQueue?'collapsed':''}`}>
+            <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">ACTION QUEUE</span><h3>🔔 What Needs Attention</h3></div><div className="va-section-head-actions"><span className="va-dashboard-badge">{businessAlerts.length} active</span><button className="va-collapse-btn" onClick={()=>toggleSection('actionQueue')} aria-label={collapsedSections.actionQueue?'Expand section':'Collapse section'}>{collapsedSections.actionQueue?'+':'−'}</button></div></div>
+            {!collapsedSections.actionQueue && <div className="va-collapsible-body"><div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div></div>
           </div>
         </div>
       )}
