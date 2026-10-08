@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vintage Restaurant — POS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#111827;--blue:#2563eb;--green:#16a34a;--amber:#d97706;--red:#dc2626;--bg:#f5f7fb;--card:#fff;--muted:#64748b;--line:#e5e7eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#172033;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit}.pos{min-height:100vh;display:flex;flex-direction:column}
+.top{height:70px;background:var(--navy);color:#fff;display:flex;align-items:center;gap:18px;padding:0 22px;box-shadow:0 3px 14px #0002}
+.brand{font-weight:900;font-size:20px;white-space:nowrap}.brand small{display:block;font-size:10px;color:#94a3b8;letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:8px}.top button{border:1px solid #334155;background:#1f2937;color:#fff;border-radius:9px;padding:9px 13px;cursor:pointer}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:14px;padding:14px;flex:1;min-height:0}
+.left,.right{min-width:0}.toolbar,.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 14px #0f172a0a}
+.toolbar{padding:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.toolbar input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:10px 12px}.pill{border:0;border-radius:9px;padding:9px 12px;background:#eef2ff;color:#3730a3;cursor:pointer;font-weight:700}.pill.active{background:var(--blue);color:#fff}
+.section{margin-top:14px}.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}.section-head h2{font-size:16px;margin:0}.muted{color:var(--muted);font-size:12px}
+.tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}.table{background:#fff;border:2px solid #cbd5e1;border-radius:13px;padding:12px;cursor:pointer;min-height:94px;text-align:left}.table:hover{border-color:var(--blue);transform:translateY(-1px)}.table.selected{border-color:var(--blue);box-shadow:0 0 0 3px #2563eb18}.table.occupied{border-color:#f59e0b}.table.reserved{border-color:#a855f7}.table strong{font-size:18px}.table span{display:block;margin-top:6px;font-size:12px;color:var(--muted)}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--green)}.occupied .dot{background:var(--amber)}.reserved .dot{background:#a855f7}
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}.item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px;cursor:pointer}.item:hover{border-color:#93c5fd;box-shadow:0 6px 18px #0f172a0b}.item strong{display:block}.item small{display:block;color:var(--muted);margin:4px 0 10px}.price{font-weight:900;color:#0f766e}
+.right{position:sticky;top:14px;height:calc(100vh - 98px);display:flex;flex-direction:column}.panel{padding:14px}.order-head{display:flex;justify-content:space-between;align-items:center}.order-head h2{margin:0;font-size:18px}.badge{font-size:11px;padding:5px 8px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:800}
+.order-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.order-meta select,.order-meta input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px}.cart{margin-top:12px;flex:1;overflow:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0}.cart-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px 0;border-bottom:1px solid #f1f5f9}.cart-name{font-weight:700}.cart-price{font-size:12px;color:var(--muted)}.qty{display:flex;align-items:center;gap:5px}.qty button{width:27px;height:27px;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer}.summary{padding-top:10px}.sum{display:flex;justify-content:space-between;margin:6px 0;color:#475569}.sum.total{font-size:18px;font-weight:900;color:#0f172a;border-top:1px dashed var(--line);padding-top:10px}.pay{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.pay button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px;cursor:pointer;font-size:12px}.pay button.active{background:#ecfdf5;border-color:#22c55e;color:#166534;font-weight:800}.primary{width:100%;border:0;background:var(--blue);color:#fff;border-radius:10px;padding:12px;margin-top:10px;font-weight:900;cursor:pointer}.secondary{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;margin-top:7px;cursor:pointer}
+.empty{text-align:center;color:var(--muted);padding:30px 10px}.toast{position:fixed;right:20px;bottom:20px;background:#111827;color:#fff;padding:12px 15px;border-radius:10px;display:none;box-shadow:0 10px 30px #0003}
+@media(max-width:950px){.main{grid-template-columns:1fr}.right{position:relative;top:auto;height:auto;min-height:520px}.cart{max-height:320px}}
+@media(max-width:600px){.main{padding:8px}.top{padding:0 12px}.brand{font-size:16px}.tables{grid-template-columns:repeat(3,1fr)}.menu{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="pos">
+<header class="top"><div class="brand">Vintage Restaurant<small>Restaurant POS & Order Management</small></div><div class="top-actions"><button onclick="location.href='/'">← Dashboard</button><button onclick="location.reload()">↻ Refresh</button></div></header>
+<main class="main">
+<section class="left">
+<div class="toolbar"><input id="search" placeholder="Search menu items..." oninput="renderMenu()"><div id="cats"></div></div>
+<div class="section panel"><div class="section-head"><h2>Floor & Tables</h2><span class="muted" id="tableSummary"></span></div><div id="tables" class="tables"></div></div>
+<div class="section panel"><div class="section-head"><h2>Menu</h2><span class="muted">Click an item to add</span></div><div id="menu" class="menu"></div></div>
+</section>
+<aside class="right panel">
+<div class="order-head"><h2>Current Order</h2><span class="badge" id="orderBadge">NEW</span></div>
+<div class="order-meta">
+<select id="orderType" onchange="syncType()"><option>Dine In</option><option>Takeaway</option><option>Delivery</option></select>
+<select id="payment" onchange="paymentMethod=this.value"><option>Cash</option><option>UPI</option><option>Card</option><option>Credit</option></select>
+<input id="customer" placeholder="Customer name">
+<input id="phone" placeholder="Phone (optional)">
+</div>
+<div class="muted" style="margin-top:8px">Selected table: <strong id="selectedTable">None</strong></div>
+<div id="cart" class="cart"></div>
+<div class="summary"><div class="sum"><span>Subtotal</span><strong id="subtotal">₹0</strong></div><div class="sum"><span>Tax (5%)</span><strong id="tax">₹0</strong></div><div class="sum total"><span>Total</span><strong id="total">₹0</strong></div>
+<div class="pay"><button class="active" onclick="setPayment('Cash')">Cash</button><button onclick="setPayment('UPI')">UPI</button><button onclick="setPayment('Card')">Card</button><button onclick="setPayment('Credit')">Credit</button></div>
+<button class="primary" onclick="sendKOT()">🔥 Send to Kitchen / KOT</button><button class="secondary" onclick="clearOrder()">Clear Order</button></div>
+</aside>
+</main></div><div id="toast" class="toast"></div>
+<script>
+const SUPABASE_URL='https://gsscocpxmsmtevjadxjd.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc29jcHhtc210ZXZqYWR4amQiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3ODUwMzEwMywiZXhwIjoyMDk0MDc5MTAzLCJzdWIiOiJndHNzb2NweG1zbXRldmphZHhqZCIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJhcHAiOiJwcm9qZWN0In0.fake';
+const db=supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let menu=[], tables=[], cart=[], selectedTable=null, category='All', paymentMethod='Cash', session=null;
+const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+function toast(s){const x=document.getElementById('toast');x.textContent=s;x.style.display='block';setTimeout(()=>x.style.display='none',2400)}
+async function init(){
+  const s=await db.auth.getSession(); session=s.data.session;
+  if(!session){toast('Please log in from the dashboard first.');setTimeout(()=>location.href='/',800);return}
+  const [m,t]=await Promise.all([db.from('pos_menu_items').select('*').eq('active',true).order('category').order('name'),db.from('pos_tables').select('*').eq('active',true).order('floor_name').order('table_no')]);
+  if(m.error||t.error){toast((m.error||t.error).message);return}
+  menu=m.data||[];tables=t.data||[];renderAll();
+}
+function renderAll(){renderCategories();renderTables();renderMenu();renderCart()}
+function renderCategories(){const cats=['All',...new Set(menu.map(x=>x.category))];document.getElementById('cats').innerHTML=cats.map(c=>'<button class="pill '+(category===c?'active':'')+'" onclick="category=\''+c.replaceAll("'","\\'")+'\';renderAll()">'+c+'</button>').join(' ')}
+function renderTables(){
+ const groups=[...new Set(tables.map(t=>t.floor_name))];let out='';
+ for(const g of groups){out+='<div style="grid-column:1/-1;font-size:12px;font-weight:900;color:#64748b;margin-top:5px">'+g+'</div>';out+=tables.filter(t=>t.floor_name===g).map(t=>'<button class="table '+t.status+' '+(selectedTable?.id===t.id?'selected':'')+'" onclick="selectTable('+t.id+')"><strong>'+t.table_no+'</strong><span><i class="dot"></i>'+t.status+' • '+t.seats+' seats</span></button>').join('')}
+ document.getElementById('tables').innerHTML=out;document.getElementById('tableSummary').textContent=tables.length+' tables';
+}
+function renderMenu(){const q=document.getElementById('search').value.toLowerCase();const rows=menu.filter(x=>(category==='All'||x.category===category)&&x.name.toLowerCase().includes(q));document.getElementById('menu').innerHTML=rows.map(x=>'<button class="item" onclick="addItem('+x.id+')"><strong>'+x.name+'</strong><small>'+x.category+'</small><span class="price">'+money(x.price)+'</span></button>').join('')||'<div class="empty">No menu items found.</div>'}
+function selectTable(id){selectedTable=tables.find(t=>t.id===id)||null;document.getElementById('selectedTable').textContent=selectedTable?.table_no||'None';renderTables()}
+function addItem(id){const m=menu.find(x=>x.id===id);if(!m)return;const row=cart.find(x=>x.id===id);if(row)row.quantity++;else cart.push({id:m.id,name:m.name,price:Number(m.price),quantity:1});renderCart()}
+function changeQty(id,d){const r=cart.find(x=>x.id===id);if(!r)return;r.quantity+=d;if(r.quantity<=0)cart=cart.filter(x=>x.id!==id);renderCart()}
+function renderCart(){const el=document.getElementById('cart');if(!cart.length){el.innerHTML='<div class="empty">No items yet.<br>Add menu items to start the order.</div>'}else{el.innerHTML=cart.map(r=>'<div class="cart-row"><div><div class="cart-name">'+r.name+'</div><div class="cart-price">'+money(r.price)+' × '+r.quantity+' = '+money(r.price*r.quantity)+'</div></div><div class="qty"><button onclick="changeQty('+r.id+',-1)">−</button><strong>'+r.quantity+'</strong><button onclick="changeQty('+r.id+',1)">+</button></div></div>').join('')}const sub=cart.reduce((s,r)=>s+r.price*r.quantity,0),tax=sub*.05,total=sub+tax;document.getElementById('subtotal').textContent=money(sub);document.getElementById('tax').textContent=money(tax);document.getElementById('total').textContent=money(total)}
+function setPayment(v){paymentMethod=v;document.querySelectorAll('.pay button').forEach(b=>b.classList.toggle('active',b.textContent===v))}
+function syncType(){if(document.getElementById('orderType').value!=='Dine In'){selectedTable=null;document.getElementById('selectedTable').textContent='None';renderTables()}}
+function clearOrder(){cart=[];selectedTable=null;document.getElementById('customer').value='';document.getElementById('phone').value='';document.getElementById('selectedTable').textContent='None';document.getElementById('orderBadge').textContent='NEW';renderTables();renderCart()}
+async function sendKOT(){
+ if(!cart.length)return toast('Add at least one item.');
+ const type=document.getElementById('orderType').value;
+ if(type==='Dine In'&&!selectedTable)return toast('Select a table first.');
+ const sub=cart.reduce((s,r)=>s+r.price*r.quantity,0),tax=sub*.05,total=sub+tax, no='POS-'+Date.now().toString().slice(-8);
+ const order={order_no:no,order_type:type,table_id:selectedTable?.id||null,table_no:selectedTable?.table_no||null,customer_name:document.getElementById('customer').value.trim()||null,customer_phone:document.getElementById('phone').value.trim()||null,status:'KOT Sent',payment_method:paymentMethod,payment_status:paymentMethod==='Credit'?'Unpaid':'Paid',subtotal:sub,tax,discount:0,total,created_by:session.user.id};
+ const ins=await db.from('pos_orders').insert(order).select().single();if(ins.error)return toast(ins.error.message);
+ const items=cart.map(r=>({order_id:ins.data.id,menu_item_id:r.id,item_name:r.name,quantity:r.quantity,unit_price:r.price,line_total:r.price*r.quantity}));
+ const ii=await db.from('pos_order_items').insert(items);if(ii.error){toast(ii.error.message);return}
+ if(selectedTable){await db.from('pos_tables').update({status:'occupied',updated_at:new Date().toISOString()}).eq('id',selectedTable.id);selectedTable.status='occupied'}
+ document.getElementById('orderBadge').textContent=no;toast('KOT sent successfully — '+no);cart=[];renderAll()
+}
+init();
+</script></body></html>
