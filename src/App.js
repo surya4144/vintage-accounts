@@ -1805,6 +1805,154 @@ export default function App() {
     setClosingSaving(false);
   };
 
+  const printDailyClosingReceipt = () => {
+    if (!closingExisting || closingExisting.status !== 'Closed') {
+      return alert('Close the day first before printing the daily receipt.');
+    }
+
+    const row = historyLogs.find(x => x.date === closingDate);
+    if (!row) return alert('No saved Daily Accounting record exists for this date.');
+
+    const sales = row.expense_details?.sales || {};
+    const onlineExpensesList = row.expense_details?.online || [];
+    const cashExpensesList = row.expense_details?.cash || [];
+    const staffList = row.expense_details?.staff || [];
+    const creditSalesList = row.expense_details?.credit_sales || [];
+    const creditReceivedList = row.expense_details?.credit_received || [];
+
+    const n = value => Number(value || 0);
+    const money = value => '₹' + n(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    const line = (label, value) => `<div class="line"><span>${label}</span><strong>${money(value)}</strong></div>`;
+    const listTotal = items => (items || []).reduce((sum, item) => sum + n(item.amount), 0);
+
+    const cashSales = n(sales.cash);
+    const onlineSales = n(sales.online);
+    const parcelCash = n(sales.parcel_counter_cash);
+    const parcelOnline = n(sales.parcel_counter_online);
+    const creditSales = listTotal(creditSalesList);
+    const creditReceived = listTotal(creditReceivedList);
+    const grossSales = cashSales + onlineSales + parcelCash + parcelOnline + creditSales;
+    const cashExpenses = listTotal(cashExpensesList);
+    const onlineExpenses = listTotal(onlineExpensesList);
+    const staffExpenses = listTotal(staffList);
+    const totalExpenses = cashExpenses + onlineExpenses + staffExpenses;
+    const actualCash = n(closingExisting.actual_cash);
+    const actualOnline = n(closingExisting.actual_online);
+
+    const expenseRows = [
+      ...cashExpensesList.map(x => ({ label: `${x.category || 'Cash Expense'}${x.description ? ' • ' + x.description : ''}`, amount: n(x.amount) })),
+      ...onlineExpensesList.map(x => ({ label: `${x.category || 'Online Expense'}${x.description ? ' • ' + x.description : ''}`, amount: n(x.amount) })),
+      ...staffList.map(x => ({ label: `Staff: ${x.employee || x.name || 'Staff'}${x.note ? ' • ' + x.note : ''}`, amount: n(x.amount) }))
+    ];
+
+    const expenseDetailHtml = expenseRows.length
+      ? expenseRows.map(x => line(x.label, x.amount)).join('')
+      : '<div class="muted">No expenses recorded</div>';
+
+    const popup = window.open('', '_blank', 'width=420,height=760');
+    if (!popup) return alert('Please allow pop-ups for this site to print the thermal receipt.');
+
+    popup.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Daily Closing Receipt - ${closingDate}</title>
+<style>
+  @page { size: 80mm auto; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body {
+    width: 80mm;
+    padding: 4mm 4mm 6mm;
+    font-family: "Arial Narrow", Arial, sans-serif;
+    color: #000;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  .center { text-align: center; }
+  .brand { font-size: 17px; font-weight: 900; margin-bottom: 2px; }
+  .title { font-size: 12px; font-weight: 900; letter-spacing: .08em; margin-top: 5px; }
+  .date { font-size: 11px; margin-top: 3px; }
+  .rule { border-top: 1px dashed #000; margin: 8px 0; }
+  .section { font-size: 10px; font-weight: 900; text-transform: uppercase; margin: 6px 0 3px; }
+  .line { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0; }
+  .line span { flex: 1; overflow-wrap: anywhere; }
+  .line strong { white-space: nowrap; font-weight: 800; }
+  .total { font-size: 12px; font-weight: 900; margin-top: 5px; }
+  .muted { font-size: 10px; text-align: center; margin: 5px 0; }
+  .closing {
+    border: 1.5px solid #000;
+    padding: 7px 6px;
+    margin-top: 7px;
+  }
+  .closing .label { font-size: 10px; font-weight: 900; text-transform: uppercase; }
+  .closing .amount { font-size: 16px; font-weight: 900; margin-top: 2px; }
+  .closing-row { display: flex; justify-content: space-between; gap: 8px; margin: 5px 0; }
+  .closing-row strong { font-size: 13px; }
+  .footer { text-align: center; font-size: 9px; margin-top: 9px; }
+  @media print {
+    body { width: 80mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="center">
+    <div class="brand">${String(restaurantName || 'Vintage Restaurant').replace(/[<>&"]/g, '')}</div>
+    <div class="title">DAILY CLOSING RECEIPT</div>
+    <div class="date">${closingDate}</div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="section">Today's Sales</div>
+  ${line('Cash Sales', cashSales)}
+  ${line('Online Sales', onlineSales)}
+  ${line('Parcel Counter - Cash', parcelCash)}
+  ${line('Parcel Counter - Online', parcelOnline)}
+  ${line('Credit Sales', creditSales)}
+  ${line('Credit Received', creditReceived)}
+  <div class="line total"><span>Total Sales</span><strong>${money(grossSales)}</strong></div>
+
+  <div class="rule"></div>
+
+  <div class="section">Expenses</div>
+  ${line('Cash Expenses', cashExpenses)}
+  ${line('Online Expenses', onlineExpenses)}
+  ${line('Staff Wages / Advances', staffExpenses)}
+  <div class="line total"><span>Total Expenses</span><strong>${money(totalExpenses)}</strong></div>
+
+  <div class="rule"></div>
+
+  <div class="section">Expense Details</div>
+  ${expenseDetailHtml}
+
+  <div class="rule"></div>
+
+  <div class="closing">
+    <div class="label">Final Balance After Day Closing</div>
+    <div class="closing-row"><span>Cash In Hand</span><strong>${money(actualCash)}</strong></div>
+    <div class="closing-row"><span>Online Balance</span><strong>${money(actualOnline)}</strong></div>
+    <div class="closing-row"><span>Total Available</span><strong>${money(actualCash + actualOnline)}</strong></div>
+  </div>
+
+  <div class="footer">
+    Day Status: CLOSED<br>
+    Printed from Vintage Accounts
+  </div>
+<script>
+  window.onload = function() {
+    setTimeout(function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    }, 250);
+  };
+</script>
+</body>
+</html>`);
+    popup.document.close();
+    popup.focus();
+  };
+
   const reopenDailyClosing = async () => {
     if (!closingExisting || !['admin','manager'].includes(role)) return;
     if (!window.confirm('Reopen this day for correction? The reconciliation record will remain in history.')) return;
@@ -3364,6 +3512,7 @@ export default function App() {
               <label className="va-closing-notes">Manager notes<textarea value={closingNotes} onChange={e=>setClosingNotes(e.target.value)} placeholder="Explain shortages, overages, bank timing differences, corrections, etc." rows="4" /></label>
               <div className="va-closing-actions">
                 <button className="va-closing-btn primary" disabled={closingSaving || !closingExpected.hasData} onClick={saveDailyClosing}>{closingSaving?'Saving…':closingExisting?.status==='Closed'?'✓ Update Closing':'🔒 Close Day'}</button>
+                {closingExisting?.status==='Closed' && <button className="va-closing-btn secondary" onClick={printDailyClosingReceipt}>🧾 Print Thermal Receipt</button>}
                 {closingExisting?.status==='Closed' && <button className="va-closing-btn danger" onClick={reopenDailyClosing}>Reopen for Correction</button>}
               </div>
               <div className="va-closing-note">Control rule: the reconciliation does not alter sales, expenses, purchases, supplier payments, or balances. It records the manager's end-of-day verification separately.</div>
