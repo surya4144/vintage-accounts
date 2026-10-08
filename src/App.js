@@ -2727,7 +2727,6 @@ export default function App() {
               {historyLogs.every(log => !(log.expense_details?.account_transfers || []).length) && <div className="va-empty-state">No saved money transfers yet.</div>}
             </div>
           </section>
-          </section>
         </div>
       )}
 
