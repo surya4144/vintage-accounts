@@ -2307,6 +2307,69 @@ export default function App() {
           .va-status { display:none; }
           .va-main { padding:10px; }
         }
+        /* Global responsive theme + fluid interaction layer */
+        :root{
+          --va-bg:#f4f7fb;
+          --va-surface:#ffffff;
+          --va-border:#e2e8f0;
+          --va-text:#172033;
+          --va-muted:#64748b;
+          --va-primary:#2563eb;
+          --va-primary-dark:#1d4ed8;
+          --va-radius:14px;
+          --va-shadow:0 8px 26px rgba(15,23,42,.055);
+        }
+        html{scroll-behavior:smooth;background:var(--va-bg)}
+        body{background:var(--va-bg);overflow-x:hidden}
+        button,input,select,textarea{font-family:inherit;max-width:100%}
+        button{touch-action:manipulation}
+        button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(37,99,235,.18);outline-offset:1px}
+        .va-shell{min-width:0;overflow-x:hidden}
+        .va-main{min-width:0;overflow-x:hidden;overflow-y:visible}
+        .va-main>*{max-width:100%}
+        .va-main table{display:block;max-width:100%;overflow-x:auto}
+        .va-main .va-recent-table,.va-main .va-table-wrap,.va-main [class*="table-wrap"]{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+        .va-main .va-entry-card,.va-main .va-drawer-card,.va-main .va-final-card,.va-main .va-feature-card,.va-main .va-dashboard-card,.va-main .va-financial-card,.va-main .va-report-card,.va-main .va-inventory-card,.va-main .va-payables-card{border-color:var(--va-border);box-shadow:var(--va-shadow)}
+        .va-main button{transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease,border-color .16s ease,color .16s ease}
+        .va-main button:not(:disabled):active{transform:translateY(1px)}
+        .va-main input,.va-main select,.va-main textarea{min-height:42px}
+        .va-entry-collapsible{overflow:hidden;transition:box-shadow .2s ease}
+        .va-entry-collapsible.collapsed{min-height:0}
+        .va-entry-collapsible-head{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-right:0}
+        .va-entry-collapsible-head>div:first-child{min-width:0}
+        .va-entry-collapsible-head h3{margin:4px 0}
+        .va-entry-collapsible-head p{margin:0}
+        .va-entry-collapsible-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+        .va-entry-collapsible-actions .va-collapse-btn{position:static;transform:none}
+        .va-entry-collapsible.collapsed .va-entry-head{margin-bottom:0}
+        .va-entry-collapsible.collapsed .va-entry-collapsible-actions .va-entry-total{white-space:nowrap}
+        .va-drawer-card .va-entry-collapsible-head{margin-bottom:14px}
+        .sidebar-collapsed .va-sidebar-close{background:#2563eb;color:#fff;border-color:#2563eb;box-shadow:0 5px 14px rgba(37,99,235,.25)}
+        .sidebar-collapsed .va-sidebar-close:hover{background:#1d4ed8;color:#fff;transform:translateX(1px)}
+        .sidebar-open .va-sidebar-close{font-size:21px}
+        .va-menu-toggle{transition:transform .16s ease,box-shadow .16s ease}
+        .va-menu-toggle:hover{transform:translateY(-1px)}
+        @media(max-width:850px){
+          .va-main{overflow-x:hidden}
+          .va-main>*{min-width:0}
+          .va-entry-collapsible-head{align-items:flex-start}
+          .va-entry-collapsible-actions{margin-left:auto}
+        }
+        @media(max-width:650px){
+          .va-main{padding-left:12px!important;padding-right:12px!important}
+          .va-entry-collapsible-head{gap:10px}
+          .va-entry-collapsible-actions{gap:6px}
+          .va-entry-collapsible-actions .va-entry-total{font-size:13px}
+          .va-collapse-btn{width:34px;height:34px;min-width:34px}
+          .va-main button{min-height:42px}
+          .va-main .va-entry-head{flex-wrap:wrap}
+          .va-main .va-entry-head>div:first-child{flex:1 1 220px}
+        }
+        @media(max-width:520px){
+          .va-main{padding:10px!important}
+          .va-entry-collapsible-actions{width:auto}
+          .va-entry-collapsible-actions .va-drawer-total{display:none}
+        }
       `}</style>
       <div className={`va-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
         <button className="va-menu-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Open menu' : 'Open menu'} title="Open navigation">
@@ -2320,8 +2383,8 @@ export default function App() {
               <div className="va-brand-title">Vintage Accounts</div>
               <div className="va-brand-sub">Restaurant Finance</div>
             </div>
-            <button className="va-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Collapse navigation" title="Collapse navigation">
-              <span>‹</span>
+            <button className="va-sidebar-close" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'} title={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'}>
+              <span>{sidebarOpen ? '‹' : '›'}</span>
             </button>
           </div>
           <nav className="va-nav" aria-label="Main navigation">
@@ -2861,11 +2924,29 @@ export default function App() {
           </div>
 
           <div className="va-staff-card"><div className="va-entry-head"><div><span className="va-eyebrow">STEP 4 • STAFF</span><h3>👨‍🍳 Staff Wages & Advances</h3><p>Record wages, advances, salary month, and payment source.</p></div><span className="va-entry-total">{formatINR(totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil)}</span></div><div className="va-staff-help">💡 <strong>Cash</strong> payments reduce Cash In Hand. <strong>Cash From Till</strong> wages are already deducted from the daily cash you enter, so they count as expenses but are not deducted again.</div>{staffPayments.map(s => (<div key={s.id} className="va-staff-row"><select value={s.name || ''} onChange={e => updateArrItem(setStaffPayments,staffPayments,s.id,'name',e.target.value)} style={inputStyle}><option value="">Staff Name</option>{employeeNames.map(name=><option key={name} value={name}>{name}</option>)}</select><select value={s.type} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'type',e.target.value)} style={inputStyle}><option>Full Wage</option><option>Cash Advance</option></select><input type="month" value={s.dueFor || date?.slice(0,7) || new Date().toISOString().slice(0,7)} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'dueFor',e.target.value)} style={inputStyle}/><input type="number" min="0" step="0.01" value={s.amount ?? ''} placeholder="Amount ₹" onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'amount',e.target.value)} style={inputStyle}/><select value={s.method} onChange={e=>updateArrItem(setStaffPayments,staffPayments,s.id,'method',e.target.value)} style={inputStyle}><option value="Cash">💰 Cash — Cash In Hand</option><option value="Till">🧾 Cash From Till — Already Deducted</option><option value="Counter">Counter — Net Sale</option><option value="Credit">Credit — Owe Later</option><option value="Teja">Teja Paid</option><option value="Anil">Anil Paid</option><option value="Online">💳 Online</option></select><button onClick={()=>removeArrItem(setStaffPayments,staffPayments,s.id)} className="va-icon-delete">✕</button></div>))}<button onClick={addStaffPayment} style={{...btnStyle,backgroundColor:'#8b5cf6'}}>+ Log Staff Payment</button></div>
-          <div className="va-drawer-card"><div className="va-entry-head"><div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div><div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div></div><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div>
-          <div className="va-entry-card" style={{marginBottom:'18px',borderTop:'4px solid #059669'}}>
-            <div className="va-entry-head"><div><span className="va-eyebrow">STEP 5 • INVENTORY COST</span><h3>📦 Purchases Recorded for {date}</h3><p>Purchases are tracked separately from Daily Accounting expenses so the same cost is never counted twice.</p></div><span className="va-entry-total">{formatINR((purchaseSummary.byDate[date]||{}).total||0)}</span></div>
-            {(() => { const p = purchaseSummary.byDate[date] || {total:0,paid:0,due:0,cash:0,online:0}; return <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}><div style={{padding:'12px',background:'#f0fdf4',borderRadius:'10px'}}><small>Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.paid)}</strong></div><div style={{padding:'12px',background:'#eff6ff',borderRadius:'10px'}}><small>Cash Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.cash)}</strong></div><div style={{padding:'12px',background:'#eef2ff',borderRadius:'10px'}}><small>Online Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.online)}</strong></div><div style={{padding:'12px',background:'#fff7ed',borderRadius:'10px'}}><small>Supplier Due</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.due)}</strong></div></div>; })()}
-            <div className="va-helper" style={{marginTop:'10px'}}>💡 Cash/Online purchase payments are shown here as inventory outflows. Do not enter the same purchase again as a cash or online expense, or it will be double-counted.</div>
+          <div className={`va-drawer-card va-entry-collapsible ${collapsedSections.cashDrawer ? 'collapsed' : ''}`}>
+            <div className="va-entry-head va-entry-collapsible-head">
+              <div><span className="va-eyebrow">Physical verification</span><h3>🧮 Cash Drawer Count</h3><p>Count notes and coins without changing accounting balances.</p></div>
+              <div className="va-entry-collapsible-actions">
+                <div className="va-drawer-total"><span>Physical Cash</span><strong>{formatINR(actualDrawerTotal)}</strong></div>
+                <button type="button" className="va-collapse-btn" onClick={() => toggleSection('cashDrawer')} aria-label={collapsedSections.cashDrawer ? 'Expand Cash Drawer Count' : 'Collapse Cash Drawer Count'} title={collapsedSections.cashDrawer ? 'Expand' : 'Collapse'}>{collapsedSections.cashDrawer ? '›' : '⌃'}</button>
+              </div>
+            </div>
+            {!collapsedSections.cashDrawer && <div className="va-collapsible-body"><div className="va-drawer-grid">{[500,200,100,50,20,10].map(note=><label key={note} className="va-note-box"><span>₹{note}</span><input type="number" min="0" value={notes[note]} onChange={e=>setNotes({...notes,[note]:e.target.value})} placeholder="0"/><small>{formatINR(note*Number(notes[note]||0))}</small></label>)}<label className="va-note-box va-coin-box"><span>🪙 Coins</span><input type="number" min="0" value={notes.coins} onChange={e=>setNotes({...notes,coins:e.target.value})} placeholder="Total ₹"/><small>{formatINR(Number(notes.coins||0))}</small></label></div><div className="va-drawer-summary"><div><span>Expected Cash</span><strong>{formatINR(totalCashInHand)}</strong></div><div><span>Physical Count</span><strong>{formatINR(actualDrawerTotal)}</strong></div><div className={actualDrawerTotal-totalCashInHand>=0?'positive':'negative'}><span>Difference</span><strong>{formatINR(actualDrawerTotal-totalCashInHand)}</strong></div></div><div className="va-drawer-note">📌 Counting only — this does not automatically change accounting balances.</div></div></div>}
+          </div>
+          <div className="va-entry-card va-entry-collapsible" style={{marginBottom:'18px',borderTop:'4px solid #059669'}}>
+
+            <div className={`va-entry-head va-entry-collapsible-head`}>
+              <div><span className="va-eyebrow">STEP 5 • INVENTORY COST</span><h3>📦 Purchases Recorded for {date}</h3><p>Purchases are tracked separately from Daily Accounting expenses so the same cost is never counted twice.</p></div>
+              <div className="va-entry-collapsible-actions">
+                <span className="va-entry-total">{formatINR((purchaseSummary.byDate[date]||{}).total||0)}</span>
+                <button type="button" className="va-collapse-btn" onClick={() => toggleSection('inventoryCost')} aria-label={collapsedSections.inventoryCost ? 'Expand Inventory Cost' : 'Collapse Inventory Cost'} title={collapsedSections.inventoryCost ? 'Expand' : 'Collapse'}>{collapsedSections.inventoryCost ? '›' : '⌃'}</button>
+              </div>
+            </div>
+            {!collapsedSections.inventoryCost && <div className="va-collapsible-body">
+              {(() => { const p = purchaseSummary.byDate[date] || {total:0,paid:0,due:0,cash:0,online:0}; return <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}><div style={{padding:'12px',background:'#f0fdf4',borderRadius:'10px'}}><small>Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.paid)}</strong></div><div style={{padding:'12px',background:'#eff6ff',borderRadius:'10px'}}><small>Cash Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.cash)}</strong></div><div style={{padding:'12px',background:'#eef2ff',borderRadius:'10px'}}><small>Online Paid</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.online)}</strong></div><div style={{padding:'12px',background:'#fff7ed',borderRadius:'10px'}}><small>Supplier Due</small><strong style={{display:'block',marginTop:'4px'}}>{formatINR(p.due)}</strong></div></div>; })()}
+              <div className="va-helper" style={{marginTop:'10px'}}>💡 Cash/Online purchase payments are shown here as inventory outflows. Do not enter the same purchase again as a cash or online expense, or it will be double-counted.</div>
+            </div>}
           </div>
           <div className="va-final-card">
             <div className="va-final-head">
