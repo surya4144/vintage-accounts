@@ -2386,7 +2386,6 @@ export default function App() {
               <button onClick={() => setActiveTab('cashflow')}>💵 Cash Flow</button>
               <button onClick={() => setActiveTab('analytics')}>📈 Full Analytics</button>
             </div>
-          </div>
 
           <div className="va-dashboard-filter va-financial-filter">
             <div><strong>Management period</strong><span>All performance metrics below follow this date range. Outstanding balances are current balances.</span></div>
