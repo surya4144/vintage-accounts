@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     ].join('\n');
 
     const { text } = await generateText({
-      model: 'openai/gpt-5.5',
+      model: process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna',
       system: 'You are Vintage Accounts AI, a read-only business intelligence assistant for a restaurant. Be accurate, transparent, and management-focused.',
       prompt
     });
