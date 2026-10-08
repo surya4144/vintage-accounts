@@ -46,6 +46,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('daily');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedNavGroups, setExpandedNavGroups] = useState({ operations: true, insights: false, people: false, management: false });
+  const toggleNavGroup = (key) => setExpandedNavGroups(prev => ({ ...prev, [key]: !prev[key] }));
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem('vintage_collapsed_sections') || '{}'); } catch { return {}; }
   });
@@ -2329,7 +2330,7 @@ export default function App() {
             </button>
 
             <div className="va-nav-group">
-              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, operations: !v.operations }))} aria-expanded={expandedNavGroups.operations}>
+              <button className="va-nav-group-toggle" onClick={() => toggleNavGroup('operations')} aria-expanded={expandedNavGroups.operations}>
                 <span className="va-nav-icon">⚡</span><span className="va-nav-label">Operations</span><span className="va-nav-chevron">{expandedNavGroups.operations ? '⌄' : '›'}</span>
               </button>
               {expandedNavGroups.operations && <div className="va-subnav">
@@ -2347,7 +2348,7 @@ export default function App() {
             </div>
 
             <div className="va-nav-group">
-              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, insights: !v.insights }))} aria-expanded={expandedNavGroups.insights}>
+              <button className="va-nav-group-toggle" onClick={() => toggleNavGroup('insights')} aria-expanded={expandedNavGroups.insights}>
                 <span className="va-nav-icon">📊</span><span className="va-nav-label">Reports & Insights</span><span className="va-nav-chevron">{expandedNavGroups.insights ? '⌄' : '›'}</span>
               </button>
               {expandedNavGroups.insights && <div className="va-subnav">
@@ -2365,7 +2366,7 @@ export default function App() {
             </div>
 
             <div className="va-nav-group">
-              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, people: !v.people }))} aria-expanded={expandedNavGroups.people}>
+              <button className="va-nav-group-toggle" onClick={() => toggleNavGroup('people')} aria-expanded={expandedNavGroups.people}>
                 <span className="va-nav-icon">👥</span><span className="va-nav-label">People</span><span className="va-nav-chevron">{expandedNavGroups.people ? '⌄' : '›'}</span>
               </button>
               {expandedNavGroups.people && <div className="va-subnav">
@@ -2382,7 +2383,7 @@ export default function App() {
             </div>
 
             <div className="va-nav-group">
-              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, management: !v.management }))} aria-expanded={expandedNavGroups.management}>
+              <button className="va-nav-group-toggle" onClick={() => toggleNavGroup('management')} aria-expanded={expandedNavGroups.management}>
                 <span className="va-nav-icon">⚙️</span><span className="va-nav-label">Management</span><span className="va-nav-chevron">{expandedNavGroups.management ? '⌄' : '›'}</span>
               </button>
               {expandedNavGroups.management && <div className="va-subnav">
