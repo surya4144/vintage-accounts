@@ -2235,7 +2235,7 @@ export default function App() {
                 <div><span>Purchase ratio</span><strong>{financialDashboardData.purchaseRatio}%</strong></div>
                 <div><span>Staff share of costs</span><strong>{financialDashboardData.staffShare}%</strong></div>
                 <div><span>Cash conversion</span><strong>{financialDashboardData.cashConversion}%</strong></div>
-              </div>              </div>
+              </div>              </div>}
             </section>
 
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.liquidity?'collapsed':''}`}>
@@ -2245,7 +2245,7 @@ export default function App() {
               <div className="va-liquidity-row"><span>💳 Online balance</span><strong>{formatINR(dashboardData.todayOnline)}</strong></div>
               <div className="va-liquidity-row"><span>📒 Customer receivables</span><strong className="warning-text">{formatINR(financialDashboardData.receivables)}</strong></div>
               <div className="va-liquidity-row"><span>📦 Supplier payables</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong></div>
-              <div className="va-liquidity-note">Receivables are money expected from customers; payables are money still owed to suppliers. Neither is treated as today's cash.</div>              </div>
+              <div className="va-liquidity-note">Receivables are money expected from customers; payables are money still owed to suppliers. Neither is treated as today's cash.</div>              </div>}
             </section>
           </div>
 
@@ -2279,7 +2279,7 @@ export default function App() {
                 <div><span>Operating + staff</span><b>{formatINR(cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.operatingCash+cashFlowData.operatingOnline+cashFlowData.staffCash+cashFlowData.staffOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
                 <div><span>Purchase + supplier settlement</span><b>{formatINR(cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)}</b><i style={{width:Math.min(100,cashFlowData.inflow ? ((cashFlowData.purchaseCash+cashFlowData.purchaseOnline+cashFlowData.supplierCash+cashFlowData.supplierOnline)/cashFlowData.inflow)*100:0)+'%'}}></i></div>
               </div>
-              <div className="va-financial-footnote">Internal Cash ↔ Online transfers are excluded from net cash movement because they move money between your own accounts.</div>              </div>
+              <div className="va-financial-footnote">Internal Cash ↔ Online transfers are excluded from net cash movement because they move money between your own accounts.</div>              </div>}
             </section>
 
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.workingCapital?'collapsed':''}`}>
@@ -2289,7 +2289,7 @@ export default function App() {
                 <div><span>Supplier money to pay</span><strong className="danger-text">{formatINR(financialDashboardData.payables)}</strong><small>{financialDashboardData.suppliersDue} suppliers with outstanding balances</small></div>
               </div>
               <div className="va-working-capital-result"><span>Net working-capital exposure</span><strong className={financialDashboardData.workingCapitalExposure>=0?'success-text':'danger-text'}>{formatINR(financialDashboardData.workingCapitalExposure)}</strong></div>
-              <div className="va-financial-actions"><button onClick={()=>setActiveTab('ledger')}>📒 Collect Customer Dues</button><button onClick={()=>{setActiveTab('inventory');setInventoryView('suppliers')}}>📦 Settle Supplier Dues</button></div>              </div>
+              <div className="va-financial-actions"><button onClick={()=>setActiveTab('ledger')}>📒 Collect Customer Dues</button><button onClick={()=>{setActiveTab('inventory');setInventoryView('suppliers')}}>📦 Settle Supplier Dues</button></div>              </div>}
             </section>
           </div>
 
@@ -2306,7 +2306,7 @@ export default function App() {
                   </div>;
                 })}
               </div>
-              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>
+              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>}
             </section>
 
             <section className="va-dashboard-card va-financial-card">
