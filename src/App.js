@@ -105,6 +105,13 @@ export default function App() {
   const [reportType, setReportType] = useState('pnl');
   const [reportStart, setReportStart] = useState(() => { let d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; });
   const [reportEnd, setReportEnd] = useState(new Date().toISOString().split('T')[0]);
+  const [closingDate, setClosingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [closingActualCash, setClosingActualCash] = useState('');
+  const [closingActualOnline, setClosingActualOnline] = useState('');
+  const [closingNotes, setClosingNotes] = useState('');
+  const [closingRows, setClosingRows] = useState([]);
+  const [closingLoading, setClosingLoading] = useState(false);
+  const [closingSaving, setClosingSaving] = useState(false);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [attendanceLocationRequired, setAttendanceLocationRequired] = useState(false);
@@ -2146,6 +2153,87 @@ export default function App() {
     );
   }
 
+  const loadDailyClosings = async () => {
+    setClosingLoading(true);
+    const { data, error } = await supabase.from('daily_closings').select('*').order('close_date', { ascending:false }).limit(60);
+    if (error) console.error('Daily closings:', error);
+    setClosingRows(data || []);
+    setClosingLoading(false);
+  };
+
+  const closingExpected = useMemo(() => {
+    const target = closingDate;
+    const row = historyLogs.find(x => x.date === target);
+    if (!row) return { cash:0, online:0, total:0, hasData:false };
+    return {
+      cash:Number(row.total_cash_in_hand || 0),
+      online:Number(row.total_online_balance || 0),
+      total:Number(row.total_cash_in_hand || 0) + Number(row.total_online_balance || 0),
+      hasData:true
+    };
+  }, [closingDate, historyLogs]);
+
+  const closingExisting = closingRows.find(x => x.close_date === closingDate) || null;
+  const closingVariance = {
+    cash: Number(closingActualCash || 0) - closingExpected.cash,
+    online: Number(closingActualOnline || 0) - closingExpected.online,
+    total: Number(closingActualCash || 0) + Number(closingActualOnline || 0) - closingExpected.total
+  };
+
+  useEffect(() => {
+    if (session && activeTab === 'closing') loadDailyClosings();
+  }, [session, activeTab]);
+
+  useEffect(() => {
+    if (!closingExisting) {
+      setClosingActualCash('');
+      setClosingActualOnline('');
+      setClosingNotes('');
+      return;
+    }
+    setClosingActualCash(String(closingExisting.actual_cash ?? ''));
+    setClosingActualOnline(String(closingExisting.actual_online ?? ''));
+    setClosingNotes(closingExisting.notes || '');
+  }, [closingExisting?.id]);
+
+  const saveDailyClosing = async () => {
+    if (!session || !['admin','manager'].includes(role)) return alert('Only a manager or admin can close the day.');
+    if (!closingExpected.hasData) return alert('No saved Daily Accounting record exists for this date. Save Daily Accounting first.');
+    if (closingActualCash === '' || closingActualOnline === '') return alert('Enter both actual cash and actual online balance before closing.');
+    setClosingSaving(true);
+    const payload = {
+      close_date:closingDate,
+      expected_cash:closingExpected.cash,
+      actual_cash:Number(closingActualCash),
+      cash_variance:closingVariance.cash,
+      expected_online:closingExpected.online,
+      actual_online:Number(closingActualOnline),
+      online_variance:closingVariance.online,
+      total_expected:closingExpected.total,
+      total_actual:Number(closingActualCash)+Number(closingActualOnline),
+      status:'Closed',
+      notes:closingNotes.trim(),
+      approved_by:session.user.id,
+      approved_at:new Date().toISOString(),
+      created_by:closingExisting?.created_by || session.user.id,
+      updated_at:new Date().toISOString()
+    };
+    const { error } = await supabase.from('daily_closings').upsert(payload,{onConflict:'close_date'});
+    if (error) alert('Unable to save closing: ' + error.message);
+    else { alert('✅ Day closed and reconciliation saved.'); await loadDailyClosings(); }
+    setClosingSaving(false);
+  };
+
+  const reopenDailyClosing = async () => {
+    if (!closingExisting || !['admin','manager'].includes(role)) return;
+    if (!window.confirm('Reopen this day for correction? The reconciliation record will remain in history.')) return;
+    const { error } = await supabase.from('daily_closings').update({
+      status:'Reopened', approved_by:session.user.id, approved_at:new Date().toISOString(), updated_at:new Date().toISOString()
+    }).eq('id',closingExisting.id);
+    if (error) alert('Unable to reopen closing: ' + error.message);
+    else await loadDailyClosings();
+  };
+
   // --- MAIN APP UI ---
   return (
     <>
@@ -2162,6 +2250,7 @@ export default function App() {
       <style>{payablesUiStyles}</style><style>{cashflowUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
         <style>{reportsUiStyles}</style>
+        <style>{closingUiStyles}</style>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; }
@@ -2245,6 +2334,7 @@ export default function App() {
               ['analytics','📈','Analytics'],
               ['cashflow','💵','Cash Flow'],
               ['reports','📑','Advanced Reports'],
+              ['closing','🔒','Daily Closing'],
               ['ai','✨','AI Assistant'],
               ['attendance','👥','Attendance'],
               ['payroll','💰','Employee Payroll'],
@@ -2272,6 +2362,7 @@ export default function App() {
                  activeTab === 'analytics' ? 'Business Analytics' :
                  activeTab === 'cashflow' ? 'Cash Flow Management' :
                  activeTab === 'reports' ? 'Advanced Reports & Exports' :
+                 activeTab === 'closing' ? 'Daily Closing & Reconciliation' :
                  activeTab === 'ai' ? 'AI Business Assistant' :
                  activeTab === 'attendance' ? 'Employee Attendance' :
                  activeTab === 'payroll' ? 'Employee Payroll' : 'Reminders'}
@@ -3018,6 +3109,65 @@ export default function App() {
       )}
 
 
+
+      {activeTab === 'closing' && (
+        <div className="va-closing-page">
+          <div className="va-closing-hero">
+            <div><span className="va-eyebrow">END-OF-DAY CONTROL</span><h2>🔒 Daily Closing & Cash Reconciliation</h2><p>Compare the system's saved closing balances with the money actually counted. Variances are recorded for manager review.</p></div>
+            <div className="va-closing-badge">Manager / Admin</div>
+          </div>
+
+          <div className="va-closing-toolbar">
+            <label>Closing date<input type="date" value={closingDate} onChange={e=>setClosingDate(e.target.value)} /></label>
+            <button className="va-closing-btn secondary" onClick={()=>{setActiveTab('daily');setDateSelection(closingDate);handleFetchData(closingDate,true);}}>📝 Open Daily Accounting</button>
+            <button className="va-closing-btn secondary" onClick={loadDailyClosings}>↻ Refresh</button>
+          </div>
+
+          <div className="va-closing-kpis">
+            <div><span>Expected Cash</span><strong>{formatINR(closingExpected.cash)}</strong><small>Saved system balance</small></div>
+            <div><span>Actual Cash</span><strong>{closingActualCash === '' ? '—' : formatINR(closingActualCash)}</strong><small>Physical count</small></div>
+            <div className={Math.abs(closingVariance.cash)<0.01?'good':'bad'}><span>Cash Variance</span><strong>{formatINR(closingVariance.cash)}</strong><small>{closingVariance.cash===0?'Balanced':'Short / over'}</small></div>
+            <div><span>Expected Online</span><strong>{formatINR(closingExpected.online)}</strong><small>Saved system balance</small></div>
+            <div><span>Actual Online</span><strong>{closingActualOnline === '' ? '—' : formatINR(closingActualOnline)}</strong><small>Bank / gateway balance</small></div>
+            <div className={Math.abs(closingVariance.online)<0.01?'good':'bad'}><span>Online Variance</span><strong>{formatINR(closingVariance.online)}</strong><small>{closingVariance.online===0?'Balanced':'Difference'}</small></div>
+          </div>
+
+          <div className="va-closing-grid">
+            <section className="va-closing-card">
+              <div className="va-closing-head"><div><span className="va-eyebrow">RECONCILIATION</span><h3>Count & Confirm</h3><p>Enter the actual balances after the day's physical count.</p></div><span className={'va-closing-status '+(closingExisting?.status==='Closed'?'closed':'open')}>{closingExisting?.status || 'Not Closed'}</span></div>
+              {!closingExpected.hasData && <div className="va-closing-warning">⚠️ No saved accounting record exists for this date. Save the Daily Accounting entry first.</div>}
+              <div className="va-closing-form">
+                <label>Actual Cash Count<input type="number" min="0" step="0.01" value={closingActualCash} onChange={e=>setClosingActualCash(e.target.value)} placeholder="0.00" /></label>
+                <label>Actual Online Balance<input type="number" min="0" step="0.01" value={closingActualOnline} onChange={e=>setClosingActualOnline(e.target.value)} placeholder="0.00" /></label>
+              </div>
+              <div className="va-closing-variance">
+                <div><span>Cash difference</span><strong className={closingVariance.cash===0?'good-text':'bad-text'}>{formatINR(closingVariance.cash)}</strong></div>
+                <div><span>Online difference</span><strong className={closingVariance.online===0?'good-text':'bad-text'}>{formatINR(closingVariance.online)}</strong></div>
+                <div><span>Total difference</span><strong className={closingVariance.total===0?'good-text':'bad-text'}>{formatINR(closingVariance.total)}</strong></div>
+              </div>
+              <label className="va-closing-notes">Manager notes<textarea value={closingNotes} onChange={e=>setClosingNotes(e.target.value)} placeholder="Explain shortages, overages, bank timing differences, corrections, etc." rows="4" /></label>
+              <div className="va-closing-actions">
+                <button className="va-closing-btn primary" disabled={closingSaving || !closingExpected.hasData} onClick={saveDailyClosing}>{closingSaving?'Saving…':closingExisting?.status==='Closed'?'✓ Update Closing':'🔒 Close Day'}</button>
+                {closingExisting?.status==='Closed' && <button className="va-closing-btn danger" onClick={reopenDailyClosing}>Reopen for Correction</button>}
+              </div>
+              <div className="va-closing-note">Control rule: the reconciliation does not alter sales, expenses, purchases, supplier payments, or balances. It records the manager's end-of-day verification separately.</div>
+            </section>
+
+            <section className="va-closing-card">
+              <div className="va-closing-head"><div><span className="va-eyebrow">CLOSING HISTORY</span><h3>Recent Reconciliations</h3><p>Use the history to spot repeated shortages or overages.</p></div></div>
+              {closingLoading ? <p>Loading closing history…</p> : closingRows.length===0 ? <div className="va-closing-empty">No daily closings recorded yet.</div> : (
+                <div className="va-closing-history">
+                  {closingRows.slice(0,15).map(r=><button key={r.id} onClick={()=>setClosingDate(r.close_date)} className={r.close_date===closingDate?'active':''}>
+                    <span><strong>{r.close_date}</strong><small>{r.status}</small></span>
+                    <span className={Number(r.cash_variance)+Number(r.online_variance)===0?'good-text':'bad-text'}>{formatINR(Number(r.cash_variance)+Number(r.online_variance))}<small>Total variance</small></span>
+                  </button>)}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'reports' && (
         <div className="va-reports-page">
           <div className="va-reports-hero">
@@ -3580,6 +3730,10 @@ const inventoryUiStyles = `
 
 const reportsUiStyles = `
 .va-reports-page{max-width:1500px;margin:0 auto}.va-reports-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#1e3a5f 65%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-reports-hero h2{margin:6px 0;font-size:28px}.va-reports-hero p{margin:0;color:#cbd5e1;font-size:13px;max-width:800px}.va-reports-actions{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.va-reports-actions label{font-size:10px;font-weight:900;color:#cbd5e1}.va-reports-actions input,.va-reports-actions select{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-reports-btn{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#10b981;color:#fff}.va-reports-btn.secondary{background:#fff;color:#1e3a5f}.va-report-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}.va-report-tab{border:1px solid #e2e8f0;background:#fff;border-radius:11px;padding:11px;text-align:left;cursor:pointer}.va-report-tab strong{display:block;color:#0f172a;font-size:11px}.va-report-tab small{display:block;color:#64748b;font-size:9px;margin-top:3px}.va-report-tab.active{background:#eff6ff;border-color:#93c5fd;box-shadow:0 6px 16px rgba(37,99,235,.08)}.va-report-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-report-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-report-kpis>div:nth-child(2){border-top-color:#10b981}.va-report-kpis>div:nth-child(3){border-top-color:#f59e0b}.va-report-kpis>div:nth-child(4){border-top-color:#8b5cf6}.va-report-kpis span{display:block;color:#64748b;font-size:10px;font-weight:800}.va-report-kpis strong{display:block;margin-top:6px;font-size:21px;color:#0f172a}.va-report-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-report-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-report-head h3{margin:3px 0;font-size:19px}.va-report-head p{margin:0;color:#64748b;font-size:12px}.va-report-head>span{background:#f1f5f9;padding:7px 10px;border-radius:999px;color:#475569;font-size:10px;font-weight:900}.va-report-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-report-table{width:100%;border-collapse:collapse;min-width:900px}.va-report-table th,.va-report-table td{padding:11px;border-bottom:1px solid #eef2f7;font-size:11px;text-align:right;white-space:nowrap}.va-report-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase;letter-spacing:.04em}.va-report-table th:first-child,.va-report-table td:first-child{text-align:left}.va-report-table tbody tr:hover{background:#f8fafc}.va-report-note{padding:13px 15px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e40af;font-size:11px;line-height:1.5}.va-report-empty{padding:38px;text-align:center;color:#94a3b8;background:#f8fafc;border-radius:11px}.va-report-footer{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.va-report-footer small{color:#64748b}@media(max-width:1050px){.va-report-tabs{grid-template-columns:repeat(2,1fr)}.va-report-kpis{grid-template-columns:repeat(2,1fr)}.va-reports-hero{display:block}.va-reports-actions{margin-top:15px}.va-reports-actions>*{flex:1}}@media(max-width:650px){.va-report-tabs{grid-template-columns:1fr}.va-report-kpis{grid-template-columns:1fr 1fr}.va-reports-hero,.va-report-card{padding:15px}.va-reports-actions{display:grid;grid-template-columns:1fr 1fr}.va-reports-actions label{grid-column:span 1}.va-reports-actions button{width:100%}}@media(max-width:430px){.va-report-kpis{grid-template-columns:1fr}.va-reports-actions{grid-template-columns:1fr}}`;
+
+
+const closingUiStyles = `
+.va-closing-page{max-width:1500px;margin:0 auto}.va-closing-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#111827,#1e3a5f);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 16px 38px rgba(15,23,42,.12)}.va-closing-hero h2{margin:6px 0;font-size:28px}.va-closing-hero p{margin:0;color:#cbd5e1;font-size:13px;max-width:800px}.va-closing-badge{background:rgba(16,185,129,.14);border:1px solid rgba(110,231,183,.25);color:#6ee7b7;padding:10px 13px;border-radius:999px;font-weight:900;font-size:11px;white-space:nowrap}.va-closing-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:14px;margin-bottom:18px}.va-closing-toolbar label{font-size:10px;font-weight:900;color:#475569}.va-closing-toolbar input{display:block;margin-top:5px;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.va-closing-btn{border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer}.va-closing-btn.primary{background:#10b981;color:#fff}.va-closing-btn.secondary{background:#eff6ff;color:#1d4ed8}.va-closing-btn.danger{background:#fee2e2;color:#b91c1c}.va-closing-btn:disabled{opacity:.5;cursor:not-allowed}.va-closing-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}.va-closing-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #64748b;border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-closing-kpis>div:nth-child(1),.va-closing-kpis>div:nth-child(4){border-top-color:#2563eb}.va-closing-kpis>div:nth-child(3),.va-closing-kpis>div:nth-child(6){border-top-color:#ef4444}.va-closing-kpis span{display:block;color:#64748b;font-size:10px;font-weight:800}.va-closing-kpis strong{display:block;margin-top:6px;font-size:20px;color:#0f172a}.va-closing-kpis small{display:block;color:#94a3b8;margin-top:4px;font-size:10px}.va-closing-kpis .good{border-top-color:#10b981}.va-closing-kpis .bad{border-top-color:#ef4444}.va-closing-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.va-closing-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-closing-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-closing-head h3{margin:4px 0;font-size:19px}.va-closing-head p{margin:0;color:#64748b;font-size:12px}.va-closing-status{padding:7px 10px;border-radius:999px;font-size:10px;font-weight:900;background:#f1f5f9;color:#475569}.va-closing-status.closed{background:#ecfdf5;color:#047857}.va-closing-status.open{background:#fff7ed;color:#c2410c}.va-closing-warning{padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:11px;color:#9a3412;font-size:11px;margin-bottom:14px}.va-closing-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.va-closing-form label,.va-closing-notes{font-size:11px;font-weight:900;color:#475569}.va-closing-form input,.va-closing-notes textarea{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:11px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}.va-closing-notes{display:block;margin-top:14px}.va-closing-variance{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.va-closing-variance>div{padding:13px;border-radius:11px;background:#f8fafc;text-align:center}.va-closing-variance span{display:block;color:#64748b;font-size:10px;font-weight:800}.va-closing-variance strong{display:block;margin-top:5px;font-size:17px}.good-text{color:#059669!important}.bad-text{color:#dc2626!important}.va-closing-actions{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}.va-closing-note{margin-top:12px;padding:11px 13px;border-radius:10px;background:#f8fafc;color:#64748b;font-size:10px;line-height:1.5}.va-closing-history{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto}.va-closing-history button{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:11px;padding:11px;cursor:pointer}.va-closing-history button:hover,.va-closing-history button.active{background:#f8fafc;border-color:#93c5fd}.va-closing-history strong{display:block;color:#0f172a;font-size:12px}.va-closing-history small{display:block;color:#94a3b8;font-size:9px;margin-top:3px}.va-closing-empty{padding:35px;text-align:center;color:#94a3b8;background:#f8fafc;border-radius:11px}@media(max-width:1050px){.va-closing-kpis{grid-template-columns:repeat(3,1fr)}.va-closing-grid{grid-template-columns:1fr}.va-closing-hero{display:block}.va-closing-badge{display:inline-block;margin-top:12px}}@media(max-width:650px){.va-closing-kpis{grid-template-columns:repeat(2,1fr)}.va-closing-form,.va-closing-variance{grid-template-columns:1fr}.va-closing-hero,.va-closing-card{padding:15px}.va-closing-toolbar>*{flex:1}.va-closing-actions>*{width:100%}}`;
 
 const cardStyle = { background: 'rgba(255,255,255,0.96)', padding: '22px', borderRadius: '18px', border: '1px solid rgba(148,163,184,.18)', boxShadow: '0 12px 35px rgba(15,23,42,.08)', marginBottom: '20px' };
 const flexRow = { display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' };
