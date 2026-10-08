@@ -20,6 +20,236 @@ const employeeNames = [
   "David"
 ];
 
+
+function PosWorkspace({ session, role }) {
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [orderType, setOrderType] = useState('Dine-In');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [floorFilter, setFloorFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [catRes, menuRes, tableRes, orderRes] = await Promise.all([
+      supabase.from('menu_categories').select('*').eq('is_active', true).order('sort_order').order('name'),
+      supabase.from('menu_items').select('*').eq('is_available', true).order('sort_order').order('name'),
+      supabase.from('restaurant_tables').select('*').eq('is_active', true).order('floor_name').order('sort_order').order('table_code'),
+      supabase.from('restaurant_orders').select('*').order('created_at', { ascending:false }).limit(100)
+    ]);
+    if (catRes.error) console.error(catRes.error);
+    if (menuRes.error) console.error(menuRes.error);
+    if (tableRes.error) console.error(tableRes.error);
+    if (orderRes.error) console.error(orderRes.error);
+    setCategories(catRes.data || []);
+    setMenuItems(menuRes.data || []);
+    setTables(tableRes.data || []);
+    setOrders(orderRes.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (session) load();
+  }, [session]);
+
+  const activeOrders = orders.filter(o => !['Completed','Cancelled'].includes(o.status));
+  const tableOrder = table => activeOrders.find(o => Number(o.table_id) === Number(table.id));
+  const tableState = table => {
+    const o = tableOrder(table);
+    if (o?.payment_status === 'Paid') return 'Available';
+    if (o?.status === 'Served') return 'Billing';
+    if (o) return 'Occupied';
+    return table.status === 'Reserved' ? 'Reserved' : 'Available';
+  };
+  const floors = [...new Set(tables.map(t => t.floor_name).filter(Boolean))];
+  const visibleTables = tables.filter(t => floorFilter === 'all' || t.floor_name === floorFilter);
+  const cartTotal = cart.reduce((s, x) => s + Number(x.line_total || 0), 0);
+
+  const addTable = async () => {
+    if (!['admin','manager'].includes(role)) return alert('Only managers and admins can add tables.');
+    const code = window.prompt('Table number / code (e.g. T01):');
+    if (!code?.trim()) return;
+    const name = window.prompt('Table name:', code.trim()) || code.trim();
+    const floor = window.prompt('Floor / area:', floors[0] || 'Main Floor') || 'Main Floor';
+    const capacity = Number(window.prompt('Seating capacity:', '4') || 4);
+    const { error } = await supabase.from('restaurant_tables').insert({
+      table_code: code.trim().toUpperCase(), table_name:name.trim(), floor_name:floor.trim(),
+      capacity:Math.max(1, capacity), created_by:session?.user?.id
+    });
+    if (error) return alert('Unable to add table: ' + error.message);
+    await load();
+  };
+
+  const addToCart = item => setCart(prev => {
+    const found = prev.find(x => x.menu_item_id === item.id);
+    if (found) return prev.map(x => x.menu_item_id === item.id
+      ? {...x, quantity:Number(x.quantity)+1, line_total:(Number(x.quantity)+1)*Number(x.unit_price)}
+      : x);
+    return [...prev, { menu_item_id:item.id, item_name:item.name, quantity:1, unit_price:Number(item.price||0), line_total:Number(item.price||0), notes:'' }];
+  });
+
+  const changeQty = (id, delta) => setCart(prev => prev.flatMap(x => {
+    if (x.menu_item_id !== id) return [x];
+    const q = Number(x.quantity) + delta;
+    return q > 0 ? [{...x, quantity:q, line_total:q*Number(x.unit_price)}] : [];
+  }));
+
+  const startTableOrder = table => {
+    setSelectedTable(table);
+    setOrderType('Dine-In');
+    const existing = tableOrder(table);
+    if (existing) {
+      setCustomerName(existing.customer_name || '');
+      setCustomerPhone(existing.customer_phone || '');
+    }
+  };
+
+  const createOrder = async () => {
+    if (!cart.length) return alert('Add at least one menu item.');
+    if (orderType === 'Dine-In' && !selectedTable) return alert('Select a table first.');
+    setSaving(true);
+    const orderNo = 'ORD-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14);
+    const existing = selectedTable ? tableOrder(selectedTable) : null;
+    if (existing) {
+      const { data: oldItems, error: oldError } = await supabase.from('restaurant_order_items').select('*').eq('order_id', existing.id);
+      if (oldError) { setSaving(false); return alert('Could not load the running order: ' + oldError.message); }
+      const merged = [...(oldItems || []), ...cart.map(x => ({
+        order_id:existing.id, menu_item_id:x.menu_item_id, item_name:x.item_name,
+        quantity:Number(x.quantity), unit_price:Number(x.unit_price), line_total:Number(x.line_total), notes:x.notes || ''
+      }))];
+      const total = merged.reduce((s,x)=>s+Number(x.line_total||0),0);
+      await supabase.from('restaurant_order_items').delete().eq('order_id', existing.id);
+      const { error:itemError } = await supabase.from('restaurant_order_items').insert(merged);
+      if (itemError) { setSaving(false); return alert('Could not add items: ' + itemError.message); }
+      const { error:updateError } = await supabase.from('restaurant_orders').update({
+        subtotal:total, total_amount:total, customer_name:customerName, customer_phone:customerPhone,
+        notes:notes || existing.notes || '', updated_at:new Date().toISOString()
+      }).eq('id', existing.id);
+      if (updateError) { setSaving(false); return alert('Could not update order: ' + updateError.message); }
+      alert('Items added to ' + selectedTable.table_code + ' running order.');
+    } else {
+      const { data: order, error } = await supabase.from('restaurant_orders').insert({
+        order_no:orderNo, order_type:orderType, table_id:selectedTable?.id || null,
+        table_name:selectedTable?.table_name || '', customer_name:customerName, customer_phone:customerPhone,
+        status:'New', payment_status:'Unpaid', payment_method:'Pending',
+        subtotal:cartTotal, total_amount:cartTotal, notes, created_by:session?.user?.id,
+        waiter_id:session?.user?.id, order_channel:'POS'
+      }).select().single();
+      if (error) { setSaving(false); return alert('Order creation failed: ' + error.message); }
+      const { error:itemError} = await supabase.from('restaurant_order_items').insert(cart.map(x => ({
+        order_id:order.id, menu_item_id:x.menu_item_id, item_name:x.item_name,
+        quantity:Number(x.quantity), unit_price:Number(x.unit_price), line_total:Number(x.line_total), notes:x.notes || ''
+      })));
+      if (itemError) {
+        await supabase.from('restaurant_orders').delete().eq('id',order.id);
+        setSaving(false);
+        return alert('Order items could not be saved: ' + itemError.message);
+      }
+      alert(orderNo + ' created for ' + (selectedTable?.table_code || orderType) + '.');
+    }
+    setCart([]); setNotes(''); setCustomerName(''); setCustomerPhone(''); setSelectedTable(null);
+    await load();
+    setSaving(false);
+  };
+
+  const closeWorkspace = () => { window.location.href = '/'; };
+
+  if (!session) return <div style={{padding:40,fontFamily:'Inter,Arial',textAlign:'center'}}>Please sign in from Vintage Accounts first.</div>;
+
+  return (
+    <div style={{minHeight:'100vh',background:'#f1f5f9',fontFamily:'Inter,Arial',color:'#0f172a'}}>
+      <style>{`
+        .vp-top{position:sticky;top:0;z-index:20;background:#0f172a;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 5px 20px rgba(15,23,42,.2)}
+        .vp-top button,.vp-action{border:0;border-radius:9px;padding:9px 12px;font-weight:900;cursor:pointer}
+        .vp-layout{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px;max-width:1700px;margin:auto}
+        .vp-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 7px 24px rgba(15,23,42,.05)}
+        .vp-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+        .vp-toolbar button{border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer}
+        .vp-toolbar button.active{background:#0f766e;color:#fff;border-color:#0f766e}
+        .vp-tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px}
+        .vp-table{border:2px solid #cbd5e1;border-radius:14px;padding:13px;background:#fff;text-align:left;cursor:pointer;min-height:115px}
+        .vp-table.available{border-color:#86efac;background:#f0fdf4}.vp-table.occupied{border-color:#fbbf24;background:#fffbeb}.vp-table.billing{border-color:#fb7185;background:#fff1f2}.vp-table.reserved{border-color:#a78bfa;background:#f5f3ff}
+        .vp-menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:9px;margin-top:12px}
+        .vp-item{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:12px;text-align:left;cursor:pointer}
+        .vp-item:hover{border-color:#10b981;box-shadow:0 5px 14px rgba(16,185,129,.12)}
+        .vp-cart-row{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-bottom:1px solid #eef2f7}
+        .vp-cart-row button{border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:3px 7px;cursor:pointer}
+        .vp-input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px;margin-top:7px}
+        @media(max-width:1050px){.vp-layout{grid-template-columns:1fr}.vp-side{position:static!important}}
+        @media(max-width:600px){.vp-layout{padding:9px}.vp-top{align-items:flex-start}.vp-tables{grid-template-columns:repeat(2,1fr)}.vp-menu{grid-template-columns:repeat(2,1fr)}}
+      `}</style>
+      <header className="vp-top">
+        <div><strong style={{fontSize:18}}>🍽️ VINTAGE POS</strong><span style={{marginLeft:10,color:'#94a3b8',fontSize:11}}>Restaurant Order Workspace</span></div>
+        <div style={{display:'flex',gap:7,alignItems:'center'}}><span style={{fontSize:11,color:'#cbd5e1'}}>👤 {role}</span><button onClick={load} style={{background:'#334155',color:'#fff'}}>↻ Refresh</button><button onClick={closeWorkspace} style={{background:'#fff',color:'#0f172a'}}>← Accounts</button></div>
+      </header>
+      <div className="vp-layout">
+        <main>
+          <section className="vp-card">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:12}}>
+              <div><h2 style={{margin:'0 0 4px'}}>Floor & Tables</h2><small style={{color:'#64748b'}}>Tap a table to open its running order.</small></div>
+              {['admin','manager'].includes(role) && <button className="vp-action" onClick={addTable} style={{background:'#059669',color:'#fff'}}>＋ Add Table</button>}
+            </div>
+            <div className="vp-toolbar">
+              <button className={floorFilter==='all'?'active':''} onClick={()=>setFloorFilter('all')}>All Floors</button>
+              {floors.map(f=><button key={f} className={floorFilter===f?'active':''} onClick={()=>setFloorFilter(f)}>{f}</button>)}
+            </div>
+            {loading ? <div style={{padding:30,textAlign:'center',color:'#64748b'}}>Loading floor…</div> :
+              <div className="vp-tables">
+                {visibleTables.map(table=>{
+                  const state=tableState(table), running=tableOrder(table);
+                  return <button key={table.id} className={'vp-table '+state.toLowerCase()} onClick={()=>startTableOrder(table)}>
+                    <div style={{display:'flex',justifyContent:'space-between'}}><strong>{table.table_code}</strong><span style={{fontSize:10,fontWeight:900}}>{state}</span></div>
+                    <div style={{marginTop:9,fontSize:12}}>{table.table_name}</div>
+                    <small style={{display:'block',marginTop:6,color:'#64748b'}}>👥 {table.capacity} seats</small>
+                    {running && <strong style={{display:'block',marginTop:7}}>{formatINR(running.total_amount)}</strong>}
+                  </button>;
+                })}
+                {!visibleTables.length && <div style={{padding:30,color:'#64748b'}}>No tables yet. Add your first table to start the floor.</div>}
+              </div>}
+          </section>
+          <section className="vp-card" style={{marginTop:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+              <div><h3 style={{margin:0}}>Menu</h3><small style={{color:'#64748b'}}>Select items for the active table/order.</small></div>
+              <select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="vp-input" style={{maxWidth:220,margin:0}}>
+                <option value="all">All categories</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="vp-menu">
+              {menuItems.filter(i=>categoryFilter==='all'||String(i.category_id)===String(categoryFilter)).map(item=><button key={item.id} className="vp-item" onClick={()=>addToCart(item)}>
+                <strong>{item.name}</strong><small style={{display:'block',color:item.item_type==='Non-Veg'?'#dc2626':'#059669',marginTop:4}}>{item.item_type}</small><b style={{display:'block',marginTop:9}}>{formatINR(item.price)}</b>
+              </button>)}
+            </div>
+          </section>
+        </main>
+        <aside className="vp-card vp-side" style={{position:'sticky',top:76,height:'fit-content'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><h3 style={{margin:'0 0 3px'}}>Current Order</h3><small style={{color:'#64748b'}}>{selectedTable ? selectedTable.table_code+' • '+selectedTable.floor_name : 'No table selected'}</small></div><span style={{fontSize:10,fontWeight:900,color:'#059669'}}>{cart.length} items</span></div>
+          <select value={orderType} onChange={e=>setOrderType(e.target.value)} className="vp-input">
+            <option>Dine-In</option><option>Takeaway</option><option>Delivery</option>
+          </select>
+          <input className="vp-input" placeholder="Customer name" value={customerName} onChange={e=>setCustomerName(e.target.value)}/>
+          <input className="vp-input" placeholder="Phone" value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)}/>
+          <div style={{marginTop:12}}>
+            {!cart.length && <div style={{padding:20,textAlign:'center',background:'#f8fafc',borderRadius:10,color:'#94a3b8'}}>Select a table, then tap menu items.</div>}
+            {cart.map(item=><div className="vp-cart-row" key={item.menu_item_id}><div><strong style={{fontSize:12}}>{item.item_name}</strong><small style={{display:'block',color:'#64748b'}}>{formatINR(item.unit_price)}</small></div><div style={{display:'flex',alignItems:'center',gap:6}}><button onClick={()=>changeQty(item.menu_item_id,-1)}>−</button><b>{item.quantity}</b><button onClick={()=>changeQty(item.menu_item_id,1)}>＋</button></div></div>)}
+          </div>
+          <textarea className="vp-input" placeholder="Order / kitchen notes" value={notes} onChange={e=>setNotes(e.target.value)} style={{minHeight:65}}/>
+          <div style={{display:'flex',justifyContent:'space-between',padding:13,background:'#ecfdf5',borderRadius:10,marginTop:10}}><span>Total</span><strong style={{fontSize:20,color:'#047857'}}>{formatINR(cartTotal)}</strong></div>
+          <button disabled={saving || !cart.length || (orderType==='Dine-In' && !selectedTable)} onClick={createOrder} style={{width:'100%',marginTop:10,padding:13,border:0,borderRadius:10,background:'#059669',color:'#fff',fontWeight:900,cursor:'pointer',opacity:(saving || !cart.length || (orderType==='Dine-In' && !selectedTable))?.55:1}}>{saving?'Saving…':selectedTable && tableOrder(selectedTable)?'＋ Add to Running Order':'🍽️ Create Order'}</button>
+          <div style={{marginTop:10,padding:11,background:'#f8fafc',borderRadius:9,fontSize:10,color:'#64748b'}}>Next: KOT and Kitchen Display will use this same running table order.</div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
@@ -1920,6 +2150,10 @@ export default function App() {
     );
   }
 
+  if (window.location.pathname === '/pos') {
+    return <PosWorkspace session={session} role={role} />;
+  }
+
   if (role === 'cashier') {
     const cashierCashSaleAmount = Number(cashierCashSale || 0);
     const cashierCreditGiven = cashierCreditSales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -2431,7 +2665,7 @@ export default function App() {
               ['payroll','💰','Employee Payroll'],
               ['tasks','🔔','Reminders']
             ].map(([tab,icon,label]) => (
-              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }}>
+              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => { if (tab === 'pos') { window.open('/pos', '_blank', 'noopener,noreferrer'); return; } setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }}>
                 {icon} &nbsp;{label}
               </button>
             ))}
