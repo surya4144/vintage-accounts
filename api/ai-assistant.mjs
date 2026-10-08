@@ -3,9 +3,9 @@ import { generateText } from 'ai';
 
 export const maxDuration = 30;
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://gsscocpxmsmtevjadxjd.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwiaWF0IjoxNzc4NTAzMTgyLCJleHAiOjIwOTQwNzkxODN9._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 const cleanText = (value, max = 5000) => String(value || '').slice(0, max);
 
@@ -25,6 +25,11 @@ export default async function handler(req, res) {
       return;
     }
 
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase server authentication is not configured.' });
+      return;
+    }
+
     const { data: userData, error: authError } = await supabase.auth.getUser(accessToken);
     if (authError || !userData?.user) {
       res.status(401).json({ error: 'Your session is no longer valid. Please log in again.' });
@@ -38,9 +43,6 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Vercel deployments can authenticate AI Gateway with either an API key
-    // or the deployment's OIDC token. Prefer the configured key when present,
-    // while allowing native Vercel authentication as a fallback.
     if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
       res.status(503).json({
         error: 'AI Gateway authentication is not configured for this deployment.'
@@ -65,7 +67,7 @@ export default async function handler(req, res) {
       'Do not provide definitive tax, legal, or accounting compliance advice; recommend a qualified professional for those matters.'
     ].join('\n');
 
-    const model = process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna';
+    const model = process.env.AI_GATEWAY_MODEL || 'inclusionai/ling-3.1-flash-free';
 
     const { text } = await generateText({
       model,
@@ -81,7 +83,7 @@ export default async function handler(req, res) {
       name: error?.name,
       message: error?.message,
       statusCode: error?.statusCode,
-      model: process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna'
+      model: process.env.AI_GATEWAY_MODEL || 'inclusionai/ling-3.1-flash-free'
     });
 
     const message = cleanText(error?.message, 500);
