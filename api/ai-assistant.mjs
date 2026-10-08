@@ -4,12 +4,14 @@ import { generateText } from 'ai';
 export const maxDuration = 30;
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://gsscocpxmsmtevjadxjd.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2amFkeGpkIiwiaWF0IjoxNzc4NTAzMTgyLCJleHAiOjIwOTQwNzkxODN9._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const cleanText = (value, max = 5000) => String(value || '').slice(0, max);
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -36,9 +38,12 @@ export default async function handler(req, res) {
       return;
     }
 
-    if (!process.env.AI_GATEWAY_API_KEY) {
+    // Vercel deployments can authenticate AI Gateway with either an API key
+    // or the deployment's OIDC token. Prefer the configured key when present,
+    // while allowing native Vercel authentication as a fallback.
+    if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
       res.status(503).json({
-        error: 'AI is not connected yet. Add AI_GATEWAY_API_KEY to the Vintage Accounts Vercel project environment variables, then redeploy.'
+        error: 'AI Gateway authentication is not configured for this deployment.'
       });
       return;
     }
@@ -60,15 +65,30 @@ export default async function handler(req, res) {
       'Do not provide definitive tax, legal, or accounting compliance advice; recommend a qualified professional for those matters.'
     ].join('\n');
 
+    const model = process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna';
+
     const { text } = await generateText({
-      model: process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna',
+      model,
       system: 'You are Vintage Accounts AI, a read-only business intelligence assistant for a restaurant. Be accurate, transparent, and management-focused.',
-      prompt
+      prompt,
+      maxOutputTokens: 900,
+      reasoning: 'low'
     });
 
     res.status(200).json({ text: text || 'I could not generate an answer from the available data.' });
   } catch (error) {
-    console.error('Vintage Accounts AI error:', error);
-    res.status(500).json({ error: 'The AI assistant could not complete that request. Please try again.' });
+    console.error('Vintage Accounts AI error:', {
+      name: error?.name,
+      message: error?.message,
+      statusCode: error?.statusCode,
+      model: process.env.AI_GATEWAY_MODEL || 'openai/gpt-5.6-luna'
+    });
+
+    const message = cleanText(error?.message, 500);
+    res.status(502).json({
+      error: message
+        ? 'AI Gateway request failed: ' + message
+        : 'AI Gateway request failed. Please try again.'
+    });
   }
 }
