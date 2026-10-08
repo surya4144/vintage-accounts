@@ -1707,6 +1707,88 @@ export default function App() {
     return alerts.slice(0, 6);
   }, [fundLedger, khataSummary, khataCustomers, payrollRows, payrollMonth, analyticsData, historyLogs, purchaseSummary, supplierPayableSummary]);
 
+  const loadDailyClosings = async () => {
+    setClosingLoading(true);
+    const { data, error } = await supabase.from('daily_closings').select('*').order('close_date', { ascending:false }).limit(60);
+    if (error) console.error('Daily closings:', error);
+    setClosingRows(data || []);
+    setClosingLoading(false);
+  };
+
+  const closingExpected = useMemo(() => {
+    const target = closingDate;
+    const row = historyLogs.find(x => x.date === target);
+    if (!row) return { cash:0, online:0, total:0, hasData:false };
+    return {
+      cash:Number(row.total_cash_in_hand || 0),
+      online:Number(row.total_online_balance || 0),
+      total:Number(row.total_cash_in_hand || 0) + Number(row.total_online_balance || 0),
+      hasData:true
+    };
+  }, [closingDate, historyLogs]);
+
+  const closingExisting = closingRows.find(x => x.close_date === closingDate) || null;
+  const closingVariance = {
+    cash: Number(closingActualCash || 0) - closingExpected.cash,
+    online: Number(closingActualOnline || 0) - closingExpected.online,
+    total: Number(closingActualCash || 0) + Number(closingActualOnline || 0) - closingExpected.total
+  };
+
+  useEffect(() => {
+    if (session && activeTab === 'closing') loadDailyClosings();
+  }, [session, activeTab]);
+
+  useEffect(() => {
+    if (!closingExisting) {
+      setClosingActualCash('');
+      setClosingActualOnline('');
+      setClosingNotes('');
+      return;
+    }
+    setClosingActualCash(String(closingExisting.actual_cash ?? ''));
+    setClosingActualOnline(String(closingExisting.actual_online ?? ''));
+    setClosingNotes(closingExisting.notes || '');
+  }, [closingExisting?.id]);
+
+  const saveDailyClosing = async () => {
+    if (!session || !['admin','manager'].includes(role)) return alert('Only a manager or admin can close the day.');
+    if (!closingExpected.hasData) return alert('No saved Daily Accounting record exists for this date. Save Daily Accounting first.');
+    if (closingActualCash === '' || closingActualOnline === '') return alert('Enter both actual cash and actual online balance before closing.');
+    setClosingSaving(true);
+    const payload = {
+      close_date:closingDate,
+      expected_cash:closingExpected.cash,
+      actual_cash:Number(closingActualCash),
+      cash_variance:closingVariance.cash,
+      expected_online:closingExpected.online,
+      actual_online:Number(closingActualOnline),
+      online_variance:closingVariance.online,
+      total_expected:closingExpected.total,
+      total_actual:Number(closingActualCash)+Number(closingActualOnline),
+      status:'Closed',
+      notes:closingNotes.trim(),
+      approved_by:session.user.id,
+      approved_at:new Date().toISOString(),
+      created_by:closingExisting?.created_by || session.user.id,
+      updated_at:new Date().toISOString()
+    };
+    const { error } = await supabase.from('daily_closings').upsert(payload,{onConflict:'close_date'});
+    if (error) alert('Unable to save closing: ' + error.message);
+    else { alert('✅ Day closed and reconciliation saved.'); await loadDailyClosings(); }
+    setClosingSaving(false);
+  };
+
+  const reopenDailyClosing = async () => {
+    if (!closingExisting || !['admin','manager'].includes(role)) return;
+    if (!window.confirm('Reopen this day for correction? The reconciliation record will remain in history.')) return;
+    const { error } = await supabase.from('daily_closings').update({
+      status:'Reopened', approved_by:session.user.id, approved_at:new Date().toISOString(), updated_at:new Date().toISOString()
+    }).eq('id',closingExisting.id);
+    if (error) alert('Unable to reopen closing: ' + error.message);
+    else await loadDailyClosings();
+  };
+
+
   // --- SECURE LOGIN SCREEN ---
   if (!session) {
     return (
@@ -2152,87 +2234,6 @@ export default function App() {
       </div>
     );
   }
-
-  const loadDailyClosings = async () => {
-    setClosingLoading(true);
-    const { data, error } = await supabase.from('daily_closings').select('*').order('close_date', { ascending:false }).limit(60);
-    if (error) console.error('Daily closings:', error);
-    setClosingRows(data || []);
-    setClosingLoading(false);
-  };
-
-  const closingExpected = useMemo(() => {
-    const target = closingDate;
-    const row = historyLogs.find(x => x.date === target);
-    if (!row) return { cash:0, online:0, total:0, hasData:false };
-    return {
-      cash:Number(row.total_cash_in_hand || 0),
-      online:Number(row.total_online_balance || 0),
-      total:Number(row.total_cash_in_hand || 0) + Number(row.total_online_balance || 0),
-      hasData:true
-    };
-  }, [closingDate, historyLogs]);
-
-  const closingExisting = closingRows.find(x => x.close_date === closingDate) || null;
-  const closingVariance = {
-    cash: Number(closingActualCash || 0) - closingExpected.cash,
-    online: Number(closingActualOnline || 0) - closingExpected.online,
-    total: Number(closingActualCash || 0) + Number(closingActualOnline || 0) - closingExpected.total
-  };
-
-  useEffect(() => {
-    if (session && activeTab === 'closing') loadDailyClosings();
-  }, [session, activeTab]);
-
-  useEffect(() => {
-    if (!closingExisting) {
-      setClosingActualCash('');
-      setClosingActualOnline('');
-      setClosingNotes('');
-      return;
-    }
-    setClosingActualCash(String(closingExisting.actual_cash ?? ''));
-    setClosingActualOnline(String(closingExisting.actual_online ?? ''));
-    setClosingNotes(closingExisting.notes || '');
-  }, [closingExisting?.id]);
-
-  const saveDailyClosing = async () => {
-    if (!session || !['admin','manager'].includes(role)) return alert('Only a manager or admin can close the day.');
-    if (!closingExpected.hasData) return alert('No saved Daily Accounting record exists for this date. Save Daily Accounting first.');
-    if (closingActualCash === '' || closingActualOnline === '') return alert('Enter both actual cash and actual online balance before closing.');
-    setClosingSaving(true);
-    const payload = {
-      close_date:closingDate,
-      expected_cash:closingExpected.cash,
-      actual_cash:Number(closingActualCash),
-      cash_variance:closingVariance.cash,
-      expected_online:closingExpected.online,
-      actual_online:Number(closingActualOnline),
-      online_variance:closingVariance.online,
-      total_expected:closingExpected.total,
-      total_actual:Number(closingActualCash)+Number(closingActualOnline),
-      status:'Closed',
-      notes:closingNotes.trim(),
-      approved_by:session.user.id,
-      approved_at:new Date().toISOString(),
-      created_by:closingExisting?.created_by || session.user.id,
-      updated_at:new Date().toISOString()
-    };
-    const { error } = await supabase.from('daily_closings').upsert(payload,{onConflict:'close_date'});
-    if (error) alert('Unable to save closing: ' + error.message);
-    else { alert('✅ Day closed and reconciliation saved.'); await loadDailyClosings(); }
-    setClosingSaving(false);
-  };
-
-  const reopenDailyClosing = async () => {
-    if (!closingExisting || !['admin','manager'].includes(role)) return;
-    if (!window.confirm('Reopen this day for correction? The reconciliation record will remain in history.')) return;
-    const { error } = await supabase.from('daily_closings').update({
-      status:'Reopened', approved_by:session.user.id, approved_at:new Date().toISOString(), updated_at:new Date().toISOString()
-    }).eq('id',closingExisting.id);
-    if (error) alert('Unable to reopen closing: ' + error.message);
-    else await loadDailyClosings();
-  };
 
   // --- MAIN APP UI ---
   return (
