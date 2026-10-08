@@ -47,6 +47,18 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedNavGroups, setExpandedNavGroups] = useState({ operations: true, insights: false, people: false, management: false });
   const toggleNavGroup = (key) => setExpandedNavGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  const [displayMode, setDisplayMode] = useState(() => localStorage.getItem('vintage_display_mode') || 'light');
+  const [restaurantName, setRestaurantName] = useState(() => localStorage.getItem('vintage_restaurant_name') || 'Vintage Accounts');
+  const [restaurantLogo, setRestaurantLogo] = useState(() => localStorage.getItem('vintage_restaurant_logo') || 'https://cdn-icons-png.flaticon.com/512/3170/3170733.png');
+  const [settingsSaved, setSettingsSaved] = useState('');
+  const saveDisplayMode = (mode) => { setDisplayMode(mode); localStorage.setItem('vintage_display_mode', mode); };
+  const saveRestaurantName = (name) => { setRestaurantName(name); localStorage.setItem('vintage_restaurant_name', name); };
+  const handleRestaurantLogo = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { const value = String(reader.result || ''); setRestaurantLogo(value); localStorage.setItem('vintage_restaurant_logo', value); };
+    reader.readAsDataURL(file);
+  };
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem('vintage_collapsed_sections') || '{}'); } catch { return {}; }
   });
@@ -2307,6 +2319,19 @@ export default function App() {
           .va-status { display:none; }
           .va-main { padding:10px; }
         }
+        .va-sidebar{align-self:flex-start;z-index:100;position:sticky}
+        .va-shell{overflow:visible}
+        .va-logout{display:flex;align-items:center;justify-content:center;gap:9px;min-height:44px;margin-top:10px;background:#1f2937;color:#fca5a5;border:1px solid #334155;box-shadow:0 6px 16px rgba(0,0,0,.14);transition:.18s ease}
+        .va-logout:hover{background:#b91c1c;color:#fff;transform:translateY(-1px);box-shadow:0 9px 20px rgba(185,28,28,.24)}
+        .va-logout-icon{font-size:18px;font-weight:900}.va-logout-label{font-size:13px}
+        .sidebar-collapsed .va-logout{padding:10px}.sidebar-collapsed .va-logout-label{display:none}.sidebar-collapsed .va-logout-icon{font-size:19px}
+        .va-info-tip{display:flex;align-items:center;gap:9px;min-height:42px;padding:7px 9px!important}
+        .va-info-trigger{width:34px!important;min-width:34px;height:34px!important;min-height:34px!important;border:1px solid #c4b5fd!important;border-radius:10px!important;background:#fff!important;color:#7c3aed!important;font-size:18px!important;display:grid!important;place-items:center!important;padding:0!important;cursor:pointer!important}
+        .va-info-copy{display:none;line-height:1.55}.va-info-tip:focus-within .va-info-copy,.va-info-tip:hover .va-info-copy{display:block}
+        .va-money-transfer-page{max-width:1500px;margin:0 auto}.va-money-transfer-balance{min-width:190px;padding:14px 16px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);border-radius:14px}.va-money-transfer-balance span{display:block;color:#cbd5e1;font-size:10px;text-transform:uppercase;letter-spacing:.08em}.va-money-transfer-balance strong{display:block;margin-top:5px;font-size:22px}.va-money-transfer-card{margin-top:18px}
+        .va-settings-page{max-width:1180px;margin:0 auto}.va-settings-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;background:linear-gradient(135deg,#0f172a,#1e3a5f 65%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.14)}.va-settings-hero h2{margin:6px 0;font-size:28px}.va-settings-hero p{margin:0;color:#cbd5e1;font-size:13px}.va-settings-preview{display:flex;align-items:center;gap:11px;padding:10px 13px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);border-radius:14px}.va-settings-preview img{width:48px;height:48px;object-fit:cover;border-radius:12px;background:#fff;padding:4px}.va-settings-preview strong{display:block}.va-settings-preview small{display:block;color:#cbd5e1;margin-top:3px}.va-settings-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.va-settings-card-head{margin-bottom:16px}.va-settings-card-head h3{margin:5px 0 3px}.va-settings-card-head p{margin:0;color:#64748b;font-size:12px}.va-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.va-mode-option{border:2px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:18px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px}.va-mode-option:hover{border-color:#93c5fd;transform:translateY(-1px)}.va-mode-option.active{border-color:#2563eb;background:#eff6ff}.va-mode-option span{font-size:22px}.va-mode-option strong{font-size:15px}.va-mode-option small{color:#64748b}.va-settings-profile-grid{display:grid;grid-template-columns:180px 1fr;gap:20px;align-items:start}.va-settings-logo-panel{display:flex;flex-direction:column;align-items:center;gap:10px}.va-settings-logo-panel img{width:120px;height:120px;object-fit:cover;border-radius:22px;border:1px solid #e2e8f0;background:#f8fafc;padding:8px}.va-upload-btn,.va-settings-save{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-weight:800;cursor:pointer}.va-upload-btn input{display:none}.va-upload-btn:hover{background:#f8fafc}.va-settings-fields{display:flex;flex-direction:column;gap:12px}.va-settings-fields label{font-size:12px;font-weight:800;color:#475569}.va-settings-fields input{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f172a}.va-settings-note{padding:11px 13px;border-radius:10px;background:#eff6ff;color:#1e40af;font-size:12px;line-height:1.5}.va-settings-save{border:0;background:#2563eb;color:#fff}.va-settings-preferences{display:grid;gap:10px}.va-settings-preferences>div{display:grid;grid-template-columns:180px 1fr auto;gap:12px;align-items:center;padding:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:11px}.va-settings-preferences strong{font-size:13px}.va-settings-preferences span{font-size:12px;color:#64748b}.va-settings-preferences b{font-size:10px;color:#047857;background:#dcfce7;padding:6px 9px;border-radius:999px}
+        .va-theme-dark{background:#0b1220;color:#e5e7eb}.va-theme-dark .va-main{color:#e5e7eb}.va-theme-dark .va-page-title,.va-theme-dark h1,.va-theme-dark h2,.va-theme-dark h3,.va-theme-dark h4,.va-theme-dark strong{color:#f8fafc}.va-theme-dark .va-page-subtitle,.va-theme-dark p,.va-theme-dark small{color:#94a3b8}.va-theme-dark .va-dashboard-card,.va-theme-dark .va-feature-card,.va-theme-dark .va-entry-card,.va-theme-dark .va-drawer-card,.va-theme-dark .va-final-card,.va-theme-dark .va-staff-card,.va-theme-dark .va-settings-card,.va-theme-dark .va-fund-entry-card,.va-theme-dark .va-fund-ledger-card,.va-theme-dark .va-financial-card{background:#111827;border-color:#273449;box-shadow:0 10px 28px rgba(0,0,0,.2)}.va-theme-dark .va-dashboard-filter,.va-theme-dark .va-status{background:#111827;border-color:#273449;color:#e5e7eb}.va-theme-dark input,.va-theme-dark select,.va-theme-dark textarea{background:#0f172a!important;color:#e5e7eb!important;border-color:#334155!important}.va-theme-dark .va-dashboard-list>div,.va-theme-dark .va-feature-row,.va-theme-dark .va-settings-preferences>div,.va-theme-dark .va-empty-state{background:#0f172a;border-color:#273449}.va-theme-dark .va-settings-note,.va-theme-dark .va-feature-note,.va-theme-dark .va-helper{background:#172033;color:#cbd5e1;border-color:#334155}.va-theme-dark .va-mode-option{background:#0f172a;border-color:#334155;color:#e5e7eb}.va-theme-dark .va-mode-option.active{background:#172554;border-color:#60a5fa}.va-theme-dark .va-upload-btn,.va-theme-dark .va-settings-save,.va-theme-dark .va-collapse-btn,.va-theme-dark .va-info-trigger{background:#1e293b!important;color:#e5e7eb!important;border-color:#334155!important}.va-theme-dark td{border-color:#273449!important}.va-theme-dark th{background:#172033!important;color:#cbd5e1!important}
+        @media(max-width:700px){.va-settings-hero{display:block}.va-settings-preview{margin-top:16px;width:max-content;max-width:100%}.va-mode-grid{grid-template-columns:1fr}.va-settings-profile-grid{grid-template-columns:1fr}.va-settings-preferences>div{grid-template-columns:1fr auto}.va-settings-preferences span{grid-column:1/-1}.va-money-transfer-balance{margin-top:16px;width:max-content;max-width:100%}}
         /* Global responsive theme + fluid interaction layer */
         :root{
           --va-bg:#f4f7fb;
@@ -2371,16 +2396,16 @@ export default function App() {
           .va-entry-collapsible-actions .va-drawer-total{display:none}
         }
       `}</style>
-      <div className={`va-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+      <div className={`va-shell va-theme-${displayMode} ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
         <button className="va-menu-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Open menu' : 'Open menu'} title="Open navigation">
           ☰
         </button>
         <div className="va-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
         <aside className="va-sidebar">
           <div className="va-brand">
-            <img src="https://cdn-icons-png.flaticon.com/512/3170/3170733.png" alt="Vintage Accounts"/>
+            <img src={restaurantLogo} alt={restaurantName}/>
             <div>
-              <div className="va-brand-title">Vintage Accounts</div>
+              <div className="va-brand-title">{restaurantName}</div>
               <div className="va-brand-sub">Restaurant Finance</div>
             </div>
             <button className="va-sidebar-close" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'} title={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'}>
@@ -2453,7 +2478,8 @@ export default function App() {
                 {[
                   ['closing','🔒','Daily Closing'],
                   ['ai','✨','AI Assistant'],
-                  ['tasks','🔔','Reminders']
+                  ['tasks','🔔','Reminders'],
+                  ['settings','⚙️','Settings']
                 ].map(([tab,icon,label]) => (
                   <button key={tab} className={`va-nav-item va-subnav-item ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }} title={label}>
                     <span className="va-nav-icon">{icon}</span><span className="va-nav-label">{label}</span>
@@ -2462,7 +2488,7 @@ export default function App() {
               </div>}
             </div>
           </nav>
-          <button className="va-logout" onClick={handleLogout}>🚪 Log Out</button>
+          <button className="va-logout" onClick={handleLogout} title="Log out"><span className="va-logout-icon">↪</span><span className="va-logout-label">Log Out</span></button>
         </aside>
 
         <main className="va-main">
@@ -2488,6 +2514,21 @@ export default function App() {
             </div>
             <div className="va-status"><span className="va-dot"></span> System Online</div>
           </div>
+
+      {activeTab === 'settings' && (
+        <div className="va-settings-page">
+          <div className="va-settings-hero"><div><span className="va-eyebrow">PERSONALIZATION • RESTAURANT PROFILE</span><h2>⚙️ Settings</h2><p>Customize how the application looks and how your restaurant identity appears throughout the workstation.</p></div><div className="va-settings-preview"><img src={restaurantLogo} alt="" /><div><strong>{restaurantName}</strong><small>{displayMode === 'dark' ? 'Dark mode' : 'Light mode'}</small></div></div></div>
+          <section className="va-settings-card"><div className="va-settings-card-head"><div><span className="va-eyebrow">DISPLAY</span><h3>🌓 Display Mode</h3><p>Choose the appearance that works best for your restaurant workstation.</p></div></div>
+            <div className="va-mode-grid"><button type="button" className={`va-mode-option ${displayMode === 'light' ? 'active' : ''}`} onClick={() => saveDisplayMode('light')}><span>☀️</span><strong>Light</strong><small>Clean and bright</small></button><button type="button" className={`va-mode-option ${displayMode === 'dark' ? 'active' : ''}`} onClick={() => saveDisplayMode('dark')}><span>🌙</span><strong>Dark</strong><small>Comfortable in low light</small></button></div>
+          </section>
+          <section className="va-settings-card"><div className="va-settings-card-head"><div><span className="va-eyebrow">RESTAURANT PROFILE</span><h3>🏪 Restaurant Name & Logo</h3><p>These details appear in the navigation and settings preview on this device.</p></div></div>
+            <div className="va-settings-profile-grid"><div className="va-settings-logo-panel"><img src={restaurantLogo} alt={restaurantName}/><label className="va-upload-btn">📷 Change Logo<input type="file" accept="image/*" onChange={e => handleRestaurantLogo(e.target.files?.[0])}/></label></div><div className="va-settings-fields"><label>Restaurant name<input value={restaurantName} onChange={e => saveRestaurantName(e.target.value)} placeholder="Enter restaurant name"/></label><div className="va-settings-note">💡 Logo and name are saved locally in this browser, so you can personalize the workstation without changing accounting data.</div><button type="button" className="va-settings-save" onClick={() => { localStorage.setItem('vintage_restaurant_name', restaurantName); localStorage.setItem('vintage_restaurant_logo', restaurantLogo); setSettingsSaved('Restaurant profile saved'); setTimeout(() => setSettingsSaved(''), 2200); }}>{settingsSaved || '✓ Save Restaurant Profile'}</button></div></div>
+          </section>
+          <section className="va-settings-card"><div className="va-settings-card-head"><div><span className="va-eyebrow">WORKSPACE</span><h3>🧩 Interface Preferences</h3><p>Keep the interface compact and fluid while working with long financial forms.</p></div></div>
+            <div className="va-settings-preferences"><div><strong>Sticky navigation</strong><span>Navigation remains visible while you scroll through pages.</span><b>ON</b></div><div><strong>Collapsible sections</strong><span>Long sections can be collapsed to keep the workspace compact.</span><b>ON</b></div><div><strong>Responsive layout</strong><span>Tables and wide forms can scroll horizontally when needed.</span><b>ON</b></div></div>
+          </section>
+        </div>
+      )}
 
       {activeTab === 'dashboard' && (
         <div className="va-dashboard va-financial-dashboard">
@@ -2639,8 +2680,10 @@ export default function App() {
       )}
 
       {activeTab === 'funds' && (
-        <div className="va-feature-card">
-          <div className="va-entry-head"><div><span className="va-eyebrow">Internal movement</span><h3>🔄 Transfer Money Between Accounts</h3><p>Move money between Cash In Hand and Online Balance without treating it as sales or expenses.</p></div></div>
+        <div className="va-funds-page va-money-transfer-page">
+          <div className="va-funds-hero"><div><span className="va-eyebrow">CASH MANAGEMENT • INTERNAL MOVEMENT</span><h2>🔄 Money Transfers</h2><p>Move money between Cash In Hand and Online Balance without treating transfers as sales or expenses.</p></div><div className="va-money-transfer-balance"><span>Current Total Money</span><strong>{formatINR(totalCashInHand + totalOnlineBalance)}</strong></div></div>
+          <section className="va-fund-entry-card va-money-transfer-card">
+            <div className="va-entry-head"><div><span className="va-eyebrow">TRANSFER WORKSPACE</span><h3>🔄 Transfer Money Between Accounts</h3><p>Use this for bank deposits, cash withdrawals, or moving funds between operating accounts.</p></div></div>
           <div className="va-feature-grid">
             {accountTransfers.map(t => <div key={t.id} className="va-feature-row">
               <select value={t.from} onChange={e=>updateArrItem(setAccountTransfers,accountTransfers,t.id,'from',e.target.value)} style={inputStyle}><option value="Cash">💵 Cash In Hand</option><option value="Online">💳 Online Balance</option></select>
@@ -2652,7 +2695,8 @@ export default function App() {
             </div>)}
           </div>
           <button onClick={addAccountTransfer} style={btnStyle}>+ Add Transfer</button>
-          <div className="va-feature-note">Example: If Online Balance is empty, transfer ₹10,000 from Cash In Hand to Online. Cash decreases ₹10,000 and Online increases ₹10,000. Total money stays the same.</div>
+          <div className="va-feature-note">💡 Example: If Online Balance is empty, transfer ₹10,000 from Cash In Hand to Online. Cash decreases ₹10,000 and Online increases ₹10,000. Total money stays the same.</div>
+          </section>
         </div>
       )}
 
@@ -2902,7 +2946,7 @@ export default function App() {
 
             <div className="va-entry-card va-cash-card">
               <div className="va-entry-head"><div><span className="va-eyebrow">STEP 3 • PAYMENTS</span><h3>💵 Offline & Owner Expenses</h3><p>Choose exactly where the money is accounted for.</p></div><span className="va-entry-total">{formatINR(totalCashExpenses)}</span></div>
-              <div className="va-helper"><strong>💡 Cash In Hand</strong> expenses reduce the physical cash balance. <strong>Cash From Till</strong> expenses are already deducted from the daily cash/parcel amount you enter, so they are recorded for reference but are not deducted again.</div>
+              <div className="va-helper va-info-tip"><button type="button" className="va-info-trigger" aria-label="Show cash expense explanation" title="Show explanation">💡</button><div className="va-info-copy"><strong>Cash In Hand</strong> expenses reduce the physical cash balance. <strong>Cash From Till</strong> expenses are already deducted from the daily cash/parcel amount you enter, so they are recorded for reference but are not deducted again.</div></div>
               {cashExpenses.map(exp => (
                 <div key={exp.id} className="va-expense-row va-cash-expense-row">
                   <input list="common-expenses" placeholder="Category" value={exp.category} onChange={e => updateArrItem(setCashExpenses, cashExpenses, exp.id, 'category', e.target.value)} style={inputStyle}/>
