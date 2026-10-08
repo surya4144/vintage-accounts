@@ -2349,7 +2349,7 @@ export default function App() {
           <button className="va-logout" onClick={handleLogout}>🚪 Log Out</button>
         </aside>
 
-
+        <main className="va-main">
           <div className="va-topbar">
             <div>
               <h1 className="va-page-title">
@@ -2382,9 +2382,11 @@ export default function App() {
               <p>One view of sales, operating costs, purchases, payroll, receivables, payables and real cash movement.</p>
             </div>
 
-              <button onClick={() => setActiveTab('daily')}>＋ Daily Accounts</button>
-              <button onClick={() => setActiveTab('cashflow')}>💵 Cash Flow</button>
-              <button onClick={() => setActiveTab('analytics')}>📈 Full Analytics</button>
+              <div className="va-financial-hero-actions">
+                <button onClick={() => setActiveTab('daily')}>＋ Daily Accounts</button>
+                <button onClick={() => setActiveTab('cashflow')}>💵 Cash Flow</button>
+                <button onClick={() => setActiveTab('analytics')}>📈 Full Analytics</button>
+              </div>
             </div>
 
           <div className="va-dashboard-filter va-financial-filter">
