@@ -2219,7 +2219,7 @@ export default function App() {
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.profitBridge?'collapsed':''}`}>
               <div className="va-dashboard-card-head va-collapsible-head">
                 <div><span className="va-eyebrow">PROFIT BRIDGE</span><h3>💰 Where the Money Went</h3></div>
-                <div className="va-section-head-actions"><span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span>
+                <div className="va-section-head-actions"><span className={'va-financial-pill '+(financialDashboardData.profitAfterPurchases>=0?'good':'bad')}>{financialDashboardData.profitAfterPurchases>=0?'Profitable':'Loss period'}</span><button className="va-collapse-btn" onClick={()=>toggleSection('profitBridge')} aria-label={collapsedSections.profitBridge?'Expand section':'Collapse section'}>{collapsedSections.profitBridge?'+':'−'}</button></div>
               </div>
               {!collapsedSections.profitBridge && <div className="va-collapsible-body"><div className="va-profit-bridge">
                 <div><span>Sales</span><strong>{formatINR(financialDashboardData.sales)}</strong></div>
