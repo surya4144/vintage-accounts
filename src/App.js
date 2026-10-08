@@ -2326,7 +2326,6 @@ export default function App() {
           <div className="va-nav">
             {[
               ['dashboard','🏠','Dashboard'],
-              ['pos','🧾','Restaurant POS'],
               ['daily','📝','Daily Accounting'],
               ['funds','🔄','Money Transfers'],
               ['sources','🏦','Fund Sources'],
@@ -2350,12 +2349,11 @@ export default function App() {
           <button className="va-logout" onClick={handleLogout}>🚪 Log Out</button>
         </aside>
 
-        <main className="va-main"><div style={{display:'flex',justifyContent:'flex-end',marginBottom:'10px'}}><button className="va-link-btn" onClick={() => window.open('/pos.html','_blank','noopener,noreferrer')}>🧾 Open Restaurant POS</button></div>
+
           <div className="va-topbar">
             <div>
               <h1 className="va-page-title">
                 {activeTab === 'dashboard' ? 'Dashboard' :
-                 activeTab === 'pos' ? 'Restaurant POS' :
                  activeTab === 'daily' ? 'Daily Accounting' :
                  activeTab === 'funds' ? 'Money Transfers' :
                  activeTab === 'sources' ? 'Fund Sources' :
@@ -2383,7 +2381,7 @@ export default function App() {
               <h2>Restaurant Financial Dashboard</h2>
               <p>One view of sales, operating costs, purchases, payroll, receivables, payables and real cash movement.</p>
             </div>
-            <div className="va-financial-hero-actions"><button onClick={() => window.open('/pos.html', '_blank', 'noopener,noreferrer')}>🧾 Restaurant POS</button>
+
               <button onClick={() => setActiveTab('daily')}>＋ Daily Accounts</button>
               <button onClick={() => setActiveTab('cashflow')}>💵 Cash Flow</button>
               <button onClick={() => setActiveTab('analytics')}>📈 Full Analytics</button>
