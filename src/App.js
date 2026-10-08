@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
 // --- DATABASE CONNECTION ---
-const supabaseUrl = 'https://gsscocpxmsmtevjadxjd.supabase.co';
-const supabaseKey = ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi','OiJzdXBhYmFzZSIsInJlZiI6Imdzc2NvY3B4bXNtdGV2a','mFkeGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MDMxODMsImV4cCI6MjA5NDA3OTE4M30._HUjYhFo34US81UiA6hCoxv_emo9K0sOa_oq8TjxKpk'].join('');
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://gsscocpxmsmtevjadxjd.supabase.co';
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const employeeNames = [
@@ -498,7 +498,6 @@ export default function App() {
     const previousPresent = previousRows.filter(r => r.status === 'Present').length;
     const previousHalf = previousRows.filter(r => r.status === 'Half Day').length;
     const previousPayableDays = previousPresent + previousHalf * 0.5;
-
     const monthlySalary = Number(salaryMap[name] || 0);
     const payableDays = present + half * 0.5;
     const calendarDays = new Date(Number(payrollMonth.slice(0,4)), Number(payrollMonth.slice(5,7)), 0).getDate();
@@ -997,8 +996,7 @@ export default function App() {
 
   const filteredKhataCustomers = useMemo(() => {
     const q = khataSearch.trim().toUpperCase();
-    return khataCustomers.filter(c => !q || c.name.toUpperCase().includes(q));
-  }, [khataCustomers, khataSearch]);
+    return khataCustomers.filter(c => !q || c.name.toUpperCase().includes(q));  }, [khataCustomers, khataSearch]);
 
   const selectedKhata = useMemo(() => khataCustomers.find(c => c.key === selectedKhataCustomer) || null, [khataCustomers, selectedKhataCustomer]);
 
@@ -1497,8 +1495,7 @@ export default function App() {
         'Profit After Purchases':r.totalSales-r.totalExpenses-r.purchaseTotal
       }));
     } else if (reportType === 'cashflow') {
-      rows = cashFlowData.rows.filter(r=>inRange(r.date)).map(r=>({
-        Date:r.date, Inflow:r.inflow, Outflow:r.outflow, Net:r.net, 'Cash Sales':r.salesCash,
+      rows = cashFlowData.rows.filter(r=>inRange(r.date)).map(r=>({        Date:r.date, Inflow:r.inflow, Outflow:r.outflow, Net:r.net, 'Cash Sales':r.salesCash,
         'Online Sales':r.salesOnline, 'Supplier Paid':r.supplierCash+r.supplierOnline, 'Purchase Paid':r.purchaseCash+r.purchaseOnline
       }));
     } else if (reportType === 'sales') {
@@ -1997,8 +1994,7 @@ export default function App() {
               <div style={{ marginTop: '18px', padding: '15px', background: '#374151', borderRadius: '10px' }}>
                 <label style={{ display: 'block', fontWeight: '800' }}>
                   🪙 Actual Cash Counted
-                  <input type="number" min="0" step="0.01" inputMode="decimal" value={cashierActualCash || ''} onChange={e => saveCashierActualCash(e.target.value)} placeholder="Enter physical cash counted" style={{ ...inputStyle, marginTop: '8px', fontSize: '22px' }}/>
-                </label>
+                  <input type="number" min="0" step="0.01" inputMode="decimal" value={cashierActualCash || ''} onChange={e => saveCashierActualCash(e.target.value)} placeholder="Enter physical cash counted" style={{ ...inputStyle, marginTop: '8px', fontSize: '22px' }}/>                </label>
                 <div style={{ marginTop: '12px', fontSize: '18px', fontWeight: '800', color: cashierCashDifference === 0 ? '#86efac' : cashierCashDifference > 0 ? '#60a5fa' : '#fca5a5' }}>
                   {Number(cashierActualCash || 0) === 0 ? 'Enter the physical cash count to check the difference.' :
                     cashierCashDifference === 0 ? '🟢 Cash matches the daily movement.' :
@@ -2497,8 +2493,7 @@ export default function App() {
                     <span>{formatINR(row.sales)}</span>
                   </div>;
                 })}
-              </div>
-              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>}
+              </div>              <div className="va-chart-legend"><span><i className="legend-sales"></i> Sales</span><span><i className="legend-expense"></i> Total costs</span></div>              </div>}
             </section>
 
             <section className={`va-dashboard-card va-financial-card va-collapsible-section ${collapsedSections.peopleInventory?'collapsed':''}`}>
@@ -2997,8 +2992,7 @@ export default function App() {
               <label>Start Date<input type="date" value={analyticsStart} onChange={e => setAnalyticsStart(e.target.value)} /></label>
               <label>End Date<input type="date" value={analyticsEnd} onChange={e => setAnalyticsEnd(e.target.value)} /></label>
               <button onClick={() => {
-                const rows = [
-                  {Metric:'Sales',Value:analyticsData.totalSales},
+                const rows = [                  {Metric:'Sales',Value:analyticsData.totalSales},
                   {Metric:'Operating Expenses',Value:analyticsData.totalExpenses},
                   {Metric:'Purchase Costs',Value:analyticsData.purchaseCosts},
                   {Metric:'Estimated Profit',Value:analyticsData.estimatedProfit},
@@ -3497,8 +3491,7 @@ export default function App() {
               </div>
               <div className="va-staff-card">
                 <div className="va-staff-card-head"><div><h3>Priority Payroll</h3><p>People requiring a manager review.</p></div></div>
-                <div className="va-payroll-priority-list">
-                  {staffManagement.priority.slice(0,5).map(r => <button key={r.name} onClick={() => setSelectedStaffMember(r.name)}><span>{r.monthlySalary <= 0 ? '⚙️' : '💸'}</span><strong>{r.name}</strong><small>{r.monthlySalary <= 0 ? 'Salary not configured' : `Due ${formatINR(r.totalBalanceToPay)}`}</small></button>)}
+                <div className="va-payroll-priority-list">                  {staffManagement.priority.slice(0,5).map(r => <button key={r.name} onClick={() => setSelectedStaffMember(r.name)}><span>{r.monthlySalary <= 0 ? '⚙️' : '💸'}</span><strong>{r.name}</strong><small>{r.monthlySalary <= 0 ? 'Salary not configured' : `Due ${formatINR(r.totalBalanceToPay)}`}</small></button>)}
                   {staffManagement.priority.length === 0 && <div className="va-staff-empty">No payroll exceptions.</div>}
                 </div>
               </div>
