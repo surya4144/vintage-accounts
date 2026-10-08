@@ -128,6 +128,19 @@ export default function App() {
   const [khataStartDate, setKhataStartDate] = useState('');
   const [khataEndDate, setKhataEndDate] = useState('');
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [posCategories, setPosCategories] = useState([]);
+  const [posMenuItems, setPosMenuItems] = useState([]);
+  const [posOrders, setPosOrders] = useState([]);
+  const [posCart, setPosCart] = useState([]);
+  const [posOrderType, setPosOrderType] = useState('Takeaway');
+  const [posCustomerName, setPosCustomerName] = useState('');
+  const [posCustomerPhone, setPosCustomerPhone] = useState('');
+  const [posTableName, setPosTableName] = useState('');
+  const [posNotes, setPosNotes] = useState('');
+  const [posLoading, setPosLoading] = useState(false);
+  const [posCategoryFilter, setPosCategoryFilter] = useState('all');
+
+
   const [suppliers, setSuppliers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [inventoryTransactions, setInventoryTransactions] = useState([]);
@@ -151,6 +164,86 @@ export default function App() {
 
   
 
+
+  const loadPosModule = async () => {
+    setPosLoading(true);
+    const [catRes, menuRes, orderRes] = await Promise.all([
+      supabase.from('menu_categories').select('*').eq('is_active', true).order('sort_order').order('name'),
+      supabase.from('menu_items').select('*').eq('is_available', true).order('sort_order').order('name'),
+      supabase.from('restaurant_orders').select('*').order('created_at', { ascending:false }).limit(25)
+    ]);
+    if (catRes.error) console.error('POS categories:', catRes.error);
+    if (menuRes.error) console.error('POS menu:', menuRes.error);
+    if (orderRes.error) console.error('POS orders:', orderRes.error);
+    setPosCategories(catRes.data || []);
+    setPosMenuItems(menuRes.data || []);
+    setPosOrders(orderRes.data || []);
+    setPosLoading(false);
+  };
+
+  const addPosMenuCategory = async () => {
+    const name = window.prompt('Menu category name (e.g. Starters, Main Course, Beverages):');
+    if (!name?.trim()) return;
+    const { error } = await supabase.from('menu_categories').insert({ name:name.trim(), created_by:session?.user?.id });
+    if (error) return alert('Unable to add category: ' + error.message);
+    await loadPosModule();
+  };
+
+  const addPosMenuItem = async () => {
+    const name = window.prompt('Menu item name:');
+    if (!name?.trim()) return;
+    const price = Number(window.prompt('Price:', '0') || 0);
+    if (price < 0) return alert('Price cannot be negative.');
+    const categoryId = window.prompt('Category ID (leave blank for none):', '');
+    const itemType = window.prompt('Type (Veg / Non-Veg / Egg / Beverage / Other):', 'Veg') || 'Veg';
+    const { error } = await supabase.from('menu_items').insert({
+      name:name.trim(), price, category_id:categoryId ? Number(categoryId) : null,
+      item_type:itemType, created_by:session?.user?.id
+    });
+    if (error) return alert('Unable to add menu item: ' + error.message);
+    await loadPosModule();
+  };
+
+  const addToPosCart = (item) => {
+    setPosCart(prev => {
+      const found = prev.find(x => x.menu_item_id === item.id);
+      if (found) return prev.map(x => x.menu_item_id === item.id ? {...x, quantity:Number(x.quantity)+1, line_total:(Number(x.quantity)+1)*Number(x.unit_price)} : x);
+      return [...prev, { menu_item_id:item.id, item_name:item.name, quantity:1, unit_price:Number(item.price||0), line_total:Number(item.price||0), notes:'' }];
+    });
+  };
+
+  const updatePosCartQty = (id, delta) => setPosCart(prev => prev.flatMap(x => {
+    if (x.menu_item_id !== id) return [x];
+    const quantity = Number(x.quantity) + delta;
+    return quantity > 0 ? [{...x, quantity, line_total:quantity*Number(x.unit_price)}] : [];
+  }));
+
+  const posCartTotal = posCart.reduce((sum,x)=>sum+Number(x.line_total||0),0);
+
+  const createPosOrder = async () => {
+    if (!posCart.length) return alert('Add at least one menu item.');
+    const orderNo = 'ORD-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14);
+    const { data: order, error } = await supabase.from('restaurant_orders').insert({
+      order_no:orderNo, order_type:posOrderType, table_name:posTableName,
+      customer_name:posCustomerName, customer_phone:posCustomerPhone,
+      status:'New', payment_status:'Unpaid', payment_method:'Pending',
+      subtotal:posCartTotal, total_amount:posCartTotal, notes:posNotes, created_by:session?.user?.id
+    }).select().single();
+    if (error) return alert('Order creation failed: ' + error.message);
+    const items = posCart.map(x => ({ order_id:order.id, menu_item_id:x.menu_item_id, item_name:x.item_name, quantity:Number(x.quantity), unit_price:Number(x.unit_price), line_total:Number(x.line_total), notes:x.notes || '' }));
+    const { error:itemError } = await supabase.from('restaurant_order_items').insert(items);
+    if (itemError) {
+      await supabase.from('restaurant_orders').delete().eq('id',order.id);
+      return alert('Order items could not be saved: ' + itemError.message);
+    }
+    setPosCart([]); setPosCustomerName(''); setPosCustomerPhone(''); setPosTableName(''); setPosNotes('');
+    await loadPosModule();
+    alert(orderNo + ' created and sent to the kitchen queue.');
+  };
+
+  useEffect(() => {
+    if (session && activeTab === 'pos') loadPosModule();
+  }, [session, activeTab]);
 
   const loadInventoryModule = async () => {
     setInventoryLoading(true);
@@ -2322,6 +2415,7 @@ export default function App() {
           <div className="va-nav">
             {[
               ['dashboard','🏠','Dashboard'],
+              ['pos','🍽️','Restaurant POS'],
               ['daily','📝','Daily Accounting'],
               ['funds','🔄','Money Transfers'],
               ['sources','🏦','Fund Sources'],
@@ -2553,6 +2647,57 @@ export default function App() {
         </div>
       )}
 
+
+      {activeTab === 'pos' && (
+        <div style={{maxWidth:'1500px',margin:'0 auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:18,background:'linear-gradient(135deg,#111827,#0f766e)',color:'#fff',borderRadius:22,padding:26,marginBottom:18}}>
+            <div><div style={{fontSize:10,fontWeight:900,letterSpacing:1.5,color:'#a7f3d0'}}>ORDER → KOT → BILL → PAYMENT</div><h2 style={{margin:'7px 0',fontSize:28}}>🍽️ Restaurant POS</h2><p style={{margin:0,color:'#cbd5e1',fontSize:13}}>Take orders quickly and keep the kitchen queue connected to billing.</p></div>
+            <div style={{display:'flex',gap:8}}><button style={{...btnStyle,background:'#10b981'}} onClick={addPosMenuCategory}>＋ Category</button><button style={{...btnStyle,background:'#fff',color:'#0f766e'}} onClick={addPosMenuItem}>＋ Menu Item</button></div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1.35fr .65fr',gap:18}}>
+            <section style={cardStyle}>
+              <div style={{...flexRow,justifyContent:'space-between',marginBottom:14}}>
+                <div><h3 style={{margin:'0 0 4px'}}>Menu</h3><small style={{color:'#64748b'}}>Tap an item to add it to the order.</small></div>
+                <select value={posCategoryFilter} onChange={e=>setPosCategoryFilter(e.target.value)} style={{padding:10,border:'1px solid #cbd5e1',borderRadius:9}}>
+                  <option value="all">All categories</option>{posCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {posLoading ? <div style={{padding:35,textAlign:'center',color:'#64748b'}}>Loading menu…</div> :
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:10}}>
+                {posMenuItems.filter(i=>posCategoryFilter==='all'||String(i.category_id)===String(posCategoryFilter)).map(item=>(
+                  <button key={item.id} onClick={()=>addToPosCart(item)} style={{textAlign:'left',padding:14,border:'1px solid #e2e8f0',borderRadius:14,background:'#fff',cursor:'pointer'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',gap:8}}><strong>{item.name}</strong><span style={{fontSize:10,fontWeight:900,color:item.item_type==='Non-Veg'?'#dc2626':'#059669'}}>{item.item_type}</span></div>
+                    <div style={{marginTop:9,fontWeight:900,fontSize:17}}>{formatINR(item.price)}</div>
+                  </button>
+                ))}
+              </div>}
+            </section>
+            <section style={cardStyle}>
+              <h3 style={{margin:'0 0 12px'}}>Current Order</h3>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <select value={posOrderType} onChange={e=>setPosOrderType(e.target.value)} style={inputStyle}><option>Dine-In</option><option>Takeaway</option><option>Delivery</option></select>
+                <input placeholder="Table" value={posTableName} onChange={e=>setPosTableName(e.target.value)} style={inputStyle}/>
+                <input placeholder="Customer name" value={posCustomerName} onChange={e=>setPosCustomerName(e.target.value)} style={{...inputStyle,gridColumn:'span 2'}}/>
+                <input placeholder="Phone" value={posCustomerPhone} onChange={e=>setPosCustomerPhone(e.target.value)} style={inputStyle}/>
+              </div>
+              <div style={{marginTop:14,display:'flex',flexDirection:'column',gap:7}}>
+                {!posCart.length && <div style={{padding:18,textAlign:'center',background:'#f8fafc',borderRadius:10,color:'#94a3b8'}}>No items yet.</div>}
+                {posCart.map(item=><div key={item.menu_item_id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,borderBottom:'1px solid #eef2f7',padding:'9px 0'}}><div><strong style={{fontSize:12}}>{item.item_name}</strong><small style={{display:'block',color:'#64748b'}}>{formatINR(item.unit_price)} each</small></div><div style={{display:'flex',alignItems:'center',gap:7}}><button onClick={()=>updatePosCartQty(item.menu_item_id,-1)} style={{border:'1px solid #cbd5e1',borderRadius:7,background:'#fff'}}>−</button><b>{item.quantity}</b><button onClick={()=>updatePosCartQty(item.menu_item_id,1)} style={{border:'1px solid #cbd5e1',borderRadius:7,background:'#fff'}}>＋</button></div></div>)}
+              </div>
+              <textarea placeholder="Kitchen / order notes" value={posNotes} onChange={e=>setPosNotes(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginTop:12,minHeight:60,padding:10,border:'1px solid #cbd5e1',borderRadius:9}}/>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,padding:14,background:'#ecfdf5',border:'1px solid #bbf7d0',borderRadius:12}}><span>Total</span><strong style={{fontSize:23,color:'#047857'}}>{formatINR(posCartTotal)}</strong></div>
+              <button onClick={createPosOrder} disabled={!posCart.length} style={{...btnStyle,width:'100%',marginTop:10,background:'#059669'}}>Send Order / Create KOT</button>
+            </section>
+          </div>
+          <section style={cardStyle}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><div><h3 style={{margin:'0 0 4px'}}>Recent Orders</h3><small style={{color:'#64748b'}}>Orders created from this staging POS.</small></div><button style={{...btnStyle,background:'#eff6ff',color:'#1d4ed8'}} onClick={loadPosModule}>Refresh</button></div>
+            <div style={{overflow:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:760}}><thead><tr>{['Order','Type','Customer','Total','Status','Payment','Time'].map(h=><th key={h} style={{textAlign:'left',padding:10,background:'#f8fafc',fontSize:10,color:'#475569'}}>{h}</th>)}</tr></thead><tbody>
+              {posOrders.map(o=><tr key={o.id}><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}><strong>{o.order_no}</strong></td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}>{o.order_type}</td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}>{o.customer_name||'—'}</td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}>{formatINR(o.total_amount)}</td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}><span style={{padding:'5px 8px',borderRadius:999,background:o.status==='New'?'#eff6ff':o.status==='Ready'?'#ecfdf5':'#f1f5f9',fontSize:10,fontWeight:900}}>{o.status}</span></td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}>{o.payment_status}</td><td style={{padding:10,borderBottom:'1px solid #eef2f7'}}>{new Date(o.created_at).toLocaleString()}</td></tr>)}
+              {!posOrders.length && <tr><td colSpan="7" style={{padding:30,textAlign:'center',color:'#94a3b8'}}>No orders yet. Create your first test order above.</td></tr>}
+            </tbody></table></div>
+          </section>
+        </div>
+      )}
 
       {activeTab === 'inventory' && (
         <div className="va-inventory-page">
