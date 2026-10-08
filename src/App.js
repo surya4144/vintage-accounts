@@ -45,6 +45,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('daily');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [expandedNavGroups, setExpandedNavGroups] = useState({ operations: true, insights: false, people: false, management: false });
   const [collapsedSections, setCollapsedSections] = useState(() => {
     try { return JSON.parse(localStorage.getItem('vintage_collapsed_sections') || '{}'); } catch { return {}; }
   });
@@ -2247,21 +2248,28 @@ export default function App() {
         <style>{expenseUiStyles}</style>
         <style>{khataUiStyles}</style>
         <style>{fundUiStyles}</style>
-        <style>{payrollUiStyles}</style>\n        <style>{staffManagementStyles}</style>
-      <style>{payablesUiStyles}</style><style>{cashflowUiStyles}</style>{}<style>{inventoryUiStyles}</style>\n        <style>{analyticsUiStyles}</style>
+        <style>{payrollUiStyles}</style>        <style>{staffManagementStyles}</style>
+      <style>{payablesUiStyles}</style><style>{cashflowUiStyles}</style>{}<style>{inventoryUiStyles}</style>        <style>{analyticsUiStyles}</style>
         <style>{aiUiStyles}</style>
         <style>{reportsUiStyles}</style>
         <style>{closingUiStyles}</style>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
         * { box-sizing: border-box; }
-        body { margin: 0; background: #f5f7fb; }
+        body { margin: 0; background: #f5f7fb; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
         .va-shell { min-height: 100vh; display: flex; background: #f5f7fb; color: #172033; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-        .va-sidebar { width: 245px; min-width: 245px; background: #111827; color: white; padding: 22px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
-        .va-brand { display:flex; align-items:center; gap:11px; padding: 8px 10px 24px; border-bottom:1px solid rgba(255,255,255,.1); margin-bottom:18px; }
+        .va-sidebar { width: 260px; min-width: 260px; background: #0f172a; color: white; padding: 18px 12px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: width .25s ease, min-width .25s ease, padding .25s ease; }
+        .va-brand { display:flex; align-items:center; gap:11px; padding: 6px 8px 16px; border-bottom:1px solid rgba(255,255,255,.1); margin-bottom:12px; }
         .va-brand img { width:40px; height:40px; border-radius:10px; background:white; padding:5px; }
-        .va-brand-title { font-size:18px; font-weight:900; line-height:1.1; }
+        .va-brand-title { font-family:Manrope,Inter,sans-serif;font-size:18px; font-weight:800; line-height:1.1; }
         .va-brand-sub { font-size:10px; color:#9ca3af; margin-top:4px; letter-spacing:.08em; text-transform:uppercase; }
-        .va-nav { display:flex; flex-direction:column; gap:6px; }
+        .va-nav { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:5px; padding:2px 1px 12px; scrollbar-width:thin; scrollbar-color:#334155 transparent; }
+        .va-nav::-webkit-scrollbar{width:6px}.va-nav::-webkit-scrollbar-thumb{background:#334155;border-radius:999px}.va-nav::-webkit-scrollbar-track{background:transparent}
+        .va-nav-group{display:flex;flex-direction:column;gap:2px}.va-nav-group-toggle,.va-nav-item{width:100%;min-height:44px;display:flex;align-items:center;gap:10px;border:0;border-radius:11px;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;transition:background .18s ease,color .18s ease,transform .18s ease;white-space:nowrap}
+        .va-nav-group-toggle{padding:10px 11px;background:transparent;color:#94a3b8;text-align:left}.va-nav-group-toggle:hover{background:#172033;color:#f8fafc}
+        .va-nav-item{padding:10px 11px;background:transparent;color:#cbd5e1;text-align:left}.va-nav-item:hover{background:#172033;color:#fff;transform:translateX(2px)}.va-nav-item.active{background:#2563eb;color:#fff;box-shadow:0 7px 18px rgba(37,99,235,.25)}
+        .va-nav-icon{width:22px;min-width:22px;display:grid;place-items:center;font-size:16px}.va-nav-label{overflow:hidden;text-overflow:ellipsis}.va-nav-chevron{margin-left:auto;font-size:18px;line-height:1;color:#64748b}.va-subnav{display:flex;flex-direction:column;gap:3px;margin:1px 0 5px 11px;padding-left:10px;border-left:1px solid #263449}.va-subnav-item{min-height:40px;font-size:12px;padding:8px 10px}
+        .va-nav-dashboard{margin-bottom:5px}
         .va-nav button { width:100%; text-align:left; border:0; background:transparent; color:#cbd5e1; padding:12px 13px; border-radius:10px; cursor:pointer; font-weight:700; font-size:14px; transition:.18s; }
         .va-nav button:hover { background:#1f2937; color:white; }
         .va-nav button.active { background:#2563eb; color:white; box-shadow:0 7px 18px rgba(37,99,235,.28); }
@@ -2280,28 +2288,21 @@ export default function App() {
         .va-fund-row { grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 1.2fr 38px; }
         .va-transfer-arrow { text-align:center; font-size:20px; font-weight:900; color:#2563eb; }
         .va-feature-note { margin-top:14px; padding:12px 14px; border-radius:10px; background:#eff6ff; color:#1e40af; font-size:13px; line-height:1.5; }
-        .va-main { flex:1; min-width:0; padding:24px; }
+        .va-main { flex:1; min-width:0; padding:24px; transition:padding .25s ease; }
         .va-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:20px; }
         .va-page-title { margin:0; font-size:25px; font-weight:900; color:#111827; }
         .va-page-subtitle { margin:5px 0 0; color:#64748b; font-size:13px; }
         .va-status { display:flex; align-items:center; gap:8px; background:white; border:1px solid #e5e7eb; padding:9px 12px; border-radius:10px; font-size:12px; color:#475569; box-shadow:0 4px 14px rgba(15,23,42,.04); }
         .va-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; }
         .va-mobile-nav { display:none; }
-        .va-menu-toggle{position:fixed;top:18px;left:18px;z-index:1100;width:44px;height:44px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;box-shadow:0 8px 22px rgba(15,23,42,.12);cursor:pointer;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}.va-sidebar-close{display:none;margin-left:auto;border:0;background:transparent;color:#cbd5e1;font-size:28px;line-height:1;cursor:pointer}.sidebar-collapsed .va-sidebar{transform:translateX(-100%);width:0;min-width:0;padding:0;overflow:hidden}.va-sidebar{transition:width .25s ease, min-width .25s ease, transform .25s ease, padding .25s ease}.va-main{transition:padding-left .25s ease}.sidebar-open .va-main{padding-left:78px}.sidebar-collapsed .va-main{padding-left:78px}.va-sidebar-overlay{display:none}.va-menu-toggle:hover{background:#f8fafc;transform:translateY(-1px)}
+        .va-menu-toggle{position:fixed;top:18px;left:18px;z-index:1100;width:44px;height:44px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;box-shadow:0 8px 22px rgba(15,23,42,.12);cursor:pointer;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}.va-sidebar-close{display:none;margin-left:auto;border:0;background:transparent;color:#cbd5e1;font-size:28px;line-height:1;cursor:pointer}.sidebar-collapsed .va-sidebar{transform:translateX(-100%);width:0;min-width:0;padding:0;overflow:hidden}.va-sidebar{transition:width .25s ease, min-width .25s ease, transform .25s ease, padding .25s ease}.va-main{transition:padding-left .25s ease}.sidebar-open .va-main{padding-left:24px}.sidebar-collapsed .va-main{padding-left:24px}.va-sidebar-overlay{display:none}.va-menu-toggle:hover{background:#f8fafc;transform:translateY(-1px)}
         @media (max-width: 1100px){.va-dashboard-kpis{grid-template-columns:repeat(3,1fr)}.va-dashboard-grid{grid-template-columns:1fr}}
         @media (max-width: 650px){.va-dashboard-hero{display:block}.va-dashboard-hero button{margin-top:16px;width:100%}.va-dashboard-filter{display:block}.va-dashboard-dates{min-width:0;margin-top:12px;flex-wrap:wrap}.va-dashboard-dates input{max-width:none;flex:1}.va-dashboard-kpis{grid-template-columns:repeat(2,1fr)}.va-dashboard-actions{grid-template-columns:1fr}.va-recent-row{min-width:700px}}
-        @media (max-width: 850px){.va-menu-toggle{top:10px;left:10px}.va-sidebar{position:fixed!important;z-index:1050;left:0;top:0;width:280px!important;min-width:280px!important;height:100vh!important;padding:18px 14px!important;transform:translateX(-100%);box-shadow:16px 0 40px rgba(15,23,42,.2)}.sidebar-open .va-sidebar{transform:translateX(0)}.sidebar-collapsed .va-sidebar{width:280px!important;min-width:280px!important;padding:18px 14px!important;transform:translateX(-100%)}.sidebar-open .va-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1040}.va-sidebar-close{display:block}.va-brand{padding:5px 8px 18px!important;margin-bottom:16px!important}.va-nav{display:flex!important;flex-direction:column!important}.va-nav button{text-align:left!important;padding:12px 13px!important;font-size:14px!important}.va-logout{margin-top:auto!important}.va-main,.sidebar-open .va-main,.sidebar-collapsed .va-main{padding:64px 14px 14px!important}.va-topbar{align-items:flex-start}.va-page-title{font-size:21px}}
+        @media (max-width: 850px){.va-menu-toggle{display:flex;position:fixed;top:12px;left:12px;z-index:1100;width:42px;height:42px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;box-shadow:0 8px 22px rgba(15,23,42,.12);cursor:pointer;font-size:20px;font-weight:900;align-items:center;justify-content:center}.va-sidebar{position:fixed!important;z-index:1050;left:0;top:0;width:290px!important;min-width:290px!important;height:100vh!important;padding:18px 14px!important;transform:translateX(-105%);box-shadow:16px 0 40px rgba(15,23,42,.2)}.sidebar-open .va-sidebar{transform:translateX(0)}.sidebar-collapsed .va-sidebar{width:290px!important;min-width:290px!important;padding:18px 14px!important;transform:translateX(-105%)}.sidebar-open .va-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1040}.va-sidebar-close{display:flex}.va-brand{padding:5px 8px 14px!important;margin-bottom:12px!important}.va-nav{display:flex!important;flex-direction:column!important;overflow-y:auto!important}.va-nav button{text-align:left!important;font-size:13px!important}.va-logout{margin-top:8px!important}.va-main,.sidebar-open .va-main,.sidebar-collapsed .va-main{padding:64px 14px 14px!important}.va-topbar{align-items:flex-start}.va-page-title{font-size:21px}}
 
         @media (max-width: 850px) {
           .va-shell { display:block; }
-          .va-sidebar { width:100%; min-width:0; height:auto; position:relative; padding:12px; }
-          .va-brand { padding:5px 8px 12px; margin-bottom:10px; }
-          .va-nav { display:grid; grid-template-columns:repeat(4,1fr); }
-          .va-nav button { text-align:center; padding:9px 5px; font-size:12px; }
-          .va-logout { margin-top:10px; }
-          .va-main { padding:14px; }
-          .va-topbar { align-items:flex-start; }
-          .va-page-title { font-size:21px; }
+          .va-main { padding:64px 14px 14px; }
         }
         @media (max-width: 520px) {
           .va-nav { grid-template-columns:repeat(2,1fr); }
@@ -2310,8 +2311,8 @@ export default function App() {
         }
       `}</style>
       <div className={`va-shell ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-        <button className="va-menu-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Hide menu' : 'Open menu'}>
-          {sidebarOpen ? '☰' : '☰'}
+        <button className="va-menu-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label={sidebarOpen ? 'Open menu' : 'Open menu'} title="Open navigation">
+          ☰
         </button>
         <div className="va-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
         <aside className="va-sidebar">
@@ -2321,31 +2322,85 @@ export default function App() {
               <div className="va-brand-title">Vintage Accounts</div>
               <div className="va-brand-sub">Restaurant Finance</div>
             </div>
-            <button className="va-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Hide menu">×</button>
+            <button className="va-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Collapse navigation" title="Collapse navigation">
+              <span>‹</span>
+            </button>
           </div>
-          <div className="va-nav">
-            {[
-              ['dashboard','🏠','Dashboard'],
-              ['daily','📝','Daily Accounting'],
-              ['funds','🔄','Money Transfers'],
-              ['sources','🏦','Fund Sources'],
-              ['inventory','📦','Purchases & Inventory'],
-              ['ledger','📒','Customer Khata'],
-              ['history','📋','History'],
-              ['analytics','📈','Analytics'],
-              ['cashflow','💵','Cash Flow'],
-              ['reports','📑','Advanced Reports'],
-              ['closing','🔒','Daily Closing'],
-              ['ai','✨','AI Assistant'],
-              ['attendance','👥','Attendance'],
-              ['payroll','💰','Employee Payroll'],
-              ['tasks','🔔','Reminders']
-            ].map(([tab,icon,label]) => (
-              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }}>
-                {icon} &nbsp;{label}
+          <nav className="va-nav" aria-label="Main navigation">
+            <button className="va-nav-item va-nav-dashboard ${activeTab === "dashboard" ? "active" : ""}" onClick={() => { setActiveTab('dashboard'); if (window.innerWidth <= 850) setSidebarOpen(false); }} title="Dashboard">
+              <span className="va-nav-icon">🏠</span><span className="va-nav-label">Dashboard</span>
+            </button>
+
+            <div className="va-nav-group">
+              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, operations: !v.operations }))} aria-expanded={expandedNavGroups.operations}>
+                <span className="va-nav-icon">⚡</span><span className="va-nav-label">Operations</span><span className="va-nav-chevron">{expandedNavGroups.operations ? '⌄' : '›'}</span>
               </button>
-            ))}
-          </div>
+              {expandedNavGroups.operations && <div className="va-subnav">
+                {[
+                  ['daily','📝','Daily Accounting'],
+                  ['funds','🔄','Money Transfers'],
+                  ['sources','🏦','Fund Sources'],
+                  ['inventory','📦','Purchases & Inventory']
+                ].map(([tab,icon,label]) => (
+                  <button key={tab} className={`va-nav-item va-subnav-item ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }} title={label}>
+                    <span className="va-nav-icon">{icon}</span><span className="va-nav-label">{label}</span>
+                  </button>
+                ))}
+              </div>}
+            </div>
+
+            <div className="va-nav-group">
+              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, insights: !v.insights }))} aria-expanded={expandedNavGroups.insights}>
+                <span className="va-nav-icon">📊</span><span className="va-nav-label">Reports & Insights</span><span className="va-nav-chevron">{expandedNavGroups.insights ? '⌄' : '›'}</span>
+              </button>
+              {expandedNavGroups.insights && <div className="va-subnav">
+                {[
+                  ['history','📋','Transaction History'],
+                  ['analytics','📈','Business Analytics'],
+                  ['cashflow','💵','Cash Flow'],
+                  ['reports','📑','Advanced Reports']
+                ].map(([tab,icon,label]) => (
+                  <button key={tab} className={`va-nav-item va-subnav-item ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }} title={label}>
+                    <span className="va-nav-icon">{icon}</span><span className="va-nav-label">{label}</span>
+                  </button>
+                ))}
+              </div>}
+            </div>
+
+            <div className="va-nav-group">
+              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, people: !v.people }))} aria-expanded={expandedNavGroups.people}>
+                <span className="va-nav-icon">👥</span><span className="va-nav-label">People</span><span className="va-nav-chevron">{expandedNavGroups.people ? '⌄' : '›'}</span>
+              </button>
+              {expandedNavGroups.people && <div className="va-subnav">
+                {[
+                  ['ledger','📒','Customer Khata'],
+                  ['attendance','👥','Attendance'],
+                  ['payroll','💰','Employee Payroll']
+                ].map(([tab,icon,label]) => (
+                  <button key={tab} className={`va-nav-item va-subnav-item ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }} title={label}>
+                    <span className="va-nav-icon">{icon}</span><span className="va-nav-label">{label}</span>
+                  </button>
+                ))}
+              </div>}
+            </div>
+
+            <div className="va-nav-group">
+              <button className="va-nav-group-toggle" onClick={() => setExpandedNavGroups(v => ({ ...v, management: !v.management }))} aria-expanded={expandedNavGroups.management}>
+                <span className="va-nav-icon">⚙️</span><span className="va-nav-label">Management</span><span className="va-nav-chevron">{expandedNavGroups.management ? '⌄' : '›'}</span>
+              </button>
+              {expandedNavGroups.management && <div className="va-subnav">
+                {[
+                  ['closing','🔒','Daily Closing'],
+                  ['ai','✨','AI Assistant'],
+                  ['tasks','🔔','Reminders']
+                ].map(([tab,icon,label]) => (
+                  <button key={tab} className={`va-nav-item va-subnav-item ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); if (window.innerWidth <= 850) setSidebarOpen(false); }} title={label}>
+                    <span className="va-nav-icon">{icon}</span><span className="va-nav-label">{label}</span>
+                  </button>
+                ))}
+              </div>}
+            </div>
+          </nav>
           <button className="va-logout" onClick={handleLogout}>🚪 Log Out</button>
         </aside>
 
@@ -3651,7 +3706,7 @@ const payrollUiStyles = `
 const cashflowUiStyles = `
 .va-cashflow-page{max-width:1500px;margin:0 auto}.va-cashflow-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;background:linear-gradient(135deg,#052e16,#0f766e 70%,#164e63);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-cashflow-hero h2{margin:6px 0;font-size:28px}.va-cashflow-hero p{margin:0;color:#ccfbf1;max-width:760px;font-size:13px;line-height:1.5}.va-cashflow-period{display:flex;gap:9px;flex-wrap:wrap}.va-cashflow-period label{font-size:10px;font-weight:900;color:#ccfbf1}.va-cashflow-period input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px}.va-cashflow-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-cashflow-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #64748b;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-cashflow-kpis .in{border-top-color:#10b981}.va-cashflow-kpis .out{border-top-color:#ef4444}.va-cashflow-kpis .positive{border-top-color:#2563eb}.va-cashflow-kpis .negative{border-top-color:#dc2626}.va-cashflow-kpis span{display:block;color:#64748b;font-size:11px;font-weight:900}.va-cashflow-kpis strong{display:block;color:#0f172a;font-size:23px;margin-top:7px}.va-cashflow-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-cashflow-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-cashflow-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-cashflow-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:14px}.va-cashflow-head h3{margin:4px 0;font-size:19px}.va-cashflow-head p{margin:0;color:#64748b;font-size:12px}.va-cashflow-head>strong{font-size:18px;color:#0f172a}.va-cashflow-lines{display:flex;flex-direction:column;gap:7px}.va-cashflow-lines div{display:flex;justify-content:space-between;padding:11px 12px;background:#f8fafc;border-radius:10px;border:1px solid #eef2f7}.va-cashflow-lines span{color:#64748b;font-size:12px}.va-cashflow-lines b{font-size:12px;color:#0f172a}.va-cashflow-channel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.va-cashflow-channel-grid>div{padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px}.va-cashflow-channel-grid span{display:block;color:#64748b;font-size:10px;font-weight:900}.va-cashflow-channel-grid strong{display:block;margin-top:6px;font-size:18px}.va-cashflow-badge{padding:7px 10px;border-radius:999px;background:#f0fdfa;color:#0f766e;font-size:10px;font-weight:900}.va-cashflow-note{margin-top:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:11px;color:#1e40af;font-size:11px;line-height:1.5}.va-cashflow-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-cashflow-table{width:100%;border-collapse:collapse;min-width:850px}.va-cashflow-table th,.va-cashflow-table td{padding:11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:11px;white-space:nowrap}.va-cashflow-table th{background:#f8fafc;color:#475569;font-size:9px;text-transform:uppercase}.va-cashflow-table th:first-child,.va-cashflow-table td:first-child{text-align:left}.in-text{color:#047857;font-weight:800}.out-text{color:#b91c1c;font-weight:800}.va-cashflow-empty{text-align:center!important;padding:30px!important;color:#64748b}@media(max-width:1050px){.va-cashflow-hero{display:block}.va-cashflow-period{margin-top:15px}.va-cashflow-kpis{grid-template-columns:repeat(2,1fr)}.va-cashflow-grid{grid-template-columns:1fr}.va-cashflow-channel-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.va-cashflow-hero,.va-cashflow-card{padding:15px}.va-cashflow-kpis{grid-template-columns:1fr 1fr}.va-cashflow-channel-grid{grid-template-columns:1fr 1fr}.va-cashflow-period label{flex:1}.va-cashflow-period input{width:100%;box-sizing:border-box}}@media(max-width:430px){.va-cashflow-kpis{grid-template-columns:1fr}.va-cashflow-channel-grid{grid-template-columns:1fr}}
 `;
-const analyticsUiStyles = `\n.va-analytics-page{max-width:1500px;margin:0 auto}.va-analytics-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-analytics-hero h2{margin:6px 0;font-size:28px}.va-analytics-hero p{margin:0;color:#cbd5e1;max-width:760px;line-height:1.5;font-size:13px}.va-analytics-actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.va-analytics-actions label{font-size:11px;font-weight:900;color:#cbd5e1}.va-analytics-actions input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-analytics-btn{border:0;border-radius:10px;padding:11px 14px;background:#10b981;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}.va-analytics-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-analytics-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-analytics-kpis .expense{border-top-color:#ef4444}.va-analytics-kpis .profit{border-top-color:#10b981}.va-analytics-kpis .loss{border-top-color:#dc2626}.va-analytics-kpis .credit{border-top-color:#f59e0b}.va-analytics-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-analytics-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-analytics-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-analytics-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-analytics-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-analytics-card-head h3{margin:4px 0;font-size:19px}.va-analytics-card-head p{margin:0;color:#64748b;font-size:12px}.va-analytics-mix-row,.va-analytics-expense-row{margin-bottom:15px}.va-analytics-mix-row>div:first-child,.va-analytics-expense-row>div:first-child{display:flex;justify-content:space-between;gap:15px;margin-bottom:6px;font-size:12px}.va-analytics-mix-row span,.va-analytics-expense-row span{color:#64748b}.va-analytics-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden}.va-analytics-progress i{display:block;height:100%;background:#2563eb;border-radius:999px}.va-analytics-progress i.cash{background:#10b981}.va-analytics-progress i.online{background:#3b82f6}.va-analytics-progress i.credit{background:#f59e0b}.va-analytics-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.va-analytics-mini-grid>div{padding:12px;background:#f8fafc;border-radius:11px}.va-analytics-mini-grid span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-analytics-mini-grid strong{display:block;margin-top:5px}.va-analytics-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-analytics-table{width:100%;border-collapse:collapse;min-width:780px}.va-analytics-table th,.va-analytics-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-analytics-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase}.va-analytics-table th:first-child,.va-analytics-table td:first-child{text-align:left}.va-analytics-insight{display:flex;gap:13px;align-items:flex-start;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;margin-bottom:18px}.va-analytics-insight-icon{width:34px;height:34px;display:grid;place-items:center;background:#dbeafe;border-radius:10px;flex:none}.va-analytics-insight strong{color:#1e40af}.va-analytics-insight p{margin:4px 0 0;color:#475569;font-size:12px;line-height:1.5}.va-analytics-note{padding:13px 15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5;margin-bottom:20px}.va-analytics-note strong{color:#334155}@media(max-width:1050px){.va-analytics-hero{display:block}.va-analytics-actions{margin-top:16px}.va-analytics-kpis{grid-template-columns:repeat(2,1fr)}.va-analytics-grid{grid-template-columns:1fr}}@media(max-width:650px){.va-analytics-hero,.va-analytics-card{padding:15px}.va-analytics-kpis{grid-template-columns:1fr 1fr}.va-analytics-actions{display:grid;grid-template-columns:1fr 1fr}.va-analytics-actions label{width:100%}.va-analytics-actions label input{width:100%;box-sizing:border-box}.va-analytics-btn{grid-column:1/-1}.va-analytics-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-analytics-kpis{grid-template-columns:1fr}.va-analytics-actions{grid-template-columns:1fr}.va-analytics-btn{grid-column:auto}}\n`;
+const analyticsUiStyles = `.va-analytics-page{max-width:1500px;margin:0 auto}.va-analytics-hero{display:flex;justify-content:space-between;gap:24px;align-items:center;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.12)}.va-analytics-hero h2{margin:6px 0;font-size:28px}.va-analytics-hero p{margin:0;color:#cbd5e1;max-width:760px;line-height:1.5;font-size:13px}.va-analytics-actions{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.va-analytics-actions label{font-size:11px;font-weight:900;color:#cbd5e1}.va-analytics-actions input{display:block;margin-top:5px;padding:10px;border:0;border-radius:9px;background:#fff;color:#111827}.va-analytics-btn{border:0;border-radius:10px;padding:11px 14px;background:#10b981;color:#fff;font-weight:900;cursor:pointer;white-space:nowrap}.va-analytics-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.va-analytics-kpis>div{background:#fff;border:1px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:16px;padding:18px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-analytics-kpis .expense{border-top-color:#ef4444}.va-analytics-kpis .profit{border-top-color:#10b981}.va-analytics-kpis .loss{border-top-color:#dc2626}.va-analytics-kpis .credit{border-top-color:#f59e0b}.va-analytics-kpis span{display:block;color:#64748b;font-size:12px;font-weight:800}.va-analytics-kpis strong{display:block;font-size:23px;margin-top:7px;color:#0f172a}.va-analytics-kpis small{display:block;color:#94a3b8;margin-top:4px}.va-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.va-analytics-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055);margin-bottom:18px}.va-analytics-card-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}.va-analytics-card-head h3{margin:4px 0;font-size:19px}.va-analytics-card-head p{margin:0;color:#64748b;font-size:12px}.va-analytics-mix-row,.va-analytics-expense-row{margin-bottom:15px}.va-analytics-mix-row>div:first-child,.va-analytics-expense-row>div:first-child{display:flex;justify-content:space-between;gap:15px;margin-bottom:6px;font-size:12px}.va-analytics-mix-row span,.va-analytics-expense-row span{color:#64748b}.va-analytics-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden}.va-analytics-progress i{display:block;height:100%;background:#2563eb;border-radius:999px}.va-analytics-progress i.cash{background:#10b981}.va-analytics-progress i.online{background:#3b82f6}.va-analytics-progress i.credit{background:#f59e0b}.va-analytics-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.va-analytics-mini-grid>div{padding:12px;background:#f8fafc;border-radius:11px}.va-analytics-mini-grid span{display:block;color:#64748b;font-size:11px;font-weight:800}.va-analytics-mini-grid strong{display:block;margin-top:5px}.va-analytics-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:12px}.va-analytics-table{width:100%;border-collapse:collapse;min-width:780px}.va-analytics-table th,.va-analytics-table td{padding:12px 11px;border-bottom:1px solid #eef2f7;text-align:right;font-size:12px;white-space:nowrap}.va-analytics-table th{background:#f8fafc;color:#475569;font-size:10px;text-transform:uppercase}.va-analytics-table th:first-child,.va-analytics-table td:first-child{text-align:left}.va-analytics-insight{display:flex;gap:13px;align-items:flex-start;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;margin-bottom:18px}.va-analytics-insight-icon{width:34px;height:34px;display:grid;place-items:center;background:#dbeafe;border-radius:10px;flex:none}.va-analytics-insight strong{color:#1e40af}.va-analytics-insight p{margin:4px 0 0;color:#475569;font-size:12px;line-height:1.5}.va-analytics-note{padding:13px 15px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5;margin-bottom:20px}.va-analytics-note strong{color:#334155}@media(max-width:1050px){.va-analytics-hero{display:block}.va-analytics-actions{margin-top:16px}.va-analytics-kpis{grid-template-columns:repeat(2,1fr)}.va-analytics-grid{grid-template-columns:1fr}}@media(max-width:650px){.va-analytics-hero,.va-analytics-card{padding:15px}.va-analytics-kpis{grid-template-columns:1fr 1fr}.va-analytics-actions{display:grid;grid-template-columns:1fr 1fr}.va-analytics-actions label{width:100%}.va-analytics-actions label input{width:100%;box-sizing:border-box}.va-analytics-btn{grid-column:1/-1}.va-analytics-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:430px){.va-analytics-kpis{grid-template-columns:1fr}.va-analytics-actions{grid-template-columns:1fr}.va-analytics-btn{grid-column:auto}}`;
 
 const aiUiStyles = `
 .va-ai-page{max-width:1180px;margin:0 auto}.va-ai-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#0f172a,#312e81 65%,#0f766e);color:#fff;border-radius:22px;padding:26px;margin-bottom:18px;box-shadow:0 15px 35px rgba(15,23,42,.14)}.va-ai-hero h2{margin:6px 0;font-size:28px}.va-ai-hero p{margin:0;color:#cbd5e1;max-width:700px;line-height:1.5;font-size:13px}.va-ai-status{padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);font-size:11px;font-weight:900;white-space:nowrap}.va-ai-layout{display:grid;grid-template-columns:1fr 300px;gap:18px}.va-ai-chat{background:#fff;border:1px solid #e2e8f0;border-radius:18px;box-shadow:0 8px 25px rgba(15,23,42,.055);overflow:hidden;display:flex;flex-direction:column;min-height:620px}.va-ai-messages{padding:20px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:430px;max-height:560px;overflow:auto;background:linear-gradient(180deg,#f8fafc,#fff)}.va-ai-message{max-width:84%;padding:12px 14px;border-radius:15px;font-size:13px;line-height:1.55;white-space:pre-wrap}.va-ai-message.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:5px}.va-ai-message.assistant{align-self:flex-start;background:#fff;color:#1e293b;border:1px solid #e2e8f0;border-bottom-left-radius:5px}.va-ai-message small{display:block;font-size:10px;font-weight:900;opacity:.7;margin-bottom:4px}.va-ai-composer{padding:14px;border-top:1px solid #e2e8f0;background:#fff}.va-ai-composer form{display:flex;gap:9px}.va-ai-composer textarea{flex:1;min-height:54px;resize:vertical;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font:inherit;outline:none}.va-ai-composer textarea:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(99,102,241,.1)}.va-ai-send{border:0;border-radius:12px;padding:0 18px;background:#2563eb;color:#fff;font-weight:900;cursor:pointer}.va-ai-send:disabled{opacity:.55;cursor:not-allowed}.va-ai-sidebar{display:flex;flex-direction:column;gap:12px}.va-ai-side-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 7px 22px rgba(15,23,42,.05)}.va-ai-side-card h3{margin:0 0 10px;font-size:15px}.va-ai-chip{width:100%;text-align:left;border:1px solid #e2e8f0;background:#f8fafc;color:#334155;border-radius:10px;padding:10px 11px;margin-bottom:7px;font-weight:700;font-size:12px;cursor:pointer}.va-ai-chip:hover{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.va-ai-metric{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #eef2f7;font-size:12px}.va-ai-metric:last-child{border-bottom:0}.va-ai-metric span{color:#64748b}.va-ai-metric strong{color:#0f172a}.va-ai-note{padding:12px;border-radius:11px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px;line-height:1.5}@media(max-width:900px){.va-ai-layout{grid-template-columns:1fr}.va-ai-sidebar{display:grid;grid-template-columns:1fr 1fr}.va-ai-note{grid-column:1/-1}}@media(max-width:600px){.va-ai-hero{display:block}.va-ai-status{display:inline-block;margin-top:14px}.va-ai-sidebar{display:block}.va-ai-chat{min-height:560px}.va-ai-messages{min-height:380px}.va-ai-message{max-width:94%}.va-ai-composer form{display:grid}.va-ai-send{padding:12px}}
