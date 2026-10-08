@@ -2323,7 +2323,7 @@ export default function App() {
 
           <div className={`va-dashboard-card va-financial-card va-financial-alert-card va-collapsible-section ${collapsedSections.actionQueue?'collapsed':''}`}>
             <div className="va-dashboard-card-head va-collapsible-head"><div><span className="va-eyebrow">ACTION QUEUE</span><h3>🔔 What Needs Attention</h3></div><div className="va-section-head-actions"><span className="va-dashboard-badge">{businessAlerts.length} active</span><button className="va-collapse-btn" onClick={()=>toggleSection('actionQueue')} aria-label={collapsedSections.actionQueue?'Expand section':'Collapse section'}>{collapsedSections.actionQueue?'+':'−'}</button></div></div>
-            {!collapsedSections.actionQueue && <div className="va-collapsible-body"><div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div></div>
+            {!collapsedSections.actionQueue && <div className="va-collapsible-body"><div className="va-alert-list">{businessAlerts.map((alert,index)=><button key={index} className={'va-alert-item '+alert.type} onClick={()=>setActiveTab(alert.action)}><span className="va-alert-icon">{alert.icon}</span><span className="va-alert-copy"><strong>{alert.title}</strong><small>{alert.text}</small></span><span className="va-alert-arrow">→</span></button>)}</div></div>}
           </div>
         </div>
       )}
