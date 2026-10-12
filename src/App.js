@@ -754,13 +754,13 @@ export default function App() {
 
   const totalParcelCounterCash = Number(parcelCounterCash || 0);
   const totalParcelCounterOnline = Number(parcelCounterOnline || 0);
-  // Staff payments marked "Till" were deducted before the net cash sale was entered.
-  // Add them back to reconstruct gross sales, while keeping them included in staff expenses.
-  const grossCashSale = Number(cashSale) + totalParcelCounterCash + totalCounterExpenses + totalStaffTill;
+  // "Cash From Till" operating expenses and staff wages were deducted before net cash sales were entered.
+  // Add both back to reconstruct gross cash sales; they remain recorded as expenses below.
+  const grossCashSale = Number(cashSale) + totalParcelCounterCash + totalCounterExpenses + totalCashFromTillExpenses + totalStaffTill;
   const grossOnlineSale = Number(onlineSale) + totalParcelCounterOnline;
   const trueGrossSale = grossCashSale + grossOnlineSale + totalCreditSales;
-  // The Daily Snapshot restores till-deducted operating expenses; staff Till wages are already included in trueGrossSale.
-  const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses + totalCashFromTillExpenses;
+  // The snapshot restores Cash In Hand expenses separately; Till expenses and Till wages are already included in trueGrossSale.
+  const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses;
   const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
