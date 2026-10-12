@@ -757,9 +757,9 @@ export default function App() {
   const grossCashSale = Number(cashSale) + totalParcelCounterCash + totalCounterExpenses;
   const grossOnlineSale = Number(onlineSale) + totalParcelCounterOnline;
   const trueGrossSale = grossCashSale + grossOnlineSale + totalCreditSales;
-  // Daily Snapshot Gross Sales = all sales entered in Today Sales, plus cash expenses that were already deducted from the till.
-  // This restores the pre-expense gross sales figure without including credit sales or non-cash expense methods.
-  const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses + totalCashFromTillExpenses;
+  // Daily Snapshot Gross Sales restores amounts already deducted from till before net sales were entered.
+  // This includes till-paid operating expenses and staff wages, so they are not omitted from gross sales.
+  const dailySnapshotGrossSale = trueGrossSale + totalTillCashExpenses + totalCashFromTillExpenses + totalStaffTill;
   const totalOperatingExpenses = totalOnlineExpenses + totalCashExpenses + totalStaffCash + totalStaffTill + totalStaffOnline + totalStaffCounter + totalStaffCredit + totalStaffTeja + totalStaffAnil;
   const estimatedProfit = trueGrossSale - totalOperatingExpenses;
   const formatINR = value => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
